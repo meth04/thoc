@@ -56,17 +56,20 @@ def an_va_suc_khoe(w: World) -> None:
             if tru > 0:
                 w.ledger.huy(m, "thoc", tru, "an", "ăn", w.tick)
                 con_phai_tru -= tru
-        # thiếu thóc → ăn THỊT (1kg thịt no bằng 3kg thóc)
+        # thiếu thóc → ăn THỊT rồi CÁ (đậm dinh dưỡng hơn thóc, nhưng mau hỏng)
         if an_duoc < tong_nhu_cau - 1e-9:
-            quy_doi = float(w.cfg.raw()["chan_nuoi"]["thit_quy_doi_dinh_duong"])
             thieu = tong_nhu_cau - an_duoc
-            for m in ho:
-                thit_co = w.ledger.so_du(m, "thit")
-                if thit_co <= 0 or thieu <= 1e-9:
-                    continue
-                an_thit = min(thit_co, thieu / quy_doi)
-                w.ledger.huy(m, "thit", an_thit, "an", "ăn thịt", w.tick)
-                thieu -= an_thit * quy_doi
+            for ts, quy_doi in (
+                ("thit", float(w.cfg.raw()["chan_nuoi"]["thit_quy_doi_dinh_duong"])),
+                ("ca", float(w.cfg.raw()["danh_ca"]["ca_quy_doi_dinh_duong"])),
+            ):
+                for m in ho:
+                    co = w.ledger.so_du(m, ts)
+                    if co <= 0 or thieu <= 1e-9:
+                        continue
+                    an_them = min(co, thieu / quy_doi)
+                    w.ledger.huy(m, ts, an_them, "an", f"ăn {ts}", w.tick)
+                    thieu -= an_them * quy_doi
             an_duoc = tong_nhu_cau - max(0.0, thieu)
         ty_le_no = an_duoc / tong_nhu_cau if tong_nhu_cau > 0 else 1.0
         # hàng "tiện nghi": mỗi tick hộ tiêu dùng 1 đơn vị/loại → cộng health nhỏ

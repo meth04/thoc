@@ -44,3 +44,24 @@
 - 2026-07-11: Thêm tử suất tự nhiên đàn gà (`ga_chet_gia_moi_tick: 0.05`) + hạ trần đàn 60→25/hộ.
   Lý do: mock 120 tick cho thấy đàn toàn làng phình 2.180 con (sinh 15%/tick, không sink ngoài giết
   thịt) — đàn quy mô hộ gia đình tiền công nghiệp hợp lý hơn và gà tiêu thóc không nuốt hết thặng dư.
+- 2026-07-11 (gói realism 2 — nghiên cứu Sugarscape/Epstein-Axtell + văn liệu kinh tế nông thôn tiền công nghiệp):
+  1. ĐẤT BẠC MÀU + BỎ HOANG PHỤC HỒI (`dat_dai`): -4%/vụ gặt, sàn 50% độ màu gốc, hồi 1.5%/tick
+     bỏ hoang. Văn liệu: làng không phân bón kiệt đất sau 60-100 năm — buộc luân canh/mua đất mới.
+  2. ĐÁNH CÁ (`danh_ca`): sông là tài nguyên CHUNG tái sinh 25kg/ô/tick, 6 công/kg — sinh kế
+     người không đất; cả làng cùng đánh thì cạn (bi kịch của cải chung, để làng tự đặt lệ).
+  3. TIỆC KHAO XÓM (`tiec`): đốt ≥60kg quy thóc → quan hệ + sức khỏe khách (kinh tế hồi báo/potlatch).
+  4. TRỘM CẮP (`trom`): vật lý cho phép (45% trót lọt, ≤25% kho), bị bắt → quan hệ sập với nạn nhân
+     lẫn cả xóm. Engine KHÔNG có tuần đinh — trị an phải tự phát sinh (Sugarscape chương combat).
+  5. TAY NGHỀ (`tay_nghe`): +0.4%/vụ trực canh, trần 1.2 (learning by doing; lão nông tri điền).
+  6. CƯU MANG MỒ CÔI (engine/xa_hoi.py): trẻ mất cả cha mẹ → giám hộ tất định (anh chị ruột →
+     ông bà → cô chú → người quen thân nhất của cha mẹ); ho_cua đi lên chủ hộ + gộp con nuôi.
+  7. Sửa bug tiềm ẩn bị lộ ra: phat_vi_pham xiết thế chấp cho vị thế VO_THUA_NHAN → thửa đất
+     có "chủ ma" (audit fail mock tick 170). Nay chỉ xiết cho bên đòi còn hoạt động.
+  Rulebot: đánh cá khi túng/không đất; tiệc khi khá giả + hợp tác cao; trộm chỉ khi đường cùng
+  (đói ≥2 tick, trắng tay, lieu_linh ≥7, p 25%). Thẻ chính sách: chỉ đánh cá (tiệc/trộm là
+  quyết định có ý thức, dành cho LLM).
+- 2026-07-11 (hiệu chỉnh realism 2 sau mock300r lần 1 — 833/1433 chết đói, CNH không chạm):
+  thoai_hoa_moi_vu 0.04→0.01 (0.04 chạm sàn sau ~17 năm, sai văn liệu 60-100 năm);
+  cong_moi_kg_ca 6→4.5 + pool 25→35 (đánh cá toàn thời gian trước đây = 75kg quy thóc/tick
+  < 90kg nhu cầu — prompt hứa "sống được nhờ sông" mà vật lý không cho sống);
+  ga_an_thoc_moi_tick 4→2 (đàn gà nuốt khẩu phần ~70 người/tick — gà thật nửa thả rông).

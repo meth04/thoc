@@ -40,7 +40,7 @@ def sinh_ban_do(cfg: Config, rng: np.random.Generator) -> tuple[dict[str, Parcel
 
     def them(r: int, c: int, loai: str, mau_mo: float = 1.0) -> None:
         pid = f"P{r:02d}_{c:02d}"
-        parcels[pid] = Parcel(id=pid, r=r, c=c, loai=loai, mau_mo=mau_mo)
+        parcels[pid] = Parcel(id=pid, r=r, c=c, loai=loai, mau_mo=mau_mo, mau_mo_goc=mau_mo)
 
     for r, c in song_o:
         them(r, c, "song", 0.0)

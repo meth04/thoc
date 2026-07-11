@@ -64,6 +64,13 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
                         "giet_ga": kh.giet_ga})
     for den, ts, sl in kh.bieu:
         hd_list.append({"loai": "bieu", "den": den, "tai_san": ts, "so_luong": sl})
+    if kh.danh_ca_cong:
+        hd_list.append({"loai": "danh_ca", "cong": kh.danh_ca_cong})
+    if kh.mo_tiec:
+        hd_list.append({"loai": "mo_tiec", "thoc": kh.mo_tiec[0], "thit": kh.mo_tiec[1]})
+    if kh.trom:
+        hd_list.append({"loai": "trom", "muc_tieu": kh.trom[0], "tai_san": kh.trom[1],
+                        "so_luong": kh.trom[2]})
     for hd, den in kh.de_nghi_hop_dong:
         hd_list.append({
             "loai": "de_nghi_hop_dong",
@@ -225,6 +232,14 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
     elif loai == "bieu":
         kh.bieu.append((str(d["den"]), str(d.get("tai_san", "thoc")),
                         float(d["so_luong"])))
+    elif loai == "danh_ca":
+        kh.danh_ca_cong += max(0.0, float(d.get("cong", d.get("so_cong", 0)) or 0))
+    elif loai == "mo_tiec":
+        kh.mo_tiec = (max(0.0, float(d.get("thoc", 0) or 0)),
+                      max(0.0, float(d.get("thit", 0) or 0)))
+    elif loai == "trom":
+        kh.trom = (str(d["muc_tieu"]), str(d.get("tai_san", "thoc")),
+                   max(0.0, float(d.get("so_luong", 50) or 0)))
     elif loai == "buon_chuyen":
         chieu = d.get("chieu", "ban")
         if chieu in ("mua", "ban"):

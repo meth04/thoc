@@ -98,6 +98,9 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
     so_ga = w.ledger.so_du(aid, "ga")
     if an_ninh < 0.6 and so_ga >= 2:
         kh.giet_ga = max(kh.giet_ga, 2)
+    # túng mà không ruộng → ra sông đánh cá (sinh kế không cần vốn)
+    if an_ninh < 0.9 and not bc.ruong_cua.get(aid) and not kh.canh_thua:
+        kh.danh_ca_cong = max(kh.danh_ca_cong, 120.0)
     if so_ga > 12:
         gia_ga = w.gia_gan_nhat("ga") or 40.0
         kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),

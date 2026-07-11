@@ -275,12 +275,13 @@ def ke_hoach_mot_nguoi(
         # ---- Phase 4: R&D, entity, cổ phần, li-xăng, quặng/xu, di chúc, di cư ----
         _phase4_hanh_vi(w, a, kh, g, an_ninh, bc, da_nham)
 
-        # ---- phụng dưỡng cha mẹ già + chăn nuôi ----
-        _phung_duong_va_chan_nuoi(w, a, kh, g, an_ninh)
+        # ---- phụng dưỡng cha mẹ già + chăn nuôi + đánh cá + tiệc + đường cùng ----
+        _phung_duong_va_chan_nuoi(w, a, kh, g, an_ninh, bc)
     return kh
 
 
-def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float) -> None:
+def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float,
+                              bc: _BoiCanhTick) -> None:
     aid = a.id
     # phụng dưỡng: cha mẹ >60 tuổi thiếu ăn mà mình dư → biếu thóc
     if an_ninh > 1.2:
@@ -304,6 +305,26 @@ def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float) -> No
     elif so_ga == 0 and an_ninh > 2.0 and a.persona.tiet_kiem >= 6 and g.random() < 0.1:
         gia_ga = w.gia_gan_nhat("ga") or 40.0
         kh.dat_lenh.append(Lenh(aid, "mua", "ga", 3.0, round(gia_ga * 1.1, 1)))
+    # đánh cá: không ruộng/đói → sông là sinh kế cuối cùng trước khi làm liều
+    so_ruong = len(bc.ruong_cua.get(aid, ()))
+    if ((so_ruong == 0 and an_ninh < 0.9 and aid not in bc.dang_lam_thue)
+            or an_ninh < 0.45):
+        kh.danh_ca_cong = max(kh.danh_ca_cong, 120.0 if so_ruong == 0 else 60.0)
+    # tiệc khao xóm: nhà khá giả + trọng giao hảo → đổi của lấy quan hệ
+    thoc_co = w.ledger.so_du(aid, "thoc")
+    if an_ninh > 3.0 and a.persona.hop_tac >= 7 and g.random() < 0.06:
+        kh.mo_tiec = (round(min(thoc_co * 0.05, 200.0), 0),
+                      round(min(w.ledger.so_du(aid, "thit"), 10.0), 0))
+    # đường cùng: đói dai dẳng, không đất, không gà, không việc, tính liều →
+    # lấy trộm nhà khấm khá gần nhất (vật lý cho phép; trị an là việc của LÀNG)
+    if (w.tick - a.doi_tick <= 1 and an_ninh < 0.25 and so_ruong == 0 and so_ga == 0
+            and aid not in bc.dang_lam_thue and a.persona.lieu_linh >= 7
+            and g.random() < 0.25):
+        hang_xom = w.hang_xom_cua(aid, ban_kinh=6, toi_da=8)
+        if hang_xom:
+            giau_nhat = max(hang_xom, key=lambda h: (w.ledger.so_du(h, "thoc"), h))
+            if w.ledger.so_du(giau_nhat, "thoc") > 200:
+                kh.trom = (giau_nhat, "thoc", 150.0)
 
 
 def _phase4_hanh_vi(w: World, a, kh: KeHoach, g, an_ninh: float,

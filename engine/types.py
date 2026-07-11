@@ -60,6 +60,11 @@ class Agent:
     ky_uc: list = field(default_factory=list)  # ≤10 mục gần nhất
     # cư trú: nhà đặt trên thửa nào (làng xóm 2D — hàng xóm theo khoảng cách thật)
     nha_thua: str | None = None
+    # tay nghề đồng áng — kinh nghiệm tích qua mỗi vụ (learning by doing)
+    tay_nghe: float = 1.0
+    # trẻ mồ côi được thân nhân/hàng xóm cưu mang (ăn chung nồi cơm hộ người nuôi)
+    giam_ho: str | None = None
+    con_nuoi: list = field(default_factory=list)
 
     @property
     def tuoi_nam(self) -> float:
@@ -76,6 +81,7 @@ class Parcel:
     c: int
     loai: str  # ruong | rung | doi | mo_dong | song
     mau_mo: float = 1.0
+    mau_mo_goc: float = 0.0  # độ màu nguyên thủy — canh liên tục bạc màu, bỏ hoang hồi dần
     chu: str | None = None  # None = đất công; id người hoặc pháp nhân
     lang: int | None = None
     # trạng thái canh tác trong tick hiện tại

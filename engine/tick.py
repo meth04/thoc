@@ -92,6 +92,7 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     production.thi_hanh_san_xuat(w, ke_hoach)
     # chăn nuôi: bắt gà / giết thịt theo kế hoạch
     from engine import chan_nuoi as cn_mod
+    from engine import xa_hoi
 
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
@@ -101,6 +102,13 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
             cn_mod.bat_ga(w, aid, kh.bat_ga_cong)
         if kh.giet_ga > 0:
             cn_mod.giet_ga(w, aid, kh.giet_ga)
+        if kh.danh_ca_cong > 0:
+            cn_mod.danh_ca(w, aid, kh.danh_ca_cong)
+        if aid in w.agents:  # tiệc/trộm là chuyện người với người, entity đứng ngoài
+            if kh.mo_tiec:
+                xa_hoi.mo_tiec(w, aid, *kh.mo_tiec)
+            if kh.trom:
+                xa_hoi.trom(w, aid, *kh.trom)
     from engine import research as research_mod
 
     for aid in sorted(ke_hoach):
@@ -161,11 +169,13 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     w.chet_tick_truoc = {
         aid for aid, a in w.agents.items() if not a.con_song
     } - truoc
+    xa_hoi.cuu_mang_mo_coi(w)  # trẻ mồ côi cả cha lẫn mẹ được cưu mang ngay tick này
 
     # 10. giao_duc
     education.buoc_giao_duc(w, ke_hoach)
 
-    # 11. ket_toan: công bốc hơi → AUDIT (assert) → tri thức → metrics → observatory
+    # 11. ket_toan: đất bỏ hoang hồi màu → công bốc hơi → AUDIT (assert) → ...
+    production.phuc_hoi_dat(w)
     production.boc_hoi_cong(w)
     audit.kiem_toan_the_gioi(w, tong_thua_ban_dau)
     research_mod.cap_nhat_san_tier(w)

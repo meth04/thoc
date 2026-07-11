@@ -97,8 +97,41 @@ def giet_ga(w: World, aid: str, so_con: int) -> None:
 
 
 def hao_thit(w: World) -> None:
-    """Thịt không trữ lâu được."""
-    ty_le = float(w.cfg.raw()["chan_nuoi"]["thit_hao_moi_tick"])
+    """Thịt và cá tươi không trữ lâu được."""
+    ty_le_thit = float(w.cfg.raw()["chan_nuoi"]["thit_hao_moi_tick"])
+    ty_le_ca = float(w.cfg.raw()["danh_ca"]["ca_hao_moi_tick"])
     for (ct, ts), v in list(w.ledger._so_du.items()):
         if ts == "thit" and v > 0:
-            w.ledger.huy(ct, "thit", v * ty_le, "hao_thit", "thịt ôi", w.tick)
+            w.ledger.huy(ct, "thit", v * ty_le_thit, "hao_thit", "thịt ôi", w.tick)
+        elif ts == "ca" and v > 0:
+            w.ledger.huy(ct, "ca", v * ty_le_ca, "hao_thit", "cá ươn", w.tick)
+
+
+def danh_ca(w: World, aid: str, so_cong: float) -> None:
+    """Đánh cá trên sông — trữ lượng là CỦA CHUNG cả làng, đánh nhiều thì cạn.
+
+    Không cần đất: đây là sinh kế của người không ruộng (văn liệu kinh tế nông thôn).
+    """
+    from engine.production import _ghi_su_co, ghi_cong_dung
+
+    dc = w.cfg.raw()["danh_ca"]
+    so_o_song = sum(1 for p in w.parcels.values() if p.loai == "song")
+    if so_o_song == 0:
+        _ghi_su_co(w, aid, "vùng này không có sông để đánh cá")
+        return
+    # trữ lượng chung tái sinh mỗi tick — ai đánh trước được trước (thứ tự id tất định)
+    if getattr(w, "_ca_pool_tick", None) != w.tick:
+        w._ca_pool_tick = w.tick
+        w._ca_pool = so_o_song * float(dc["ca_moi_o_song_kg"])
+    cong_moi_kg = float(dc["cong_moi_kg_ca"])
+    cong_co = min(max(0.0, so_cong), w.ledger.so_du(aid, "cong"))
+    kg = min(cong_co / cong_moi_kg, w._ca_pool)
+    if kg <= 1e-9:
+        _ghi_su_co(w, aid, "ra sông nhưng cá đã bị đánh cạn mùa này (hoặc hết công)")
+        return
+    w.ledger.huy(aid, "cong", kg * cong_moi_kg, "dung", "đánh cá", w.tick)
+    ghi_cong_dung(w, "nong", kg * cong_moi_kg)
+    w.ledger.sinh(aid, "ca", kg, "danh_ca", "đánh cá", w.tick)
+    w._ca_pool -= kg
+    w.ghi_thu_nhap(aid, "nong", kg * float(dc["ca_quy_doi_dinh_duong"]))
+    w.events.ghi(w.tick, "danh_ca", id=aid, kg=round(kg, 1))

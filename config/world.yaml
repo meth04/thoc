@@ -44,8 +44,35 @@ lao_dong_theo_tuoi:              # người già dưỡng sức — sức lao đ
   he_so_sau_nghi: 0.15
   hao_suc_gia_moi_tick: 1.5      # >60 mỗi tick hao nhẹ sức khỏe (tuổi tác)
 
+dat_dai:                         # đất canh liên tục thì bạc màu, bỏ hoang thì hồi dần
+  thoai_hoa_moi_vu: 0.01         # ×(1-1%)/vụ → chạm sàn sau ~70 vụ, khớp văn liệu 60-100 năm
+  phuc_hoi_moi_tick_bo_hoang: 0.015
+  san_ty_le_mau_mo: 0.5          # không tụt dưới 50% độ màu nguyên thủy
+
+danh_ca:                         # sông là nguồn cá chung của cả làng — đánh nhiều thì cạn
+  ca_moi_o_song_kg: 35           # trữ lượng tái sinh mỗi tick trên mỗi ô sông
+  cong_moi_kg_ca: 4.5            # 180 công ≈ 40kg cá ≈ 100kg quy thóc — đủ sống, không giàu
+  ca_hao_moi_tick: 0.15          # cá tươi không trữ lâu
+  ca_quy_doi_dinh_duong: 2.5     # 1kg cá no bằng 2.5kg thóc
+
+tiec:                            # tiệc khao xóm — đổi của cải lấy quan hệ (kinh tế hồi báo)
+  chi_phi_toi_thieu_thoc: 60     # quy thóc (thóc + thịt×quy đổi); ít hơn thì không ai đến
+  khach_toi_da: 8
+  tang_suc_khoe_khach: 4
+  quan_he_moi_khach: 0.8
+
+trom:                            # vật lý cho phép lấy trộm — trị an, luật làng phải TỰ PHÁT SINH
+  p_thanh_cong: 0.45
+  ty_le_lay_toi_da: 0.25         # mỗi lần lấy được tối đa 25% kho nạn nhân
+  quan_he_nan_nhan: -3.0         # bị bắt quả tang: nạn nhân thù
+  quan_he_hang_xom: -1.0         # ... và cả xóm nạn nhân xa lánh
+
+tay_nghe:                        # kinh nghiệm đồng áng tích qua mỗi vụ (learning by doing)
+  tang_moi_vu: 0.004
+  tran: 1.2
+
 chan_nuoi:                       # vật lý chăn nuôi (gà) — nguồn thu nhập phụ
-  ga_an_thoc_moi_tick: 4         # mỗi con ăn 4kg thóc/tick; thiếu ăn thì chết dần
+  ga_an_thoc_moi_tick: 2         # gà nửa thả rông tự kiếm ăn — chỉ tốn 2kg thóc/tick/con
   ga_sinh_san_moi_tick: 0.15     # đàn tăng 15%/tick nếu no đủ
   ga_toi_da_moi_ho: 25           # quá đông thì dịch bệnh kìm đàn
   bat_ga_cong_moi_con: 30        # bắt gà rừng: 30 công/con (cần ô rừng trong làng)

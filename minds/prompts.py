@@ -126,6 +126,10 @@ hanh_dong hợp lệ (loai + tham số):
 - {"loai":"chan_nuoi","bat_ga_cong":60,"giet_ga":2}  (bắt gà rừng / giết gà lấy thịt)
 - {"loai":"bieu","den":"A0002","tai_san":"thoc","so_luong":90}  (biếu tặng — phụng
   dưỡng cha mẹ già, quà cưới, cứu đói người thân... không cần hợp đồng)
+- {"loai":"danh_ca","cong":120}  (ra sông đánh cá — sinh kế không cần ruộng)
+- {"loai":"mo_tiec","thoc":150,"thit":10}  (mở tiệc khao xóm — tốn của, được lòng người)
+- {"loai":"trom","muc_tieu":"A0002","tai_san":"thoc","so_luong":100}  (làm liều lúc
+  cùng đường — bị bắt quả tang là cả xóm coi khinh, thân bại danh liệt)
 
 Văn phạm dieu_khoan (9 loại — ghép tự do thành mọi kiểu thỏa thuận):
 chuyen_giao_dinh_ky{tu,den,tai_san,so_luong,moi_n_tick} ·
@@ -157,9 +161,24 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   người. Từ 15 tuổi phụ giúp được 30% sức. Quá 60 tuổi sức yếu dần (nửa công, hao sức
   mỗi tick), quá 70 gần như nghỉ hẳn — con cháu phải PHỤNG DƯỠNG cha mẹ già (chu cấp
   thóc, thẻ chính sách có sẵn phung_duong_cha_me).
+- ĐẤT BẠC MÀU: canh cùng một thửa liên tục thì độ màu giảm 4%/vụ (chạm đáy ở nửa độ
+  màu gốc); BỎ HOANG thì hồi dần. Nhà nhiều ruộng nên LUÂN CANH cho đất nghỉ.
+- TAY NGHỀ: mỗi vụ trực tiếp canh tác, kinh nghiệm đồng áng tăng dần (tối đa +20%
+  năng suất) — lão nông tri điền gặt nhiều hơn tay mơ trên cùng một thửa.
+- ĐÁNH CÁ: sông là CỦA CHUNG — 6 công/kg cá, 1kg cá no bằng 2.5kg thóc, nhưng cá ươn
+  nhanh (hao 15%/tick) và trữ lượng mỗi mùa CÓ HẠN: cả làng cùng đổ ra sông là cạn.
+  Người không ruộng vẫn sống được nhờ sông (đánh cá quanh năm, mùa nào cũng được).
+- TIỆC KHAO XÓM: bỏ ra ≥60kg (thóc/thịt quy đổi) mời hàng xóm — tốn của nhưng cả xóm
+  quý mến; quan hệ tốt là vốn liếng khi cần vay mượn, cưới hỏi, làm ăn.
+- TRỘM CẮP: về mặt vật lý KHÔNG gì ngăn bạn lấy trộm (được thì ~1/4 kho người ta), nhưng
+  hơn nửa số lần sẽ BỊ BẮT QUẢ TANG — nạn nhân thù, cả xóm coi khinh, không ai dám làm
+  ăn với bạn nữa. Làng KHÔNG có tuần đinh sẵn — muốn kho lẫm an toàn, dân làng phải tự
+  tổ chức lấy (thuê người canh, lập giao kèo trừng phạt, đền bù...).
+- TRẺ MỒ CÔI cả cha lẫn mẹ sẽ được thân nhân gần nhất (hoặc hàng xóm tử tế) cưu mang,
+  ăn chung nồi cơm nhà người nuôi — nhận nuôi là thêm miệng ăn nhưng cũng là phúc đức.
 - SẮP ĐÓI thì đừng ngồi chờ chết: đi VAY (đề nghị hợp đồng: nhận thóc ngay ký kết,
   hứa trả nhiều hơn khi đáo hạn, có thể thế chấp đất), xin LÀM THUÊ đổi công lấy thóc,
-  BÁN gỗ/công cụ/gà/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
+  ra sông ĐÁNH CÁ, BÁN gỗ/công cụ/gà/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
 
 [BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
 mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, phụng dưỡng cha mẹ già,
@@ -171,6 +190,7 @@ là tùy TÍNH CÁCH bạn. Muốn có con: đặt y_dinh_sinh_con (0/0.5/1) tro
   chia_san_luong hoặc + tô cố định). Người làm thuê: gop_cong đổi thóc định kỳ.
 - Thợ thủ công: khai gỗ → chế công cụ/nhà đem bán. Thợ mỏ: đào quặng bán / đúc xu.
 - Người chăn nuôi: gây đàn gà, bán gà sống/thịt cho làng — nhà dư thóc càng nên nuôi.
+- Người đánh cá: không tấc đất cắm dùi vẫn sống nhờ sông; bán cá tươi cho làng.
 - Lái buôn: mua rẻ bán đắt trên chợ (dat_lenh 2 chiều).
 - THẦY ĐỒ (giáo viên): biết chữ (E cao) thì dạy người khác — day_cho trong phan_bo_cong,
   kèm hợp đồng học phí (học trò trả thóc định kỳ). Học trò thăng E, bạn có thu nhập.
@@ -243,6 +263,13 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         if not ts.startswith("vi_the:")
     )
     dat = sorted(p.id for p in w.parcels.values() if p.chu == aid)
+    # độ màu từng thửa — nhìn là biết thửa nào bạc màu cần cho nghỉ (luân canh)
+    dat_hien = [
+        f"{p.id}(màu {p.mau_mo:.2f}"
+        + (", ĐANG BẠC MÀU" if p.mau_mo_goc > 0 and p.mau_mo < p.mau_mo_goc * 0.8 else "")
+        + ")"
+        for p in sorted((q for q in w.parcels.values() if q.chu == aid), key=lambda q: q.id)
+    ]
     hd_cua = []
     for h in w.hop_dong.values():
         if h.trang_thai == "hieu_luc" and aid in h.cac_ben:
@@ -329,8 +356,11 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"{tinh_trang}, học vấn E{a.e_bac}, sức khỏe {a.health:.0f}/100. "
         f"Tính cách (1-9): {a.persona.as_dict()}.",
         f"Hồi ký: {a.hoi_ky or '(trống)'} | Gia huấn: \"{a.gia_huan or '(chưa có)'}\"",
-        f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat or 'không có'}.",
+        f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat_hien or 'không có'}.",
     ]
+    if a.tay_nghe > 1.02:
+        dong.append(f"Kinh nghiệm đồng áng: năng suất +{(a.tay_nghe - 1) * 100:.0f}% "
+                    f"(tay nghề tích qua từng vụ).")
     if a.ky_uc:
         dong.append("CHUYỆN ĐỜI BẠN (chớ quên): " + " | ".join(a.ky_uc[-7:]))
     if gia_dinh:
@@ -363,7 +393,7 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     if nhu_cau > 0 and thoc_ho < nhu_cau * 2:
         so_tick = thoc_ho / nhu_cau
         cach = ["vay (đề nghị hợp đồng)", "xin làm thuê (gop_cong đổi thóc)",
-                "nhận đề nghị sẵn trên bảng rao"]
+                "ra sông đánh cá (danh_ca)", "nhận đề nghị sẵn trên bảng rao"]
         if w.ledger.so_du(aid, "go") >= 1 or w.ledger.so_du(aid, "cong_cu") >= 1:
             cach.append("bán gỗ/công cụ (dat_lenh)")
         if dat:

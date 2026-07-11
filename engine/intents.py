@@ -49,3 +49,7 @@ class KeHoach:
     giet_ga: int = 0  # giết bao nhiêu con lấy thịt
     # biếu tặng (phụng dưỡng cha mẹ già, quà cưới, cứu đói hàng xóm...)
     bieu: list = field(default_factory=list)  # [(den, tai_san, so_luong)]
+    # sinh kế & xã hội (gói realism 2)
+    danh_ca_cong: float = 0.0  # công dành ra sông đánh cá (trữ lượng chung của làng)
+    mo_tiec: tuple | None = None  # (thoc, thit) — tiệc khao xóm
+    trom: tuple | None = None  # (muc_tieu, tai_san, so_luong) — làm liều, rủi ro thể diện

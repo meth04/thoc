@@ -205,8 +205,14 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     * _tool_mult(w, aid)
                     * _health_mult(health)
                     * _he_so_nong(w, aid)  # blueprint nông nghiệp áp dụng được
+                    * (a.tay_nghe if a is not None else 1.0)  # kinh nghiệm đồng áng
                 )
                 w.ledger.sinh(aid, "thoc", san_luong, "gat", f"gặt {pid}", w.tick)
+                # đất canh liên tục bạc màu dần — muốn giữ độ màu phải cho nghỉ
+                dd = w.cfg.raw()["dat_dai"]
+                goc = p.mau_mo_goc if p.mau_mo_goc > 0 else p.mau_mo
+                p.mau_mo = max(goc * float(dd["san_ty_le_mau_mo"]),
+                               p.mau_mo * (1.0 - float(dd["thoai_hoa_moi_vu"])))
                 w.gat_tick[pid] = (aid, san_luong)
                 w.ghi_thu_nhap(aid, "nong", san_luong)
                 w.ghi_thu_nhap(aid, "canh_thua_tong", 1.0)  # đếm thửa (đơn vị: thửa)
@@ -226,6 +232,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                         w.ghi_ky_uc(aid, f"tôi khai hoang xong thửa {pid} — đất của tôi")
             if dung_cong_cu:
                 _hao_mon_cong_cu(w, aid)
+            if so_thua_canh > 0 and a is not None:
+                tn = w.cfg.raw()["tay_nghe"]
+                a.tay_nghe = min(float(tn["tran"]), a.tay_nghe + float(tn["tang_moi_vu"]))
 
         # 2) Khai thác gỗ/quặng
         kt = sx["khai_thac"]
@@ -369,3 +378,15 @@ def boc_hoi_cong(w: World) -> None:
     giu_cong = [(ct, v) for (ct, ts), v in w.ledger._so_du.items() if ts == "cong" and v > 0]
     for ct, v in giu_cong:
         w.ledger.huy(ct, "cong", v, "boc_hoi", "công bốc hơi cuối tick", w.tick)
+
+
+def phuc_hoi_dat(w: World) -> None:
+    """Ruộng bỏ hoang (không gặt tick này) hồi độ màu dần về mức nguyên thủy."""
+    dd = w.cfg.raw()["dat_dai"]
+    hoi = float(dd["phuc_hoi_moi_tick_bo_hoang"])
+    for p in w.parcels.values():
+        if p.loai != "ruong" or p.id in w.gat_tick:
+            continue
+        goc = p.mau_mo_goc if p.mau_mo_goc > 0 else p.mau_mo
+        if p.mau_mo < goc:
+            p.mau_mo = min(goc, p.mau_mo + hoi)

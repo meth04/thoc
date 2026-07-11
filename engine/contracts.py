@@ -273,7 +273,9 @@ def phat_vi_pham(w, hd: HopDong, ke_vi_pham: str) -> None:
                 if c.loai in ("chuyen_giao_mot_lan", "chuyen_giao_dinh_ky")
                 and getattr(c, "tu", None) == ke_vi_pham
             )
-            chu_no = nan_nhan[0] if nan_nhan else None
+            # chỉ xiết cho bên đòi CÒN HOẠT ĐỘNG — vị thế vô thừa nhận (chủ nợ chết
+            # không người kế) thì không ai nhận đất, thế chấp ở lại với con nợ
+            chu_no = next((n for n in nan_nhan if w.chu_the_hoat_dong(n)), None)
             if chu_no:
                 xiet_the_chap(w, hd, chu_no, ke_vi_pham, max(no, 0.0))
         elif khi_pha_vo.phat == "phat_chuyen_giao" and khi_pha_vo.phat_chuyen_giao:

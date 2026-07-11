@@ -191,15 +191,24 @@ class World:
 
     # ---------- hộ gia đình ----------
     def ho_cua(self, aid: str) -> list[str]:
-        """Hộ = bản thân + vợ/chồng + con chưa trưởng thành còn sống."""
+        """Hộ = chủ hộ + vợ/chồng + con (đẻ lẫn nuôi) chưa trưởng thành còn sống.
+
+        Trẻ chưa trưởng thành quy về hộ của cha/mẹ còn sống, hoặc người giám hộ
+        (trẻ mồ côi được cưu mang ăn chung nồi cơm nhà người nuôi)."""
         a = self.agents[aid]
         tt = self.cfg.get("nhan_khau.tuoi_truong_thanh")
-        ho = [aid]
+        if not a.truong_thanh(tt):
+            for pid in (a.cha, a.me, a.giam_ho):
+                p = self.agents.get(pid) if pid else None
+                if p is not None and p.con_song:
+                    a = p
+                    break
+        ho = [a.id]
         if a.vo_chong and a.vo_chong in self.agents and self.agents[a.vo_chong].con_song:
             ho.append(a.vo_chong)
-        for cid in a.con:
+        for cid in [*a.con, *a.con_nuoi]:
             c = self.agents.get(cid)
-            if c and c.con_song and not c.truong_thanh(tt):
+            if c and c.con_song and not c.truong_thanh(tt) and cid not in ho:
                 ho.append(cid)
         return ho
 
@@ -210,6 +219,7 @@ class World:
                 a.id, a.ten, a.gioi_tinh, a.tuoi_tick, a.lang, round(a.health, 6), a.e_bac,
                 a.con_song, a.vo_chong or "", a.cha or "", a.me or "", tuple(sorted(a.con)),
                 tuple(sorted(a.persona.as_dict().items())),
+                round(a.tay_nghe, 6), a.giam_ho or "", tuple(sorted(a.con_nuoi)),
             )
             for a in self.agents.values()
         )
@@ -295,6 +305,11 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("thit", "giet_thit", "nguon")
     f.dang_ky("thit", "an", "sink")
     f.dang_ky("thit", "hao_thit", "sink")
+    f.dang_ky("thit", "tiec", "sink")
+    f.dang_ky("thoc", "tiec", "sink")
+    f.dang_ky("ca", "danh_ca", "nguon")
+    f.dang_ky("ca", "an", "sink")
+    f.dang_ky("ca", "hao_thit", "sink")
     f.dang_ky("nha", "xay", "nguon")
     f.dang_ky("may", "che_tac", "nguon")
     f.dang_ky("may", "hao_mon", "sink")
