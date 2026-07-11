@@ -10,6 +10,7 @@ Khác mock ở ba điểm:
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -56,6 +57,8 @@ class MindReal(MindMock):
         self.gateway = GatewayReal(cfg, env, self.quota, transport=transport)
         self.provider = GatewayCoPacing(self.gateway, cho_toi_s=cho_toi_s)
         self.ly_do_dung = ""
+        # bộ phiên dịch intent: loại đã hỏi mà LLM cũng bó tay → không hỏi lại (đỡ call)
+        self._loai_bo_tay: set[str] = set()
 
     # ---------- budget guard (điều luật #7: không degrade) ----------
     def _du_ngan_sach(self, w: World, cac_batch: list) -> bool:
@@ -114,6 +117,78 @@ class MindReal(MindMock):
                 w.events.ghi(w.tick, "nen_hoi_ky_loi", loi=che_key(str(e))[:200])
                 for a in lo:
                     self._nen_heuristic(w, a)
+
+    # ---------- bộ phiên dịch intent lạ: gom cả tick vào MỘT call model rẻ ----------
+    def _dich_intent_la(self, w: World, thung: list, ke_hoach: dict) -> None:
+        """LLM trả hành động không có trong 15 nguyên tố / sai tham số → thử ÁNH XẠ về
+        văn phạm hợp lệ bằng 1 call (model rẻ nhất). Tiết kiệm request:
+        (1) gom mọi intent lạ của tick vào một call; (2) loại đã bó tay thì cache,
+        không hỏi lại; (3) tick không có intent lạ → 0 call. Kết quả ánh xạ vẫn đi
+        qua validator engine như thường — an toàn không đổi."""
+        from minds.schemas import HanhDong
+        from minds.translate import _mot_hanh_dong
+
+        hoi, bo = [], []
+        for aid, d, ly_do in thung:
+            loai = str(d.get("loai"))
+            if loai in self._loai_bo_tay or aid not in ke_hoach:
+                bo.append((aid, d, ly_do))
+            else:
+                hoi.append((aid, d, ly_do))
+        for aid, d, ly_do in bo:
+            w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
+        if not hoi:
+            return
+        hoi = hoi[:40]  # trần an toàn cho 1 call
+
+        from minds.prompts import SCHEMA_QUYET_DINH
+
+        muc = [
+            {"stt": i, "cua": aid, "y_dinh": d, "vi_sao_bi_tu_choi": ly_do}
+            for i, (aid, d, ly_do) in enumerate(hoi)
+        ]
+        prompt = (
+            "Các cư dân (agent) đã ra những Ý ĐỊNH dưới đây nhưng engine không nhận diện "
+            "được. Hãy DỊCH từng ý định về (các) hành động hợp lệ trong văn phạm — giữ "
+            "đúng tinh thần của ý định, dùng đúng id/tham số có trong ý định gốc. Không "
+            "dịch nổi thì trả mảng rỗng.\n\n"
+            + json.dumps(muc, ensure_ascii=False, indent=1)
+            + "\n\n" + SCHEMA_QUYET_DINH
+            + '\n\nTrả về DUY NHẤT mảng JSON: [{"stt": 0, "hanh_dong": [...]}, ...] '
+              "đủ mọi stt."
+        )
+        nen_cfg = self.cfg.get("models.nen_hoi_ky")
+        q = self.cfg.raw()["quotas"][nen_cfg["provider"]]["models"].get(nen_cfg["model"], {})
+        route = Route(nen_cfg["provider"], nen_cfg["model"],
+                      int(q.get("rpm", 4)), int(q.get("rpd", 100)))
+        req = LLMRequest(prompt=prompt, ctx={}, tier="T1",
+                         batch_ids=[aid for aid, _d, _l in hoi])
+        try:
+            resp = self._goi_nen_co_cho(req, route)
+            self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
+                                        time.time())
+            self.so_call += 1
+            self.log.ghi(w.tick, req, resp, fallback=False)
+            ket_qua = {int(x.get("stt", -1)): x.get("hanh_dong", [])
+                       for x in sua_va_parse(resp.text) if isinstance(x, dict)}
+        except Exception as e:  # noqa: BLE001 — dịch hỏng thì bỏ như cũ, không chết run
+            w.events.ghi(w.tick, "dich_intent_loi", loi=che_key(str(e))[:200])
+            ket_qua = {}
+        for i, (aid, d, ly_do) in enumerate(hoi):
+            anh_xa = ket_qua.get(i) or []
+            da_ap = 0
+            for hd_moi in anh_xa[:3]:
+                try:
+                    _mot_hanh_dong(w, ke_hoach[aid], HanhDong.model_validate(hd_moi))
+                    da_ap += 1
+                except Exception:  # noqa: BLE001
+                    continue
+            if da_ap:
+                w.events.ghi(w.tick, "intent_duoc_dich", ai=aid,
+                             goc=str(d.get("loai")), so_hanh_dong=da_ap)
+            else:
+                self._loai_bo_tay.add(str(d.get("loai")))
+                w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
 
     def _goi_nen_co_cho(self, req: LLMRequest, route: Route) -> LLMResponse:
         """Gọi route nền, chờ slot RPM tối đa ~30s (nén rơi về heuristic nếu kẹt)."""

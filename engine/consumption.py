@@ -76,6 +76,7 @@ def an_va_suc_khoe(w: World) -> None:
             else:
                 mat = sk["mat_toi_da_khi_doi"] * (1.0 - ty_le_no)
                 ag.health = max(0.0, ag.health - mat)
+                ag.doi_tick = w.tick  # đánh dấu vừa thiếu ăn — phân loại cái chết đúng
                 if ty_le_no < 0.75:
                     w.events.ghi(w.tick, "an_doi", id=m, ty_le_no=round(ty_le_no, 2))
 

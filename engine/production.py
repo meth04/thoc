@@ -72,6 +72,42 @@ def ghi_cong_dung(w: World, muc_dich: str, so_cong: float) -> None:
     d[muc_dich] = d.get(muc_dich, 0.0) + so_cong
 
 
+def _lam_nguyen_tu(w: World, aid: str, ly_do: str,
+                   tieu: list[tuple[str, float, str]],
+                   ra: list[tuple[str, float, str]]) -> bool:
+    """Recipe NGUYÊN TỬ: thiếu bất kỳ nguyên liệu nào → không trừ gì cả (không mất
+    công oan). Trả False khi thiếu."""
+    from engine.ledger import DongSinhHuy, Transaction
+
+    try:
+        w.ledger.ap_dung(Transaction(
+            tick=w.tick, ly_do=ly_do,
+            sinh_huy=tuple(
+                [DongSinhHuy(aid, ts, -sl, luong) for ts, sl, luong in tieu]
+                + [DongSinhHuy(aid, ts, +sl, luong) for ts, sl, luong in ra]
+            ),
+        ))
+        return True
+    except LoiSoKep:
+        return False
+
+
+def _ghi_su_co(w: World, aid: str, noi_dung: str) -> None:
+    """Việc không thành (thiếu nguyên liệu...) — agent sẽ thấy trong prompt tick sau."""
+    a = w.agents.get(aid)
+    if a is not None:
+        a.su_co = [*a.su_co, noi_dung][-3:]
+
+
+def _thieu_gi(w: World, aid: str, can: list[tuple[str, float, str]]) -> str:
+    thieu = []
+    for ts, sl, _l in can:
+        co = w.ledger.so_du(aid, ts)
+        if co + 1e-9 < sl:
+            thieu.append(f"{ts} cần {sl:.0f} chỉ có {co:.0f}")
+    return "; ".join(thieu) or "thiếu nguyên liệu"
+
+
 def _hao_mon_cong_cu(w: World, aid: str) -> None:
     sl = w.ledger.so_du(aid, "cong_cu")
     if sl >= 1.0:
@@ -131,15 +167,14 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     continue  # đất người khác, không có quyền sử dụng
                 if pid in da_canh_tick_nay:
                     continue
-                try:
-                    # máy nhân năng suất công → cùng một thửa tốn ít công hơn
-                    cong_can = float(sx["cong_moi_thua"]) / he_so_may(w, aid)
-                    giong = float(sx["giong_kg_moi_thua"])
-                    w.ledger.huy(aid, "cong", cong_can, "dung", f"canh {pid}", w.tick)
-                    w.ledger.huy(aid, "thoc", giong, "giong", f"gieo {pid}", w.tick)
-                    ghi_cong_dung(w, "nong", cong_can)
-                except LoiSoKep:
-                    continue  # thiếu công/giống → thửa này bỏ
+                # máy nhân năng suất công → cùng một thửa tốn ít công hơn
+                cong_can = float(sx["cong_moi_thua"]) / he_so_may(w, aid)
+                giong = float(sx["giong_kg_moi_thua"])
+                tieu = [("cong", cong_can, "dung"), ("thoc", giong, "giong")]
+                if not _lam_nguyen_tu(w, aid, f"canh {pid}", tieu, []):
+                    _ghi_su_co(w, aid, f"gieo {pid} không thành: {_thieu_gi(w, aid, tieu)}")
+                    continue  # thiếu công/giống → thửa này bỏ, KHÔNG mất gì
+                ghi_cong_dung(w, "nong", cong_can)
                 da_canh_tick_nay[pid] = aid
                 hs = hieu_suat[min(so_thua_canh, len(hieu_suat) - 1)]
                 so_thua_canh += 1
@@ -198,42 +233,38 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             if w.ledger.so_du(aid, "cong_cu") >= 1.0:
                 _hao_mon_cong_cu(w, aid)
 
-        # 3) Chế tác công cụ, xây nhà, đúc xu, dựng máy, hàng mới (blueprint)
+        # 3) Chế tác công cụ, xây nhà, đúc xu, dựng máy, hàng mới — recipe NGUYÊN TỬ
         giam_vl = _giam_chi_phi_vat_lieu(w, aid)
         he_may = he_so_may(w, aid)
         for _ in range(int(kh.che_tao_cong_cu)):
             r = sx["recipe"]["cong_cu"]
-            try:
-                cong_can = float(r["cong"]) * giam_vl / he_may
-                w.ledger.huy(aid, "cong", cong_can, "dung", "chế công cụ", w.tick)
-                w.ledger.huy(aid, "go", float(r["go"]), "che_tac", "chế công cụ", w.tick)
-                ghi_cong_dung(w, "phi_nong", cong_can)
-            except LoiSoKep:
+            cong_can = float(r["cong"]) * giam_vl / he_may
+            tieu = [("cong", cong_can, "dung"), ("go", float(r["go"]), "che_tac")]
+            if not _lam_nguyen_tu(w, aid, "chế công cụ", tieu,
+                                  [("cong_cu", 1.0, "che_tac")]):
+                _ghi_su_co(w, aid, f"chế công cụ không thành: {_thieu_gi(w, aid, tieu)}")
                 break
-            w.ledger.sinh(aid, "cong_cu", 1.0, "che_tac", "công cụ mới", w.tick)
+            ghi_cong_dung(w, "phi_nong", cong_can)
             w.events.ghi(w.tick, "che_tac", id=aid, mon="cong_cu")
         for _ in range(int(kh.xay_nha)):
             r = sx["recipe"]["nha"]
-            try:
-                cong_can = float(r["cong"]) * giam_vl / he_may
-                w.ledger.huy(aid, "cong", cong_can, "dung", "xây nhà", w.tick)
-                w.ledger.huy(aid, "go", float(r["go"]), "xay", "xây nhà", w.tick)
-                ghi_cong_dung(w, "phi_nong", cong_can)
-            except LoiSoKep:
+            cong_can = float(r["cong"]) * giam_vl / he_may
+            tieu = [("cong", cong_can, "dung"), ("go", float(r["go"]), "xay")]
+            if not _lam_nguyen_tu(w, aid, "xây nhà", tieu, [("nha", 1.0, "xay")]):
+                _ghi_su_co(w, aid, f"xây nhà không thành: {_thieu_gi(w, aid, tieu)}")
                 break
-            w.ledger.sinh(aid, "nha", 1.0, "xay", "nhà mới", w.tick)
+            ghi_cong_dung(w, "phi_nong", cong_can)
             w.events.ghi(w.tick, "xay_nha", id=aid)
         for _ in range(int(kh.duc_xu)):
             r = sx["recipe"]["xu"]
-            try:
-                cong_can = float(r["cong"]) * giam_vl
-                w.ledger.huy(aid, "cong", cong_can, "dung", "đúc xu", w.tick)
-                w.ledger.huy(aid, "quang_dong", float(r["quang_dong"]), "che_tac",
-                             "đúc xu", w.tick)
-                ghi_cong_dung(w, "phi_nong", cong_can)
-            except LoiSoKep:
+            cong_can = float(r["cong"]) * giam_vl
+            tieu = [("cong", cong_can, "dung"),
+                    ("quang_dong", float(r["quang_dong"]), "che_tac")]
+            if not _lam_nguyen_tu(w, aid, "đúc xu", tieu,
+                                  [("xu", float(r["ra"]), "duc_xu")]):
+                _ghi_su_co(w, aid, f"đúc xu không thành: {_thieu_gi(w, aid, tieu)}")
                 break
-            w.ledger.sinh(aid, "xu", float(r["ra"]), "duc_xu", "đúc xu", w.tick)
+            ghi_cong_dung(w, "phi_nong", cong_can)
             w.events.ghi(w.tick, "duc_xu", id=aid, ra=r["ra"])
         # máy: cần blueprint cong_cu_may_moc áp dụng được (SPEC 2.5 + research.yaml)
         for _ in range(int(kh.xay_may)):
@@ -241,26 +272,20 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
 
             if duoc_ap_dung(w, aid, "cong_cu_may_moc") <= 0:
                 w.ghi_unrecognized(aid, "xay_may", "chưa có blueprint cong_cu_may_moc")
+                _ghi_su_co(w, aid, "dựng máy không thành: chưa nắm bí quyết máy móc "
+                                   "(cần blueprint cong_cu_may_moc hoặc li-xăng)")
                 break
             r_may = w.cfg.raw()["research"]["may"]["recipe"]
-            quang_co = w.ledger.so_du(aid, "quang_dong")
-            xu_co = w.ledger.so_du(aid, "xu")
             can_kim_loai = float(r_may["quang_hoac_xu"])
-            try:
-                cong_can = float(r_may["cong"]) * giam_vl
-                w.ledger.huy(aid, "cong", cong_can, "dung", "dựng máy", w.tick)
-                w.ledger.huy(aid, "go", float(r_may["go"]), "che_tac", "dựng máy", w.tick)
-                if quang_co >= can_kim_loai:
-                    w.ledger.huy(aid, "quang_dong", can_kim_loai, "che_tac", "dựng máy",
-                                 w.tick)
-                elif xu_co >= can_kim_loai:
-                    w.ledger.huy(aid, "xu", can_kim_loai, "che_tac", "dựng máy", w.tick)
-                else:
-                    raise LoiSoKep("thiếu kim loại dựng máy")
-                ghi_cong_dung(w, "phi_nong", cong_can)
-            except LoiSoKep:
+            kim_loai = ("quang_dong"
+                        if w.ledger.so_du(aid, "quang_dong") >= can_kim_loai else "xu")
+            cong_can = float(r_may["cong"]) * giam_vl
+            tieu = [("cong", cong_can, "dung"), ("go", float(r_may["go"]), "che_tac"),
+                    (kim_loai, can_kim_loai, "che_tac")]
+            if not _lam_nguyen_tu(w, aid, "dựng máy", tieu, [("may", 1.0, "che_tac")]):
+                _ghi_su_co(w, aid, f"dựng máy không thành: {_thieu_gi(w, aid, tieu)}")
                 break
-            w.ledger.sinh(aid, "may", 1.0, "che_tac", "máy mới", w.tick)
+            ghi_cong_dung(w, "phi_nong", cong_can)
             w.events.ghi(w.tick, "may_moi", id=aid)
         # hàng mới từ blueprint che_bien
         for ma_hang, so_luong in sorted(kh.che_hang.items()):
@@ -287,17 +312,17 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     w.ghi_unrecognized(aid, "che_hang", f"không có quyền {bp.id}")
                     continue
             for _ in range(int(so_luong)):
-                try:
-                    cong_can = float(bp.recipe.get("cong", 30)) * giam_vl / he_may
-                    w.ledger.huy(aid, "cong", cong_can, "dung", f"chế {ma_hang}", w.tick)
-                    for ts, sl in sorted(bp.recipe.items()):
-                        if ts == "cong":
-                            continue
-                        w.ledger.huy(aid, ts, float(sl), "che_tac", f"chế {ma_hang}", w.tick)
-                    ghi_cong_dung(w, "phi_nong", cong_can)
-                except LoiSoKep:
+                cong_can = float(bp.recipe.get("cong", 30)) * giam_vl / he_may
+                tieu = [("cong", cong_can, "dung")] + [
+                    (ts, float(sl), "che_tac")
+                    for ts, sl in sorted(bp.recipe.items()) if ts != "cong"
+                ]
+                if not _lam_nguyen_tu(w, aid, f"chế {ma_hang}", tieu,
+                                      [(ma_hang, 1.0, "che_tac")]):
+                    _ghi_su_co(w, aid,
+                               f"chế {ma_hang} không thành: {_thieu_gi(w, aid, tieu)}")
                     break
-                w.ledger.sinh(aid, ma_hang, 1.0, "che_tac", f"chế {ma_hang}", w.tick)
+                ghi_cong_dung(w, "phi_nong", cong_can)
                 w.events.ghi(w.tick, "che_tac", id=aid, mon=ma_hang)
 
     # 4) Reset homestead cho thửa công KHÔNG được canh mùa mưa này

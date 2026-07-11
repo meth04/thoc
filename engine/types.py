@@ -51,6 +51,9 @@ class Agent:
     hoi_ky: str = ""
     gia_huan: str = ""
     di_chuc: dict | None = None  # {"phan_bo": {id: %}, "gia_huan": str}
+    # theo dõi sinh tồn + phản hồi hành động (LLM đọc trong prompt)
+    doi_tick: int = -99  # tick gần nhất bị thiếu ăn
+    su_co: list = field(default_factory=list)  # việc không thành gần đây (≤3 mục)
 
     @property
     def tuoi_nam(self) -> float:

@@ -142,6 +142,9 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   (+30% năng suất, mòn dần). Gỗ ~10 công/cây (rừng), quặng ~20 công (mỏ).
 - Đời người hữu hạn (già là chết). KHÔNG kết hôn thì không con cái — của cải về công,
   dòng họ tuyệt tự. Cầu hôn ở mùa nào cũng được; người kia trả lời tick sau.
+- SẮP ĐÓI thì đừng ngồi chờ chết: đi VAY (đề nghị hợp đồng: nhận thóc ngay ký kết,
+  hứa trả nhiều hơn khi đáo hạn, có thể thế chấp đất), xin LÀM THUÊ đổi công lấy thóc,
+  BÁN gỗ/công cụ/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
 
 [BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
 mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, để lại gia sản); và vị thế
@@ -253,5 +256,24 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         dong.append(f"Người độc thân bạn quen: {ung_vien}.")
     if rao_cho_toi:
         dong.append(f"Đề nghị trên bảng rao bạn thấy: {rao_cho_toi}.")
+    # cảnh báo đói: dự trữ hộ so với miệng ăn
+    ho = w.ho_cua(aid)
+    nc = w.cfg.raw()["nhu_cau"]
+    thoc_ho = sum(w.ledger.so_du(m, "thoc") for m in ho)
+    nhu_cau = sum(
+        nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(16) else nc["tre_em_kg_tick"]
+        for m in ho
+    )
+    if nhu_cau > 0 and thoc_ho < nhu_cau * 2:
+        so_tick = thoc_ho / nhu_cau
+        dong.append(
+            f"⚠ NGUY CƠ ĐÓI: nhà bạn ({len(ho)} miệng ăn, cần {nhu_cau:.0f}kg/tick) chỉ còn "
+            f"{thoc_ho:.0f}kg thóc — cầm cự được ~{so_tick:.1f} tick. Lo cái ăn TRƯỚC "
+            f"mọi việc khác: vay, làm thuê, bán tài sản, hoặc nhận đề nghị trên bảng rao."
+        )
+    # phản hồi việc không thành tick trước (đọc xong thì xóa)
+    if a.su_co:
+        dong.append(f"Chuyện vừa rồi KHÔNG THÀNH (rút kinh nghiệm): {a.su_co}")
+        a.su_co = []
     dong.append(f"Vì sao bạn được hỏi lúc này: {ly_do_trigger}.")
     return "\n".join(dong)

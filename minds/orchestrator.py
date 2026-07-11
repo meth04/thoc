@@ -46,6 +46,11 @@ class MindMock:
         """Mock luôn đủ; MindReal override bằng budget guard thật."""
         return True
 
+    def _dich_intent_la(self, w: World, thung: list, ke_hoach: dict) -> None:
+        """Mock: không có LLM dịch — bỏ + log (mỏ ý định mới lạ, điều luật #3)."""
+        for aid, d, ly_do in thung:
+            w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
+
     def __call__(self, w: World) -> dict[str, KeHoach]:
         from minds.rulebot import _BoiCanhTick
 
@@ -59,6 +64,7 @@ class MindMock:
 
         triggers = quet_trigger(w)
         ke_hoach: dict[str, KeHoach] = {}
+        thung_intent_la: list = []  # (aid, hành động thô, lý do) — bộ dịch intent xử lý sau
 
         # --- người nghĩ: batch theo (tier, làng), ≤8, xáo trộn seeded ---
         theo_nhom: dict[tuple[str, int], list[str]] = {}
@@ -106,7 +112,7 @@ class MindMock:
                     self.so_fallback += 1
                     ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
             for aid, qd in ok.items():
-                kh = quyet_dinh_thanh_ke_hoach(w, qd)
+                kh = quyet_dinh_thanh_ke_hoach(w, qd, thung_intent_la)
                 if qd.the_chinh_sach is not None:
                     try:
                         the_moi = ap_patch(_the_cua(w, aid), qd.the_chinh_sach)
@@ -115,6 +121,10 @@ class MindMock:
                     except Exception as e:  # noqa: BLE001 — thẻ hỏng thì giữ thẻ cũ
                         w.ghi_unrecognized(aid, "the_chinh_sach", f"patch hỏng: {e}")
                 ke_hoach[aid] = kh
+
+        # --- bộ phiên dịch intent lạ (real: 1 call LLM; mock: log như cũ) ---
+        if thung_intent_la:
+            self._dich_intent_la(w, thung_intent_la, ke_hoach)
 
         # --- người không nghĩ: thẻ chính sách ---
         for aid in sorted(w.agents):

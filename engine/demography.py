@@ -178,15 +178,17 @@ def cai_chet(w: World) -> list[str]:
         a = w.agents[aid]
         if not a.con_song:
             continue
+        vua_doi = w.tick - a.doi_tick <= 2  # thiếu ăn trong vòng 1 năm gần đây
         ly_do = None
         if a.health <= 0:
-            ly_do = "kiet_suc"
+            ly_do = "chet_doi" if vua_doi else "kiet_suc"
         elif a.health < sk["nguong_nguy_kich"] and g.random() < sk["p_chet_khi_nguy_kich"]:
-            ly_do = "doi_benh"
+            ly_do = "chet_doi" if vua_doi else "benh_tat"
         else:
             q_tick = 1 - (1 - _q_nam(a.tuoi_nam, gp)) ** 0.5
             if g.random() < q_tick:
-                ly_do = "tuoi_gia"
+                # đói mà chết thì là chết đói, dù trời có gọi đúng số
+                ly_do = "chet_doi" if (vua_doi and a.health < 50) else "tuoi_gia"
         if ly_do:
             a.con_song = False
             chet.append(aid)

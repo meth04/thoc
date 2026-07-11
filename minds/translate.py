@@ -95,23 +95,34 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
     return qd
 
 
-def quyet_dinh_thanh_ke_hoach(w, qd: QuyetDinh) -> KeHoach:
-    """QuyetDinh (đã validate schema) → KeHoach; hành động lạ/sai tham số → bỏ + log."""
+def quyet_dinh_thanh_ke_hoach(w, qd: QuyetDinh,
+                              thung_intent_la: list | None = None) -> KeHoach:
+    """QuyetDinh (đã validate schema) → KeHoach.
+
+    Hành động lạ/sai tham số: có `thung_intent_la` → gom vào thùng cho bộ phiên dịch
+    intent (LLM) thử ánh xạ; không có thùng → bỏ + log như cũ (điều luật #3).
+    """
     kh = KeHoach(id=qd.id)
     for hd in qd.hanh_dong:
         try:
-            _mot_hanh_dong(w, kh, hd)
+            _mot_hanh_dong(w, kh, hd, thung_intent_la)
         except (ValidationError, KeyError, TypeError, ValueError, AttributeError) as e:
-            w.ghi_unrecognized(qd.id, hd.loai, f"tham số sai: {e}")
+            if thung_intent_la is not None:
+                thung_intent_la.append((qd.id, hd.model_dump(), f"tham số sai: {e}"))
+            else:
+                w.ghi_unrecognized(qd.id, hd.loai, f"tham số sai: {e}")
     # ý định sinh con nằm trong thẻ (patch xử lý ở orchestrator)
     return kh
 
 
-def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong) -> None:
+def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> None:
     d = hd.model_dump()
     loai = d.get("loai")
     if loai not in LOAI_HANH_DONG:
-        w.ghi_unrecognized(kh.id, str(loai), "loại hành động lạ")
+        if thung is not None:
+            thung.append((kh.id, d, "loại hành động lạ"))
+        else:
+            w.ghi_unrecognized(kh.id, str(loai), "loại hành động lạ")
         return
     if loai == "phan_bo_cong":
         kh.canh_thua = [str(x) for x in d.get("canh_thua", [])][:10]
@@ -138,6 +149,8 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong) -> None:
             kh.duc_xu += max(0, sl)
         elif isinstance(mon, str) and mon in w.ten_hang:
             kh.che_hang[mon] = kh.che_hang.get(mon, 0) + max(0, sl)
+        elif thung is not None:
+            thung.append((kh.id, d, f"món lạ: {mon}"))
         else:
             w.ghi_unrecognized(kh.id, "xay", f"món lạ: {mon}")
     elif loai == "de_nghi_hop_dong":
@@ -208,4 +221,7 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong) -> None:
                                     float(d["gia"]), str(d.get("thanh_toan", "thoc")),
                                     lang=int(d["lang"])))
     else:
-        w.ghi_unrecognized(kh.id, str(loai), "nguyên tố chưa mở ở phase hiện tại")
+        if thung is not None:
+            thung.append((kh.id, d, "nguyên tố chưa mở ở phase hiện tại"))
+        else:
+            w.ghi_unrecognized(kh.id, str(loai), "nguyên tố chưa mở ở phase hiện tại")
