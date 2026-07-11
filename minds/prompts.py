@@ -147,8 +147,22 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   BÁN gỗ/công cụ/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
 
 [BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
-mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, để lại gia sản); và vị thế
-(đất đai, của cải, chữ nghĩa, tiếng thơm). Nặng nhẹ ra sao là tùy TÍNH CÁCH bạn."""
+mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, phụng dưỡng cha mẹ già,
+để lại gia sản); và vị thế (đất đai, của cải, chữ nghĩa, tiếng thơm). Nặng nhẹ ra sao
+là tùy TÍNH CÁCH bạn. Muốn có con: đặt y_dinh_sinh_con (0/0.5/1) trong the_chinh_sach.
+
+[NHỮNG CÁCH MƯU SINH NGƯỜI TA VẪN LÀM — bạn tự chọn, tự sáng tạo cách khác cũng được]
+- Nông dân: khai hoang/canh ruộng nhà. Tá điền: thuê đất người khác (quyen_su_dung +
+  chia_san_luong hoặc + tô cố định). Người làm thuê: gop_cong đổi thóc định kỳ.
+- Thợ thủ công: khai gỗ → chế công cụ/nhà đem bán. Thợ mỏ: đào quặng bán / đúc xu.
+- Lái buôn: mua rẻ bán đắt trên chợ (dat_lenh 2 chiều).
+- THẦY ĐỒ (giáo viên): biết chữ (E cao) thì dạy người khác — day_cho trong phan_bo_cong,
+  kèm hợp đồng học phí (học trò trả thóc định kỳ). Học trò thăng E, bạn có thu nhập.
+- Thầy lang: nắm blueprint y_te thì được trả thóc khi đỡ đẻ, cứu người.
+- Người cho vay / giữ thóc: cho vay lấy lãi (2 chuyen_giao_mot_lan), nhận gửi–rút.
+- Chủ trại/chủ xưởng: lập pháp nhân, thuê người, sắm máy, bán cổ phần gọi vốn.
+- Nhà sáng chế: dồn công + thóc vào nghien_cuu — blueprint cho thuê li-xăng kiếm lời.
+Biết chữ (E1+) mới soạn được VĂN BẢN có thế chấp/cưỡng chế — chữ nghĩa là quyền lực."""
 
 VI_DU_QUYET_DINH = """[VÍ DỤ một quyết định (đừng sao chép — hãy quyết theo hoàn cảnh CỦA BẠN)]
 {"id":"A0017","hanh_dong":[{"loai":"phan_bo_cong","canh_thua":["P14_25","P14_26"]},
@@ -174,6 +188,37 @@ def build_batch_prompt(w: World, ids: list[str], triggers: dict[str, list[str]])
            f"Trả mảng JSON đúng {len(ids)} phần tử, id theo thứ tự: {ids}."
 
 
+def _mo_ta_clause(ck, aid: str) -> str:
+    """Việt hóa một điều khoản để người nhận đọc hiểu được mình cam kết gì."""
+
+    def ten(x: str) -> str:
+        return "BẠN" if x in ("?", aid) else x
+
+    loai = ck.loai
+    if loai == "chuyen_giao_dinh_ky":
+        return (f"{ten(ck.tu)} trả {ten(ck.den)} {ck.so_luong:.0f} {ck.tai_san} "
+                f"mỗi {ck.moi_n_tick} tick")
+    if loai == "chuyen_giao_mot_lan":
+        luc = {"ky_ket": "ngay khi ký", "dao_han": "khi đáo hạn"}.get(ck.tai, ck.tai)
+        return f"{ten(ck.tu)} trao {ten(ck.den)} {ck.so_luong:.0f} {ck.tai_san} {luc}"
+    if loai == "quyen_su_dung":
+        return f"{ten(ck.den)} được quyền dùng {ck.tai_san} của {ten(ck.tu)}"
+    if loai == "gop_cong":
+        return f"{ten(ck.tu)} góp {ck.so_cong_moi_tick:.0f} công/tick cho {ten(ck.den)}"
+    if loai == "chia_san_luong":
+        return f"{ten(ck.den)} nhận {ck.ty_le:.0%} sản lượng từ {ck.nguon}"
+    if loai == "dieu_kien_su_kien":
+        return f"nếu {ck.neu.get('loai')} thì {_mo_ta_clause(ck.thi, aid)}"
+    if loai == "hoan_tra_theo_yeu_cau":
+        return (f"{ten(ck.den)} được rút lại {ck.tai_san} từ {ten(ck.tu)} bất kỳ lúc nào "
+                f"(tối đa {ck.tran_rut_moi_tick:.0f}/tick)")
+    if loai == "khi_pha_vo":
+        return f"phá vỡ thì {ck.phat}"
+    if loai == "chia_loi_nhuan":
+        return f"chia lợi nhuận {ck.entity} theo cổ phần"
+    return loai
+
+
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     a = w.agents[aid]
     tai_san = w.ledger.tai_san_cua(aid)
@@ -185,21 +230,48 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     hd_cua = []
     for h in w.hop_dong.values():
         if h.trang_thai == "hieu_luc" and aid in h.cac_ben:
-            mo_ta = "+".join(sorted(c.loai for c in h.dieu_khoan))
-            hd_cua.append(f"{h.id}({mo_ta}, hạn {h.thoi_han})")
-    rao_cho_toi = [
-        f"{dn.id}<{dn.motif}, từ {dn.tu}>" for dn in sorted(
-            w.bang_rao.values(), key=lambda d: d.id)
-        if (dn.den == aid or dn.den is None) and dn.tu != aid
-    ][:8]
-    # gia đình
+            dk = "; ".join(_mo_ta_clause(c, aid) for c in h.dieu_khoan)
+            hd_cua.append(f"{h.id}: {dk} (hạn {h.thoi_han} tick)")
+    rao_cho_toi = []
+    for dn in sorted(w.bang_rao.values(), key=lambda d: d.id):
+        if (dn.den == aid or dn.den is None) and dn.tu != aid:
+            dk = "; ".join(_mo_ta_clause(c, aid) for c in dn.hd.dieu_khoan)
+            rao_cho_toi.append(f"{dn.id} (từ {dn.tu}): {dk}")
+    rao_cho_toi = rao_cho_toi[:8]
+    dang_treo_cua_toi = [
+        f"{dn.id}" for dn in w.bang_rao.values() if dn.tu == aid
+    ]
+    # gia đình — vợ/chồng, con cái, CHA MẸ GIÀ (tên + tuổi, đọc là hiểu cảnh nhà)
     vo_chong = a.vo_chong if a.vo_chong and w.agents.get(a.vo_chong, None) else None
     con_song = [c for c in a.con if c in w.agents and w.agents[c].con_song]
     gia_dinh = []
     if vo_chong:
-        gia_dinh.append(f"vợ/chồng {vo_chong}")
+        vc = w.agents[vo_chong]
+        gia_dinh.append(f"vợ/chồng: {vc.ten} ({vo_chong}, {vc.tuoi_nam:.0f} tuổi)")
     if con_song:
-        gia_dinh.append(f"con: {con_song}")
+        gia_dinh.append("con: " + ", ".join(
+            f"{w.agents[c].ten} ({c}, {w.agents[c].tuoi_nam:.0f}t)" for c in con_song))
+    cha_me_gia = [
+        p for p in (a.cha, a.me)
+        if p and p in w.agents and w.agents[p].con_song
+    ]
+    if cha_me_gia:
+        gia_dinh.append("cha mẹ còn sống: " + ", ".join(
+            f"{w.agents[p].ten} ({p}, {w.agents[p].tuoi_nam:.0f}t"
+            + (", đã già yếu" if w.agents[p].tuoi_nam >= 60 else "") + ")"
+            for p in cha_me_gia))
+    # cầu hôn đang chờ TÔI trả lời — phải biết ai ngỏ lời thì mới đáp được
+    cau_hon_cho_toi = []
+    for tu, den, _t in w.cau_hon_cho:
+        if den == aid and tu in w.agents and w.agents[tu].con_song:
+            nguoi = w.agents[tu]
+            gia_san = w.ledger.so_du(tu, "thoc")
+            dat_ho = sum(1 for p in w.parcels.values() if p.chu == tu)
+            cau_hon_cho_toi.append(
+                f"{nguoi.ten} ({tu}, {nguoi.tuoi_nam:.0f} tuổi, {gia_san:.0f}kg thóc, "
+                f"{dat_ho} thửa đất) đã NGỎ LỜI CẦU HÔN bạn — hãy đáp bằng "
+                f'{{"loai":"tra_loi_cau_hon","cua":"{tu}","dong_y":true/false}}'
+            )
     # ứng viên hôn nhân (độc thân, khác giới, cùng làng — đồ thị xã hội rút gọn)
     ung_vien = []
     if a.vo_chong is None and 16 <= a.tuoi_nam <= 45:
@@ -235,15 +307,23 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"máy {w.ledger.so_du(eid, 'may'):.0f})"
         for eid in w._cache_dh.get(aid, ())
     ]
+    tinh_trang = "độc thân" if a.vo_chong is None else "đã có gia đình"
     dong = [
         f"[NGƯỜI {aid}] {a.ten}, {a.tuoi_nam:.0f} tuổi, {'nữ' if a.gioi_tinh == 'nu' else 'nam'}, "
-        f"học vấn E{a.e_bac}, sức khỏe {a.health:.0f}/100. "
+        f"{tinh_trang}, học vấn E{a.e_bac}, sức khỏe {a.health:.0f}/100. "
         f"Tính cách (1-9): {a.persona.as_dict()}.",
         f"Hồi ký: {a.hoi_ky or '(trống)'} | Gia huấn: \"{a.gia_huan or '(chưa có)'}\"",
         f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat or 'không có'}.",
     ]
+    if a.ky_uc:
+        dong.append("CHUYỆN ĐỜI BẠN (chớ quên): " + " | ".join(a.ky_uc[-7:]))
     if gia_dinh:
         dong.append("Gia đình: " + "; ".join(gia_dinh) + ".")
+    if cau_hon_cho_toi:
+        dong.append("💍 " + " ".join(cau_hon_cho_toi))
+    if dang_treo_cua_toi:
+        dong.append(f"Đề nghị bạn đã rao còn treo (chưa ai nhận): {dang_treo_cua_toi} "
+                    f"— đừng rao lại y hệt.")
     if hd_cua:
         dong.append(f"Giao kèo đang hiệu lực của bạn: {hd_cua}.")
     if co_phan:
@@ -266,10 +346,16 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     )
     if nhu_cau > 0 and thoc_ho < nhu_cau * 2:
         so_tick = thoc_ho / nhu_cau
+        cach = ["vay (đề nghị hợp đồng)", "xin làm thuê (gop_cong đổi thóc)",
+                "nhận đề nghị sẵn trên bảng rao"]
+        if w.ledger.so_du(aid, "go") >= 1 or w.ledger.so_du(aid, "cong_cu") >= 1:
+            cach.append("bán gỗ/công cụ (dat_lenh)")
+        if dat:
+            cach.append(f"bán bớt ruộng (niem_yet thua:{dat[-1]})")
         dong.append(
             f"⚠ NGUY CƠ ĐÓI: nhà bạn ({len(ho)} miệng ăn, cần {nhu_cau:.0f}kg/tick) chỉ còn "
             f"{thoc_ho:.0f}kg thóc — cầm cự được ~{so_tick:.1f} tick. Lo cái ăn TRƯỚC "
-            f"mọi việc khác: vay, làm thuê, bán tài sản, hoặc nhận đề nghị trên bảng rao."
+            f"mọi việc khác: {'; '.join(cach)}."
         )
     # phản hồi việc không thành tick trước (đọc xong thì xóa)
     if a.su_co:

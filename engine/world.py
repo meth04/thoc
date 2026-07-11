@@ -135,6 +135,12 @@ class World:
         gan = [x for x in ls if x[0] >= self.tick - 4]
         return sum(x[1] for x in gan) / len(gan) if gan else ls[-1][1]
 
+    def ghi_ky_uc(self, aid: str, noi_dung: str) -> None:
+        """Khắc một biến cố vào ký ức đời agent (≤10 mục, kèm mốc năm)."""
+        a = self.agents.get(aid)
+        if a is not None and a.con_song:
+            a.ky_uc = [*a.ky_uc, f"Năm {self.tick // 2}: {noi_dung}"][-10:]
+
     def ghi_unrecognized(self, ai: str, loai: str, ly_do: str) -> None:
         """Intent không hợp lệ → bỏ qua + log (điều luật #3) — mỏ 'ý định mới lạ'."""
         self.events.ghi(self.tick, "unrecognized_intent", ai=ai, intent=loai, ly_do=ly_do)

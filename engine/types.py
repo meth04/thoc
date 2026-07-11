@@ -54,6 +54,10 @@ class Agent:
     # theo dõi sinh tồn + phản hồi hành động (LLM đọc trong prompt)
     doi_tick: int = -99  # tick gần nhất bị thiếu ăn
     su_co: list = field(default_factory=list)  # việc không thành gần đây (≤3 mục)
+    # ký ức đời người — engine tự ghi các biến cố (cưới, sinh con, tang, giao kèo,
+    # đất đai...); LLM đọc trong prompt để sống TIẾP một cuộc đời, không phải mỗi
+    # lần được hỏi lại là một người xa lạ
+    ky_uc: list = field(default_factory=list)  # ≤10 mục gần nhất
 
     @property
     def tuoi_nam(self) -> float:

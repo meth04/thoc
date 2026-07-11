@@ -190,5 +190,7 @@ def phien_dat(w, niem_yet: dict[str, NiemYetDat], tra_gia: list[tuple[str, str, 
             del niem_yet[thua]
             w.ghi_gia("dat", gia, 1.0, "thoc")
             w.events.ghi(w.tick, "ban_dat", thua=thua, tu=ny.chu, den=ai, gia=gia)
+            w.ghi_ky_uc(ny.chu, f"tôi bán thửa {thua} được {gia:.0f}kg thóc")
+            w.ghi_ky_uc(ai, f"tôi mua thửa {thua} giá {gia:.0f}kg thóc")
             w.cong_quan_he(ai, ny.chu, w.cfg.get("quan_he.cong_moi_tuong_tac"))
             break

@@ -246,6 +246,9 @@ def phat_vi_pham(w, hd: HopDong, ke_vi_pham: str) -> None:
     nan_nhan = [ben_hien_tai(w, hd.id, b) for b in hd.cac_ben]
     nan_nhan = [b for b in nan_nhan if b != ke_vi_pham]
     w.events.ghi(w.tick, "vi_pham", hd=hd.id, ai=ke_vi_pham, hinh_thuc=hd.hinh_thuc)
+    w.ghi_ky_uc(ke_vi_pham, f"tôi THẤT HỨA giao kèo {hd.id} — mất mặt với làng")
+    for nn in nan_nhan:
+        w.ghi_ky_uc(nn, f"{ke_vi_pham} thất hứa giao kèo {hd.id} với tôi")
     phat_mieng = float(w.cfg.get("hop_dong.uy_tin.phat_vi_pham_mieng"))
     for nn in nan_nhan:
         w.cong_quan_he(ke_vi_pham, nn, phat_mieng)

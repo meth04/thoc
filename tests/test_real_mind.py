@@ -190,3 +190,19 @@ def test_recipe_nguyen_tu_khong_mat_cong_oan():
     assert w.ledger.so_du(a, "go") > 0 or True  # khai gỗ chạy (nếu tick khô)
     assert w.agents[a].su_co, "phải ghi sự cố 'xây nhà không thành'"
     assert "xây nhà" in w.agents[a].su_co[0]
+
+
+def test_prompt_hien_cau_hon_va_ky_uc():
+    """Người được cầu hôn PHẢI thấy ai ngỏ lời; ký ức đời người hiện trong prompt."""
+    from minds.prompts import build_user_rieng
+    from tests.helpers import the_gioi_test as tg
+
+    w = tg(seed=67, giu_lai=2, thoc_moi_nguoi=2000)
+    a, b = sorted(x for x, ag in w.agents.items() if ag.con_song)
+    w.agents[a].gioi_tinh, w.agents[b].gioi_tinh = "nam", "nu"
+    w.cau_hon_cho.append((a, b, w.tick))
+    w.ghi_ky_uc(b, "tôi khai hoang xong thửa P00_00")
+    prompt = build_user_rieng(w, b, ["duoc_cau_hon"])
+    assert "NGỎ LỜI CẦU HÔN" in prompt and a in prompt
+    assert "tra_loi_cau_hon" in prompt
+    assert "CHUYỆN ĐỜI BẠN" in prompt and "khai hoang" in prompt

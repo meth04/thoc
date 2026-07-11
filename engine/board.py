@@ -85,6 +85,10 @@ def _ky_hop_dong(w, hd: HopDong) -> bool:
     w.events.ghi(w.tick, "ky_hd", hd=hd.id, cac_ben=hd.cac_ben,
                  hinh_thuc=hd.hinh_thuc, mo_tip=mo_tip_hop_dong(hd),
                  thoi_han=hd.thoi_han)
+    for ben in hd.cac_ben:
+        khac = [b for b in hd.cac_ben if b != ben]
+        w.ghi_ky_uc(ben, f"tôi ký giao kèo {hd.id} với {khac} "
+                         f"({mo_tip_hop_dong(hd)}, hạn {hd.thoi_han} tick)")
     return True
 
 

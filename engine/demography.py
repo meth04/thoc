@@ -65,6 +65,10 @@ def xu_ly_cau_hon(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             w.cong_quan_he(tu, den, 1.0)
             w.events.ghi(w.tick, "cuoi", vo=den if b.gioi_tinh == "nu" else tu,
                          chong=tu if a.gioi_tinh == "nam" else den)
+            w.ghi_ky_uc(tu, f"tôi kết hôn với {b.ten} ({den})")
+            w.ghi_ky_uc(den, f"tôi kết hôn với {a.ten} ({tu})")
+        else:
+            w.ghi_ky_uc(tu, f"tôi cầu hôn {b.ten} ({den}) nhưng bị từ chối")
     w.cau_hon_cho = con_cho
 
     # 2) Nhận đề nghị mới từ kế hoạch tick này
@@ -152,6 +156,8 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         cha.con.append(cid)
         me.con.append(cid)
         w.events.ghi(w.tick, "sinh", id=cid, cha=cha.id, me=me.id)
+        w.ghi_ky_uc(cha.id, f"vợ chồng tôi sinh con {con.ten} ({cid})")
+        w.ghi_ky_uc(me.id, f"vợ chồng tôi sinh con {con.ten} ({cid})")
 
 
 def _q_nam(tuoi: float, gp: dict[str, float]) -> float:
@@ -193,6 +199,13 @@ def cai_chet(w: World) -> list[str]:
             a.con_song = False
             chet.append(aid)
             w.events.ghi(w.tick, "chet", id=aid, tuoi=round(a.tuoi_nam, 1), ly_do=ly_do)
+            # người thân khắc tang vào ký ức
+            nhan_xung = [(a.vo_chong, f"vợ/chồng tôi {a.ten} qua đời ({ly_do})")]
+            nhan_xung += [(c, f"cha/mẹ tôi {a.ten} qua đời ({ly_do})") for c in a.con]
+            nhan_xung += [(p, f"con tôi {a.ten} mất ({ly_do})") for p in (a.cha, a.me)]
+            for nid, loi in nhan_xung:
+                if nid:
+                    w.ghi_ky_uc(nid, loi)
     return chet
 
 
@@ -276,6 +289,8 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
             w.tick, "thua_ke", nguoi_mat=aid,
             nguoi_nhan=nguoi_nhan or ["cong"], so_thua=len(thua_cua),
         )
+        for nid in nguoi_nhan:
+            w.ghi_ky_uc(nid, f"tôi nhận thừa kế từ {a.ten} ({aid})")
     # goá bụa
     if a.vo_chong and a.vo_chong in w.agents:
         w.agents[a.vo_chong].vo_chong = None
