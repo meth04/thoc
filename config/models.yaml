@@ -1,17 +1,23 @@
-# models.yaml — thang trí tuệ, ID model THẬT theo xác nhận của chủ dự án.
+# models.yaml — thang trí tuệ, ID model THẬT (đã xác minh bằng smoke 2026-07-11).
 # Gateway hỗ trợ nhiều route/tier: thử route đầu còn ngân sách, cạn thì tràn route sau.
 # Code KHÔNG hardcode tên model — chỉ đọc file này.
+#
+# Thay đổi so với bản đầu (theo yêu cầu chủ dự án + kết quả smoke):
+# - gemma-4-31b-it (Google trả 500) → gemini-3.1-flash-lite cho T0 + nền hồi ký.
+# - gc/gemini-3-flash-preview, gc/gemini-3*-pro-preview chết upstream (404
+#   "Requested entity was not found") → thang gc xếp lại bằng model còn sống:
+#   T2 = 2.5-flash-lite, T3 = 2.5-flash, T4 = 2.5-pro (đỉnh).
 
 tiers:
   T0:
     ten: "mù chữ"
     routes:
-      - {provider: aistudio, model: "gemma-4-31b-it"}
+      - {provider: aistudio, model: "gemini-3.1-flash-lite"}
     temperature: 0.9
     max_output_tokens: 1600
   T1:
     ten: "biết chữ (E1)"
-    routes:                       # gộp 2 đường: ưu tiên 8 API key, cạn thì tràn sang 9router
+    routes:                       # gộp 2 đường: ưu tiên key AI Studio, cạn thì tràn 9router
       - {provider: aistudio,  model: "gemini-3.1-flash-lite"}
       - {provider: ninerouter, model: "gc/gemini-3.1-flash-lite-preview"}
     temperature: 0.9
@@ -19,26 +25,25 @@ tiers:
   T2:
     ten: "E2"
     routes:
-      - {provider: ninerouter, model: "gc/gemini-2.5-flash"}
+      - {provider: ninerouter, model: "gc/gemini-2.5-flash-lite"}
     temperature: 0.9
     max_output_tokens: 2000
   T3:
     ten: "E3"
     routes:
-      - {provider: ninerouter, model: "gc/gemini-2.5-pro"}   # chậm hơn nhưng T3 hiếm người
+      - {provider: ninerouter, model: "gc/gemini-2.5-flash"}
     temperature: 0.9
     max_output_tokens: 2200
   T4:
     ten: "E4 — đỉnh"
     routes:
-      - {provider: ninerouter, model: "gc/gemini-3-flash-preview"}
+      - {provider: ninerouter, model: "gc/gemini-2.5-pro"}
     temperature: 0.9
     max_output_tokens: 2400
-# 💡 Nếu thực chiến thấy gc/gemini-2.5-pro mạnh hơn gc/gemini-3-flash-preview (hoặc ngược
-# lại), chỉ cần hoán đổi 2 dòng model của T3 và T4 — không đụng code.
+# 💡 Muốn hoán đổi sức mạnh T3/T4: chỉ cần đổi 2 dòng model — không đụng code.
 
 # Việc nền (không phải "não" của agent nào)
-nen_hoi_ky: {provider: aistudio, model: "gemma-4-31b-it", temperature: 0.6, max_output_tokens: 400}
+nen_hoi_ky: {provider: aistudio, model: "gemini-3.1-flash-lite", temperature: 0.6, max_output_tokens: 400}
 chronicle:  {provider: aistudio, model: "gemini-3.1-flash-lite", temperature: 0.8, max_output_tokens: 300}
 
 mock:

@@ -72,13 +72,14 @@ def test_b_cham_rpd_khoa_model_toi_reset():
     cfg = load_config()
     quota = QuotaCounter(None)
     gw = GatewayReal(cfg, env, quota, transport=fake_transport(kich_ban))
-    rpd = gw.routes_cua_tier("T0")[0].rpd
+    route0 = gw.routes_cua_tier("T0")[0]
+    rpd = route0.rpd
     kh = key_hash(env.gemini_keys[0])
     # nạp đầy bộ đếm RPD (ghi thẳng, khỏi gọi rpd lần)
     import time
 
     for _ in range(rpd):
-        quota.ghi_call("aistudio", "gemma-4-31b-it", kh, time.time())
+        quota.ghi_call(route0.provider, route0.model, kh, time.time())
     quota._rpm.clear()  # chỉ test RPD, bỏ giới hạn RPM
     with pytest.raises(LoiHetQuota):
         gw.goi(req("T0"))
@@ -91,9 +92,9 @@ def test_c_restart_khong_mat_bo_dem(tmp_path):
     db = tmp_path / "quota.sqlite"
     q1 = QuotaCounter(db)
     for _ in range(7):
-        q1.ghi_call("aistudio", "gemma-4-31b-it", "abcd1234", time.time())
+        q1.ghi_call("aistudio", "model-x", "abcd1234", time.time())
     q2 = QuotaCounter(db)  # "restart"
-    assert q2.rpd_da_dung("aistudio", "gemma-4-31b-it", "abcd1234", time.time()) == 7
+    assert q2.rpd_da_dung("aistudio", "model-x", "abcd1234", time.time()) == 7
 
 
 def test_d_budget_thieu_dung_em_khong_degrade():

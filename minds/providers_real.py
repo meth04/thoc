@@ -112,6 +112,8 @@ class NineRouterProvider:
                 "messages": [{"role": "user", "content": req.prompt}],
                 "temperature": temperature,
                 "max_tokens": max_tokens,
+                # 9router mặc định trả SSE stream kể cả khi không xin — phải tắt tường minh
+                "stream": False,
             },
         )
         if r.status_code == 429:
