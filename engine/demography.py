@@ -231,7 +231,11 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
         if ts == "cong":
             continue  # công bốc hơi, không thừa kế
         if not nguoi_nhan:
-            w.ledger.chuyen(aid, VO_THUA_NHAN, ts, sl, f"vô thừa nhận {ts}", w.tick)
+            if ts.startswith("co_phan:"):
+                # cổ phần vô thừa nhận bị hủy — tỷ trọng cổ đông còn lại tự tăng
+                w.ledger.huy(aid, ts, sl, "giai_the", f"cổ phần vô thừa nhận {ts}", w.tick)
+            else:
+                w.ledger.chuyen(aid, VO_THUA_NHAN, ts, sl, f"vô thừa nhận {ts}", w.tick)
         elif ts in TAI_SAN_ROI or ts.startswith("vi_the:"):
             nguyen = int(sl)
             for i in range(nguyen):
@@ -246,6 +250,13 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
                 phan = sl * (ty_trong[nid] if ty_trong else 1.0 / len(nguoi_nhan))
                 if phan > 1e-12:
                     w.ledger.chuyen(aid, nid, ts, phan, f"thừa kế {ts}", w.tick)
+
+    # blueprint (sáng chế) thừa kế như tài sản: round-robin cho người nhận
+    bp_cua = sorted(b.id for b in w.blueprints.values() if b.chu == aid)
+    for i, bid in enumerate(bp_cua):
+        w.blueprints[bid].chu = nguoi_nhan[i % len(nguoi_nhan)] if nguoi_nhan else aid
+        # không người nhận: blueprint thành tri thức chung? Không — giữ tên người mất
+        # (không ai áp dụng được nữa; khuếch tán vẫn làm nghiên cứu lại rẻ hơn)
 
     # đất: chia round-robin cho người nhận; không ai → về công
     thua_cua = sorted(p.id for p in w.parcels.values() if p.chu == aid)

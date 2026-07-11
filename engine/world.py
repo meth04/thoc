@@ -74,6 +74,8 @@ class World:
     thu_nhap_4: list = field(default_factory=list)  # 4 dict gần nhất
     kl_thanh_toan_tick: dict[str, float] = field(default_factory=dict)
     cong_dung_tick: dict[str, float] = field(default_factory=dict)
+    cong_dung_4: list = field(default_factory=list)  # cửa sổ 4 tick (mùa mưa+khô)
+    kl_thanh_toan_4: list = field(default_factory=list)
 
     def ghi_thu_nhap(self, aid: str, nguon: str, quy_thoc: float) -> None:
         if quy_thoc <= 0:
@@ -102,6 +104,14 @@ class World:
     def mua_mua(self, tick: int | None = None) -> bool:
         t = self.tick if tick is None else tick
         return t % 2 == 1
+
+    def chu_the_hoat_dong(self, cid: str) -> bool:
+        """Người còn sống hoặc entity còn hoạt động."""
+        a = self.agents.get(cid)
+        if a is not None:
+            return a.con_song
+        e = self.entities.get(cid)
+        return e is not None and e.con_hoat_dong
 
     # ---------- hợp đồng ----------
     def tim_hop_dong(self, hd_id: str):
@@ -229,6 +239,7 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("thoc", "hao_kho", "sink")
     f.dang_ky("thoc", "giong", "sink")
     f.dang_ky("thoc", "nghien_cuu", "sink")
+    f.dang_ky("thoc", "phi_van_chuyen", "sink")
     f.dang_ky("go", "khai_thac", "nguon")
     f.dang_ky("go", "che_tac", "sink")
     f.dang_ky("go", "xay", "sink")

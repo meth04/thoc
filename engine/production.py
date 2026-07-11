@@ -110,8 +110,11 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
         a = w.agents.get(aid)
-        if a is None or not a.con_song:
+        if a is None and not (aid in w.entities and w.entities[aid].con_hoat_dong):
+            continue  # entity dùng công góp vào để sản xuất như người
+        if a is not None and not a.con_song:
             continue
+        health = a.health if a is not None else 100.0
 
         # 1) Canh tác (chỉ mùa mưa): gieo + gặt trong cùng tick.
         # Quá 3 thửa: cần công đi thuê (gop_cong); hiệu suất thửa 4+ giữ sàn 0.7.
@@ -147,7 +150,7 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     * he_so_tt
                     * hs
                     * _tool_mult(w, aid)
-                    * _health_mult(a.health)
+                    * _health_mult(health)
                     * _he_so_nong(w, aid)  # blueprint nông nghiệp áp dụng được
                 )
                 w.ledger.sinh(aid, "thoc", san_luong, "gat", f"gặt {pid}", w.tick)

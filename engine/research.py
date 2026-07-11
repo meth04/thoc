@@ -50,6 +50,9 @@ def thi_hanh_nghien_cuu(w: World, aid: str, linh_vuc: str, cong: float, thoc: fl
     try:
         if cong > 0:
             w.ledger.huy(aid, "cong", cong, "dung", f"nghiên cứu {linh_vuc}", w.tick)
+            from engine.production import ghi_cong_dung
+
+            ghi_cong_dung(w, "phi_nong", cong)
         if thoc > 0:
             w.ledger.huy(aid, "thoc", thoc, "nghien_cuu", f"nghiên cứu {linh_vuc}", w.tick)
     except LoiSoKep:
@@ -90,9 +93,13 @@ def buoc_nghien_cuu(w: World) -> None:
 def sinh_blueprint(w: World, chu: str, linh_vuc: str, g) -> Blueprint:
     r = w.cfg.raw()["research"]
     bp_cfg = r["blueprint"]
-    do_lon = min(float(g.lognormal(bp_cfg["do_lon_lognormal"]["mu"],
-                                   bp_cfg["do_lon_lognormal"]["sigma"]) - 1.0 + 0.05),
-                 bp_cfg["do_lon_tran"])
+    he_so_lv = bp_cfg.get("he_so_theo_linh_vuc", {}).get(linh_vuc, 1.0)
+    tran_lv = bp_cfg.get("tran_theo_linh_vuc", {}).get(linh_vuc, bp_cfg["do_lon_tran"])
+    do_lon = min(
+        (float(g.lognormal(bp_cfg["do_lon_lognormal"]["mu"],
+                           bp_cfg["do_lon_lognormal"]["sigma"]) - 1.0 + 0.05)) * he_so_lv,
+        tran_lv,
+    )
     do_lon = max(0.02, do_lon)
     w._next_bp += 1
     bid = f"BP{w._next_bp:04d}"

@@ -40,6 +40,25 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
         hd_list.append({"loai": "xay", "mon": "che_tac", "so_luong": kh.che_tao_cong_cu})
     if kh.xay_nha:
         hd_list.append({"loai": "xay", "mon": "nha", "so_luong": kh.xay_nha})
+    if kh.xay_may:
+        hd_list.append({"loai": "xay", "mon": "may", "so_luong": kh.xay_may})
+    if kh.duc_xu:
+        hd_list.append({"loai": "xay", "mon": "xu", "so_luong": kh.duc_xu})
+    for ma, sl in sorted(kh.che_hang.items()):
+        hd_list.append({"loai": "xay", "mon": ma, "so_luong": sl})
+    if kh.nghien_cuu:
+        lv, cong, thoc = kh.nghien_cuu
+        hd_list.append({"loai": "nghien_cuu", "linh_vuc": lv, "cong": cong, "thoc": thoc})
+    if kh.lap_phap_nhan:
+        hd_list.append({"loai": "lap_phap_nhan", **kh.lap_phap_nhan})
+    for eid, kh_con in kh.quyet_dinh_entity:
+        qd_con = ke_hoach_thanh_quyet_dinh(kh_con)
+        hd_list.append({"loai": "quyet_dinh_entity", "entity": eid,
+                        "hanh_dong_con": qd_con["hanh_dong"]})
+    if kh.viet_di_chuc:
+        hd_list.append({"loai": "viet_di_chuc", **kh.viet_di_chuc})
+    if kh.di_cu:
+        hd_list.append({"loai": "di_cu"})
     for hd, den in kh.de_nghi_hop_dong:
         hd_list.append({
             "loai": "de_nghi_hop_dong",
@@ -113,6 +132,12 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong) -> None:
             kh.che_tao_cong_cu += max(0, sl)
         elif mon == "nha":
             kh.xay_nha += max(0, sl)
+        elif mon == "may":
+            kh.xay_may += max(0, sl)
+        elif mon == "xu":
+            kh.duc_xu += max(0, sl)
+        elif isinstance(mon, str) and mon in w.ten_hang:
+            kh.che_hang[mon] = kh.che_hang.get(mon, 0) + max(0, sl)
         else:
             w.ghi_unrecognized(kh.id, "xay", f"món lạ: {mon}")
     elif loai == "de_nghi_hop_dong":
@@ -148,7 +173,39 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong) -> None:
         kh.cau_hon = str(d["den"])
     elif loai == "tra_loi_cau_hon":
         kh.tra_loi_cau_hon[str(d["cua"])] = bool(d["dong_y"])
+    elif loai == "nghien_cuu":
+        kh.nghien_cuu = (str(d["linh_vuc"]), float(d.get("cong", 0)), float(d.get("thoc", 0)))
+    elif loai == "lap_phap_nhan":
+        kh.lap_phap_nhan = {
+            "ten": str(d.get("ten", "")),
+            "co_phan": {str(k): float(v) for k, v in dict(d.get("co_phan", {})).items()},
+            "von_gop": {
+                str(k): {str(t): float(s) for t, s in dict(v).items()}
+                for k, v in dict(d.get("von_gop", {})).items()
+            },
+        }
+    elif loai == "quyet_dinh_entity":
+        eid = str(d["entity"])
+        con = d.get("hanh_dong_con", [])
+        kh_con = KeHoach(id=eid)
+        for hd_con in con if isinstance(con, list) else []:
+            try:
+                _mot_hanh_dong(w, kh_con, HanhDong.model_validate(hd_con))
+            except Exception:  # noqa: BLE001 — hành động con hỏng thì bỏ riêng nó
+                w.ghi_unrecognized(eid, "hanh_dong_con", "hành động con hỏng")
+        kh.quyet_dinh_entity.append((eid, kh_con))
+    elif loai == "viet_di_chuc":
+        kh.viet_di_chuc = {
+            "phan_bo": {str(k): float(v) for k, v in dict(d.get("phan_bo", {})).items()},
+            "gia_huan": str(d.get("gia_huan", ""))[:400],
+        }
+    elif loai == "di_cu":
+        kh.di_cu = True
+    elif loai == "buon_chuyen":
+        chieu = d.get("chieu", "ban")
+        if chieu in ("mua", "ban"):
+            kh.dat_lenh.append(Lenh(kh.id, chieu, str(d["tai_san"]), float(d["sl"]),
+                                    float(d["gia"]), str(d.get("thanh_toan", "thoc")),
+                                    lang=int(d["lang"])))
     else:
-        # nguyên tố chưa mở ở phase này (nghien_cuu, lap_phap_nhan, di_cu, viet_di_chuc,
-        # buon_chuyen, quyet_dinh_entity) → mỏ ý định mới lạ
         w.ghi_unrecognized(kh.id, str(loai), "nguyên tố chưa mở ở phase hiện tại")

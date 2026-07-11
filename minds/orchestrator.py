@@ -110,6 +110,11 @@ class MindMock:
                 continue
             ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
 
+        # --- entity: việc thường nhật chạy MỖI tick (thẻ của pháp nhân) ---
+        from minds.rulebot import bo_sung_ke_hoach_entity
+
+        bo_sung_ke_hoach_entity(w, ke_hoach, bc, da_nham)
+
         # --- nén hồi ký mỗi 4 tick (mock nén — heuristic, vẫn log call) ---
         if w.tick % 4 == 0:
             self._nen_hoi_ky(w)

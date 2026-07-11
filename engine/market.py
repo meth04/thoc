@@ -22,11 +22,26 @@ class Lenh:
     so_luong: float
     gia: float  # đơn giá tính bằng tài sản thanh toán
     thanh_toan: str = "thoc"
+    lang: int | None = None  # None = chợ làng mình; khác làng = buôn chuyến (chịu phí)
+
+
+def _phi_buon_chuyen(w, le: Lenh, lang_cho: int, gia_tri_quy_thoc: float) -> None:
+    """Phí buôn chuyến 2%/khoảng cách giữa làng mình và làng chợ (SPEC 3.1)."""
+    lang_nha = _lang_cua(w, le.ai)
+    if lang_nha == lang_cho:
+        return
+    v1, v2 = w.villages[lang_nha], w.villages[lang_cho]
+    kc = abs(v1.r - v2.r) + abs(v1.c - v2.c)
+    phi = gia_tri_quy_thoc * float(
+        w.cfg.get("thuong_mai.phi_van_chuyen_moi_khoang_cach")) * (kc / 10.0)
+    phi = min(phi, w.ledger.so_du(le.ai, "thoc"))
+    if phi > 0:
+        w.ledger.huy(le.ai, "thoc", phi, "phi_van_chuyen", "phí buôn chuyến", w.tick)
 
 
 def _khop_mot_so_lenh(
     w, tai_san: str, thanh_toan: str, mua: list[Lenh], ban: list[Lenh],
-    g: np.random.Generator,
+    g: np.random.Generator, lang: int = 0,
 ) -> float:
     """Call auction một cặp: tìm p* tối đa khối lượng, khớp pro-rata tại biên."""
     if not mua or not ban:
@@ -92,6 +107,8 @@ def _khop_mot_so_lenh(
                 w.kl_thanh_toan_tick[thanh_toan] = (
                     w.kl_thanh_toan_tick.get(thanh_toan, 0.0) + quy_thoc
                 )
+                _phi_buon_chuyen(w, mua_khop[i], lang, quy_thoc)
+                _phi_buon_chuyen(w, ban_khop[j], lang, quy_thoc)
             except LoiSoKep:
                 pass  # bên nào thiếu (đặt lệnh quá tay) → phần khớp đó bỏ
         con_mua[i] -= khop
@@ -112,19 +129,30 @@ def _khop_mot_so_lenh(
     return tong_khop
 
 
+def _lang_cua(w, aid: str) -> int:
+    a = w.agents.get(aid)
+    return a.lang if a is not None else 0  # entity: chợ làng 0 (làng lập entity)
+
+
 def phien_cho(w, lenh_tick: list[Lenh]) -> float:
-    """Bước 6 pipeline: gom lệnh theo cặp (tài sản, thanh toán), khớp từng cặp."""
+    """Bước 6: MỖI LÀNG một chợ — gom lệnh theo (làng, tài sản, thanh toán), khớp từng sổ.
+
+    Lệnh gửi sang làng khác = buôn chuyến: chịu phí 2%/khoảng cách trên giá trị khớp.
+    """
     g = w.rng.get("cho", w.tick)
-    cap: dict[tuple[str, str], tuple[list[Lenh], list[Lenh]]] = {}
+    cap: dict[tuple[int, str, str], tuple[list[Lenh], list[Lenh]]] = {}
     for le in lenh_tick:
         if le.so_luong <= 0 or le.gia <= 0 or le.tai_san == le.thanh_toan:
             continue
-        mua, ban = cap.setdefault((le.tai_san, le.thanh_toan), ([], []))
+        lang = le.lang if le.lang is not None else _lang_cua(w, le.ai)
+        if not (0 <= lang < len(w.villages)):
+            continue
+        mua, ban = cap.setdefault((lang, le.tai_san, le.thanh_toan), ([], []))
         (mua if le.chieu == "mua" else ban).append(le)
     tong = 0.0
-    for (ts, tt) in sorted(cap):
-        mua, ban = cap[(ts, tt)]
-        tong += _khop_mot_so_lenh(w, ts, tt, mua, ban, g)
+    for (lang, ts, tt) in sorted(cap):
+        mua, ban = cap[(lang, ts, tt)]
+        tong += _khop_mot_so_lenh(w, ts, tt, mua, ban, g, lang=lang)
     return tong
 
 

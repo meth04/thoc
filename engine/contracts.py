@@ -101,6 +101,7 @@ class HopDong(BaseModel):
     tick_ky: int = -1
     nguoi_soan: str = ""
     huy_bao_truoc_tu: int | None = None  # tick bắt đầu báo hủy
+    ke_vi_pham: str = ""  # ai phá vỡ (engine ghi khi cưỡng chế)
 
 
 # ---------------------------------------------------------------- validate
@@ -137,6 +138,13 @@ def validate_hop_dong(hd: HopDong, w) -> str | None:
                 return f"thửa không tồn tại: {pid}"
             if ck.tu != "?" and p.chu != ck.tu:
                 return f"{ck.tu} không sở hữu {pid}"
+        if ck.loai == "quyen_su_dung" and ck.tai_san.startswith("blueprint:"):
+            bid = ck.tai_san.split(":", 1)[1]
+            bp = getattr(w, "blueprints", {}).get(bid)
+            if bp is None:
+                return f"blueprint không tồn tại: {bid}"
+            if ck.tu != "?" and bp.chu != ck.tu:
+                return f"{ck.tu} không sở hữu {bid}"
         if ck.loai == "chia_loi_nhuan" and ck.entity not in getattr(w, "entities", {}):
             return f"entity không tồn tại: {ck.entity}"
         if ck.loai == "chuyen_giao_mot_lan" and ck.tai == "dao_han" and hd.thoi_han is None:
@@ -232,6 +240,7 @@ def xiet_the_chap(w, hd: HopDong, chu_no: str, con_no: str, no_con_lai_thoc: flo
 def phat_vi_pham(w, hd: HopDong, ke_vi_pham: str) -> None:
     """Cưỡng chế: miệng → trừ uy tín + tin đồn; văn bản → thi hành khi_pha_vo."""
     hd.trang_thai = "vi_pham"
+    hd.ke_vi_pham = ke_vi_pham
     nan_nhan = [ben_hien_tai(w, hd.id, b) for b in hd.cac_ben]
     nan_nhan = [b for b in nan_nhan if b != ke_vi_pham]
     w.events.ghi(w.tick, "vi_pham", hd=hd.id, ai=ke_vi_pham, hinh_thuc=hd.hinh_thuc)

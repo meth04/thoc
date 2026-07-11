@@ -94,7 +94,7 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
             if dn.tu == aid or (dn.den is not None and dn.den != aid):
                 continue
             if (the.nhan_lam_cong_gia_toi_thieu is not None
-                    and dn.motif == "chuyen_giao_dinh_ky+gop_cong"):
+                    and "gop_cong" in dn.motif and "chuyen_giao_dinh_ky" in dn.motif):
                 gop = next(c for c in dn.hd.dieu_khoan if c.loai == "gop_cong")
                 tra = next(c for c in dn.hd.dieu_khoan if c.loai == "chuyen_giao_dinh_ky")
                 gia_cong = tra.so_luong / max(gop.so_cong_moi_tick, 1e-9)

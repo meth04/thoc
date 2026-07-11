@@ -47,14 +47,30 @@ def lap_phap_nhan(w: World, nguoi_lap: str, ten: str, co_phan: dict[str, float],
     ts_cp = f"co_phan:{eid}"
     w.ledger.flows.dang_ky(ts_cp, "lap_entity", "nguon")
     w.ledger.flows.dang_ky(ts_cp, "giai_the", "sink")
-    # chuyển vốn góp TRƯỚC — ai thiếu thì hủy cả giao dịch
+    # chuyển vốn góp TRƯỚC — ai thiếu thì hủy cả giao dịch. Đất góp bằng "thua:PID".
     da_gop: list[tuple[str, str, float]] = []
+    da_gop_dat: list[str] = []
     for aid, gop in sorted(von_gop.items()):
         for ts, sl in sorted(gop.items()):
+            if ts.startswith("thua:"):
+                pid = ts.split(":", 1)[1]
+                p = w.parcels.get(pid)
+                if p is None or p.chu != aid:
+                    for pid2 in da_gop_dat:
+                        w.parcels[pid2].chu = aid
+                    for a2, t2, s2 in da_gop:
+                        w.ledger.chuyen(eid, a2, t2, s2, "hoàn vốn góp hụt", w.tick)
+                    w.ghi_unrecognized(nguoi_lap, "lap_phap_nhan", f"{aid} không có {pid}")
+                    return None
+                p.chu = eid
+                da_gop_dat.append(pid)
+                continue
             try:
                 w.ledger.chuyen(aid, eid, ts, float(sl), f"vốn góp {eid}", w.tick)
                 da_gop.append((aid, ts, float(sl)))
             except LoiSoKep:
+                for pid2 in da_gop_dat:
+                    w.parcels[pid2].chu = aid
                 for a2, t2, s2 in da_gop:
                     w.ledger.chuyen(eid, a2, t2, s2, "hoàn vốn góp hụt", w.tick)
                 w.ghi_unrecognized(nguoi_lap, "lap_phap_nhan", f"{aid} thiếu {ts}")
@@ -124,10 +140,18 @@ def kiem_tra_pha_san(w: World) -> None:
             continue
         nghia_vu = nghia_vu_quy_thoc(w, eid)
         tai_san = tai_san_quy_thoc(w, eid)
-        # phá sản khi nghĩa vụ vượt tài sản khả thi rõ rệt
-        if nghia_vu <= tai_san * 1.0 + 1e-9:
+        # phá sản khi nghĩa vụ vượt tài sản khả thi, HOẶC entity vừa vỡ nợ nghĩa vụ
+        vo_no_tick_nay = any(
+            hd.trang_thai == "vi_pham" and hd.ke_vi_pham == eid
+            for hd in w.hop_dong.values()
+        )
+        if nghia_vu > tai_san + 1e-9 or vo_no_tick_nay:
+            thanh_ly(w, eid)
             continue
-        thanh_ly(w, eid)
+        # entity cạn vốn kéo dài, không đất → tự giải thể (máy trả về cổ đông)
+        if (w.tick - e.tick_lap > 24 and w.ledger.so_du(eid, "thoc") < 50.0
+                and not any(p.chu == eid for p in w.parcels.values())):
+            thanh_ly(w, eid)
 
 
 def thanh_ly(w: World, eid: str) -> None:
@@ -136,7 +160,8 @@ def thanh_ly(w: World, eid: str) -> None:
     # 1) hủy mọi hợp đồng của entity, lập danh sách chủ nợ theo giá trị nghĩa vụ
     chu_no: dict[str, float] = {}
     for hd in sorted(w.hop_dong.values(), key=lambda h: h.id):
-        if hd.trang_thai != "hieu_luc" or eid not in [
+        # gồm cả hợp đồng VỪA vi phạm trong tick (bank-run): chủ nợ đó vẫn được chia
+        if hd.trang_thai not in ("hieu_luc", "vi_pham") or eid not in [
             ben_hien_tai(w, hd.id, b) for b in hd.cac_ben
         ]:
             continue
@@ -151,7 +176,8 @@ def thanh_ly(w: World, eid: str) -> None:
                 elif ck.loai == "hoan_tra_theo_yeu_cau":
                     chu_no[den_r] = chu_no.get(den_r, 0.0) + gia_tri_thi_truong(
                         w, ck.tai_san, ck.tran_rut_moi_tick)
-        hd.trang_thai = "huy"
+        if hd.trang_thai == "hieu_luc":
+            hd.trang_thai = "huy"  # giữ nguyên dấu "vi_pham" cho sổ sách
         from engine.contracts import dot_vi_the
 
         dot_vi_the(w, hd)
@@ -203,7 +229,9 @@ def chia_loi_nhuan_dinh_ky(w: World) -> None:
             continue
         thoc = w.ledger.so_du(eid, "thoc")
         nghia_vu = nghia_vu_quy_thoc(w, eid)
-        du = thoc - nghia_vu - 200.0  # đệm lưu động
+        # giữ lại vốn hoạt động (trả lương/mua vật liệu) — chỉ chia phần thực sự dư
+        dem_luu_dong = max(4000.0, nghia_vu * 2.0)
+        du = thoc - dem_luu_dong
         if du <= 1e-9:
             continue
         co_dong = co_dong_cua(w, eid)

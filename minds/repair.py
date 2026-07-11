@@ -31,11 +31,29 @@ def _strip_van_ban(text: str) -> str:
     return text[dau:cuoi + 1].strip()
 
 
+# tên trường schema — CHỈ những key này mới được hạ thường (id agent "A0128" giữ nguyên)
+_TEN_TRUONG = {
+    "id", "loai", "hanh_dong", "ly_do", "the_chinh_sach", "tai_san", "so_luong", "gia",
+    "sl", "chieu", "thanh_toan", "den", "tu", "ref", "tra_loi", "sua_doi", "hop_dong",
+    "cac_ben", "hinh_thuc", "thoi_han", "the_chap", "dieu_khoan", "moi_n_tick", "tai",
+    "tick_t", "nguon", "ty_le", "entity", "theo_co_phan", "neu", "thi",
+    "tran_rut_moi_tick", "phat", "phat_chuyen_giao", "nguoi_soan", "bao_truoc", "mon",
+    "thua", "cua", "dong_y", "canh_thua", "gop_cong_cho", "khai_go_cong",
+    "khai_quang_cong", "hoc", "day_cho", "linh_vuc", "cong", "thoc", "ten", "co_phan",
+    "von_gop", "hanh_dong_con", "phan_bo", "gia_huan", "lang", "so_cong_moi_tick",
+    "du_tru_muc_tieu", "canh_toi_da", "khai_go_khi_ranh", "hoc_khi_du_an", "day_con",
+    "y_dinh_sinh_con", "nhan_lam_cong_gia_toi_thieu", "nhan_gui_thoc", "ban_go_nguong",
+    "mua_cong_cu_khi_hong", "nguong_rao_dat", "dieu_le",
+}
+
+
 def _chuan_hoa_phan_tu(d: dict[str, Any]) -> dict[str, Any]:
-    """Sửa lỗi mềm: key viết hoa, số kiểu Việt '1.000' trong chuỗi."""
+    """Sửa lỗi mềm: key schema viết hoa, số kiểu Việt '1.000' trong chuỗi."""
     ra: dict[str, Any] = {}
     for k, v in d.items():
-        k2 = k.lower() if isinstance(k, str) else k
+        k2 = k
+        if isinstance(k, str) and k.lower() in _TEN_TRUONG:
+            k2 = k.lower()
         ra[k2] = _chuan_hoa_gia_tri(v)
     return ra
 

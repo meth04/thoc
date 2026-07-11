@@ -23,6 +23,9 @@ xac_suat_thanh_cong:         # p = 1 - exp(-diem_tich_luy / (k0 * (1 + muc_linh_
 blueprint:
   do_lon_lognormal: {mu: 0.12, sigma: 0.5}          # engine RÚT, LLM không tự đặt số
   do_lon_tran: 0.8
+  # hiệu chỉnh Phase 4 (DECISIONS.md): máy móc phải đủ mạnh thì xưởng mới có lãi
+  he_so_theo_linh_vuc: {cong_cu_may_moc: 3.0}
+  tran_theo_linh_vuc: {cong_cu_may_moc: 2.0}
 
 hang_moi:                    # chỉ cho lĩnh vực che_bien
   input_menu: [thoc, go, quang_dong]
@@ -34,7 +37,7 @@ khuech_tan:
   san: 0.4
 
 may:                         # "máy" — hạt giống vật lý của xưởng (không phải định chế)
-  recipe: {go: 10, quang_hoac_xu: 8, cong: 200}
+  recipe: {go: 8, quang_hoac_xu: 4, cong: 120}   # hiệu chỉnh Phase 4 (DECISIONS.md)
   can_blueprint_linh_vuc: cong_cu_may_moc
   pham_vi: nhan_nang_suat_cong_cua_nguoi_lam_cho_chu_may
 
