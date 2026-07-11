@@ -1,7 +1,22 @@
 # PROGRESS.md — trạng thái nghiệm thu từng phase
 
+## ✅ TỔNG NGHIỆM THU MOCK (trước HUMAN-GATE 1) — 2026-07-11
+
+| Hạng mục | Kết quả |
+|---|---|
+| `pytest -q` | **48 passed** (ledger+RNG 16, thế giới 6, auction 6, contracts 5, JSON repair 3, heterogeneity 1, phase-4 5, providers 6) |
+| `ruff check .` | **All checks passed** |
+| mock300 full (600 tick, p_malformed=0.15) | **audit 0 vi phạm** (600/600 tick), fallback **1/30k lượt = 0.02% < 5%**, llm_calls đủ 5684/5684, 12 milestones, **nhãn công-nghiệp-hóa NĂM 160** |
+| Hiệu chỉnh 5 seeds {41–45} | CNH năm {146, 160, 171, —, —} → **trung vị 171 ∈ [160, 280] ✅** (`reports/calibration.md`) |
+| `tools.replay mock300 --verify` | **TRÙNG hash** (8cf390fec69d41e4) |
+| `render_video mock300 --last-years 60` | **demo.mp4 hợp lệ** (242 frames, H.264, có caption milestone/chronicle) |
+| Dashboard | HTTP 200, đủ 6 tab; tab Hợp đồng: **10 mô-típ**, 6271 lượt ký |
+| `tools.analyze mock300` | `reports/final_analysis.md` + 2 PNG; ma trận dịch chuyển (n=599); β thừa kế 0.121 |
+| Run đối chứng rulebot | seeds 41/42/43 dân cuối 154/188/316 ∈ [60,500]; replay trùng hash |
+
 | Phase | Trạng thái | Lệnh nghiệm thu | Kết quả chính | Ngày |
 |---|---|---|---|---|
+| 6 | ✅ xanh | `render_video mock300 --last-years 60 --out demo.mp4` → mp4 hợp lệ có caption; dashboard 6 tab HTTP 200 (tab Hợp đồng hiện 10 mô-típ); `analyze mock300` → final_analysis.md + PNGs | Dashboard streamlit 6 tab, video 9:16 pygame+ffmpeg, session_report tự động, analyze (mobility matrix + β thừa kế + biểu đồ). | 2026-07-11 |
 | 0 | ✅ xanh | `pytest -q tests/test_ledger.py tests/test_rng.py` → **16 passed**; `ruff check .` → **All checks passed** | Ledger sổ kép nguyên tử (không âm số dư, cân từng tài sản), FlowRegistry bắt luồng lậu (2 test cài lậu cố tình đều bị bắt), hypothesis 300 examples pass, cây RNG tất định theo (subsystem, tick). | 2026-07-11 |
 | 4 | ✅ xanh | Kịch bản (a)–(e) trong `tests/test_phase4.py` → pass (entity 50/30/20 chia đúng kg + sang tên cổ phần; gửi-rút → nhãn `ngan_hang` → bank-run → thanh lý pro-rata; máy → xưởng 5 công nhân năng suất/người vượt hộ tự canh + nhãn `xuong`; hàng mới có tên mua bán + hiệu ứng đúng; bảo hiểm chi trả đúng khi hạn + nhãn `bao_hiem`); **hiệu chỉnh 5 seeds: CNH năm {146, 160, 171, —, —} → TRUNG VỊ 171 ∈ [160,280] ✅** (`reports/calibration.md`); mock300 full-feature: audit xanh 600/600, fallback 0.02%, 12 milestones, `tools.analyze` ra ma trận dịch chuyển (n=599) + β thừa kế 0.121 | Pháp nhân + cổ phần token + quản trị + phá sản/thanh lý; R&D 7 lĩnh vực + blueprint (engine rút độ lớn) + hàng mới + li-xăng + khuếch tán 0.9^n; máy; đúc xu; tri thức & sàn tier nội sinh; di chúc + gia huấn; di cư; observatory (12 giai cấp + 6 nhãn định chế + 16 milestones) + chronicle. Hiệu chỉnh: k0=160, giá máy {8 gỗ, 6 kim loại, 200 công}, blueprint máy ×3, ruộng 28%, p_goc 0.15, ngưỡng lao động xưởng 10% (căn cứ lịch sử — DECISIONS.md). | 2026-07-11 |
 | 5 | ✅ xanh | `pytest -q tests/test_providers.py` → **6 passed** (FakeTransport: (a) 429 → cooldown + xoay key; (b) chạm RPD → LoiHetQuota tới reset; (c) restart SQLite không mất bộ đếm; (d) budget thiếu → dừng êm, KHÔNG degrade; (e) T1 cạn key → tràn 9router, giữ tiền tố `gc/`); smoke thật: **3/8 route ok** (gemini-3.1-flash-lite 0.66s; nen_hoi_ky gemma 4.02s; chronicle 0.65s), 9router health-check OK nhưng `gc/*` trả body không phải JSON + `gemini-3-flash-preview` 404 (việc rà của chủ dự án tại HUMAN-GATE), `gemma-4-31b-it` trả 500 từ Google | Keypool regex .env (tên biến gạch ngang), token-bucket RPM + RPD persist SQLite, cooldown 429 lũy tiến, budget guard, routes/tier có tràn, --smoke. Sự cố: httpx in key trong URL lỗi → đã vá che key toàn cục; **khuyến nghị chủ dự án XOAY key số 1** (đã lộ vào console phiên này). | 2026-07-11 |
