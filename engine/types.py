@@ -58,6 +58,8 @@ class Agent:
     # đất đai...); LLM đọc trong prompt để sống TIẾP một cuộc đời, không phải mỗi
     # lần được hỏi lại là một người xa lạ
     ky_uc: list = field(default_factory=list)  # ≤10 mục gần nhất
+    # cư trú: nhà đặt trên thửa nào (làng xóm 2D — hàng xóm theo khoảng cách thật)
+    nha_thua: str | None = None
 
     @property
     def tuoi_nam(self) -> float:

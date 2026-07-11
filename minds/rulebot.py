@@ -160,13 +160,13 @@ def ke_hoach_mot_nguoi(
         kh = KeHoach(id=aid)
         p5 = a.persona
 
-        # ---- trẻ em ----
+        # ---- trẻ em: dưới tuổi phụ việc thì ĐI HỌC (tự học nếu không ai dạy) ----
         if not a.truong_thanh(tt):
             cha_me = [p for p in (a.cha, a.me) if p and p in w.agents and w.agents[p].con_song]
-            if a.e_bac < 1 and any(w.agents[p].e_bac >= 1 for p in cha_me) and a.tuoi_nam >= 6:
-                kh.hoc = True  # học chữ với cha mẹ
-            elif a.tuoi_nam >= nc["tre_em_gop_cong_tu_tuoi"] and cha_me:
-                kh.gop_cong_cho = cha_me[0]
+            if a.tuoi_nam >= nc["tre_em_gop_cong_tu_tuoi"] and cha_me and a.e_bac >= 1:
+                kh.gop_cong_cho = cha_me[0]  # 15+ đã biết chữ → phụ việc nhà
+            elif a.tuoi_nam >= 6 and a.e_bac < 4:
+                kh.hoc = True  # tuổi đi học — có thầy học nhanh, không thầy tự học
             return kh
 
         # ---- hộ & an ninh lương thực ----
@@ -274,7 +274,36 @@ def ke_hoach_mot_nguoi(
 
         # ---- Phase 4: R&D, entity, cổ phần, li-xăng, quặng/xu, di chúc, di cư ----
         _phase4_hanh_vi(w, a, kh, g, an_ninh, bc, da_nham)
+
+        # ---- phụng dưỡng cha mẹ già + chăn nuôi ----
+        _phung_duong_va_chan_nuoi(w, a, kh, g, an_ninh)
     return kh
+
+
+def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float) -> None:
+    aid = a.id
+    # phụng dưỡng: cha mẹ >60 tuổi thiếu ăn mà mình dư → biếu thóc
+    if an_ninh > 1.2:
+        for pid in (a.cha, a.me):
+            if not pid or pid not in w.agents:
+                continue
+            cu = w.agents[pid]
+            if cu.con_song and cu.tuoi_nam > 60 and w.ledger.so_du(pid, "thoc") < 120:
+                kh.bieu.append((pid, "thoc", 120.0))
+    # chăn nuôi: dư thóc thì gây đàn; đói thì giết ăn; đàn đông thì bán bớt
+    so_ga = w.ledger.so_du(aid, "ga")
+    if (an_ninh > 1.5 and so_ga < 8 and a.persona.cham_chi >= 4
+            and not w.mua_mua() and g.random() < 0.25):
+        kh.bat_ga_cong = max(kh.bat_ga_cong, 60.0)
+    if an_ninh < 0.6 and so_ga >= 2:
+        kh.giet_ga = max(kh.giet_ga, 2)
+    if so_ga > 12:
+        gia_ga = w.gia_gan_nhat("ga") or 40.0
+        kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),
+                                round(gia_ga * 0.95, 1)))
+    elif so_ga == 0 and an_ninh > 2.0 and a.persona.tiet_kiem >= 6 and g.random() < 0.1:
+        gia_ga = w.gia_gan_nhat("ga") or 40.0
+        kh.dat_lenh.append(Lenh(aid, "mua", "ga", 3.0, round(gia_ga * 1.1, 1)))
 
 
 def _phase4_hanh_vi(w: World, a, kh: KeHoach, g, an_ninh: float,

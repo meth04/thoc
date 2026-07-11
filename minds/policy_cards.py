@@ -23,13 +23,13 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
     kh = KeHoach(id=aid)
     kh.y_dinh_sinh_con = the.y_dinh_sinh_con
 
-    # trẻ em: như rulebot (học/góp công là bản năng gia đình, không cần thẻ)
+    # trẻ em: tuổi đi học thì học; 15+ biết chữ rồi thì phụ việc nhà
     if not a.truong_thanh(tt):
         cha_me = [p for p in (a.cha, a.me) if p and p in w.agents and w.agents[p].con_song]
-        if a.e_bac < 1 and any(w.agents[p].e_bac >= 1 for p in cha_me) and a.tuoi_nam >= 6:
-            kh.hoc = True
-        elif a.tuoi_nam >= nc["tre_em_gop_cong_tu_tuoi"] and cha_me:
+        if a.tuoi_nam >= nc["tre_em_gop_cong_tu_tuoi"] and cha_me and a.e_bac >= 1:
             kh.gop_cong_cho = cha_me[0]
+        elif a.tuoi_nam >= 6 and a.e_bac < 4:
+            kh.hoc = True
         return kh
 
     ho = w.ho_cua(aid)
@@ -86,6 +86,22 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
         if len(ruong) >= 2:
             gia_dat = w.gia_gan_nhat("dat") or 600.0
             kh.niem_yet_dat.append((ruong[-1].id, round(gia_dat, 0)))
+
+    # phụng dưỡng cha mẹ già thiếu ăn (thẻ mặc định bật)
+    if the.phung_duong_cha_me and an_ninh > 1.2:
+        for pid in (a.cha, a.me):
+            if pid and pid in w.agents:
+                cu = w.agents[pid]
+                if cu.con_song and cu.tuoi_nam > 60 and w.ledger.so_du(pid, "thoc") < 120:
+                    kh.bieu.append((pid, "thoc", 120.0))
+    # đàn gà của thẻ: đói giết ăn, đông bán bớt (việc thường nhật)
+    so_ga = w.ledger.so_du(aid, "ga")
+    if an_ninh < 0.6 and so_ga >= 2:
+        kh.giet_ga = max(kh.giet_ga, 2)
+    if so_ga > 12:
+        gia_ga = w.gia_gan_nhat("ga") or 40.0
+        kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),
+                                round(gia_ga * 0.95, 1)))
 
     # tự động trả lời hợp đồng quen thuộc theo thẻ
     if the.nhan_lam_cong_gia_toi_thieu is not None or the.nhan_gui_thoc:

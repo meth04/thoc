@@ -15,7 +15,7 @@ LOAI_HANH_DONG = {
     "de_nghi_hop_dong", "tra_loi_hop_dong", "don_phuong_pha_vo", "lap_phap_nhan",
     "quyet_dinh_entity", "niem_yet", "dat_lenh", "tra_gia_dat", "phan_bo_cong",
     "khai_hoang", "xay", "nghien_cuu", "buon_chuyen", "cau_hon", "tra_loi_cau_hon",
-    "viet_di_chuc", "di_cu", "yeu_cau_hoan_tra",
+    "viet_di_chuc", "di_cu", "yeu_cau_hoan_tra", "chan_nuoi", "bieu",
 }
 
 
@@ -39,6 +39,8 @@ class TheChinhSach(BaseModel):
     ban_go_nguong: float | None = None  # bán gỗ khi vượt ngưỡng
     mua_cong_cu_khi_hong: bool = True
     nguong_rao_dat: float | None = None  # an ninh dưới ngưỡng → rao bớt đất
+    phung_duong_cha_me: bool = True  # tự chuyển thóc cho cha mẹ già thiếu ăn
+    du_dinh: str = ""  # dự định dài hạn TỰ GHI — hiện lại trong prompt lần nghĩ sau
 
 
 class PolicyPatch(BaseModel):
@@ -55,6 +57,8 @@ class PolicyPatch(BaseModel):
     ban_go_nguong: float | None = None
     mua_cong_cu_khi_hong: bool | None = None
     nguong_rao_dat: float | None = None
+    phung_duong_cha_me: bool | None = None
+    du_dinh: str | None = None
 
 
 class HanhDong(BaseModel):

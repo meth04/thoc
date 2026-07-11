@@ -59,6 +59,11 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
         hd_list.append({"loai": "viet_di_chuc", **kh.viet_di_chuc})
     if kh.di_cu:
         hd_list.append({"loai": "di_cu"})
+    if kh.bat_ga_cong or kh.giet_ga:
+        hd_list.append({"loai": "chan_nuoi", "bat_ga_cong": kh.bat_ga_cong,
+                        "giet_ga": kh.giet_ga})
+    for den, ts, sl in kh.bieu:
+        hd_list.append({"loai": "bieu", "den": den, "tai_san": ts, "so_luong": sl})
     for hd, den in kh.de_nghi_hop_dong:
         hd_list.append({
             "loai": "de_nghi_hop_dong",
@@ -214,6 +219,12 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
         }
     elif loai == "di_cu":
         kh.di_cu = True
+    elif loai == "chan_nuoi":
+        kh.bat_ga_cong += max(0.0, float(d.get("bat_ga_cong", 0) or 0))
+        kh.giet_ga += max(0, int(d.get("giet_ga", 0) or 0))
+    elif loai == "bieu":
+        kh.bieu.append((str(d["den"]), str(d.get("tai_san", "thoc")),
+                        float(d["so_luong"])))
     elif loai == "buon_chuyen":
         chieu = d.get("chieu", "ban")
         if chieu in ("mua", "ban"):

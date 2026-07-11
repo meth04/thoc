@@ -99,7 +99,8 @@ Không hành động gì thì để "hanh_dong":[]. Mỗi người quyết đị
 the_chinh_sach (thói quen tự chạy khi bạn không được hỏi — chỉ ghi trường muốn đổi):
 {"du_tru_muc_tieu":2.5,"canh_toi_da":3,"khai_go_khi_ranh":true,"hoc_khi_du_an":false,
  "day_con":true,"y_dinh_sinh_con":0|0.5|1,"nhan_lam_cong_gia_toi_thieu":3.5,
- "nhan_gui_thoc":false,"ban_go_nguong":4,"mua_cong_cu_khi_hong":true,"nguong_rao_dat":0.3}
+ "nhan_gui_thoc":false,"ban_go_nguong":4,"mua_cong_cu_khi_hong":true,"nguong_rao_dat":0.3,
+ "phung_duong_cha_me":true,"du_dinh":"mục tiêu dài hạn của bạn, ≤200 chữ"}
 
 hanh_dong hợp lệ (loai + tham số):
 - {"loai":"phan_bo_cong","canh_thua":["P15_04"],"khai_go_cong":60,"khai_quang_cong":0,
@@ -122,6 +123,9 @@ hanh_dong hợp lệ (loai + tham số):
 - {"loai":"cau_hon","den":"A0042"} · {"loai":"tra_loi_cau_hon","cua":"A0042","dong_y":true}
 - {"loai":"viet_di_chuc","phan_bo":{"A0051":60,"A0052":40},"gia_huan":"≤100 từ"}
 - {"loai":"di_cu"} · {"loai":"don_phuong_pha_vo","ref":"HD00003"}
+- {"loai":"chan_nuoi","bat_ga_cong":60,"giet_ga":2}  (bắt gà rừng / giết gà lấy thịt)
+- {"loai":"bieu","den":"A0002","tai_san":"thoc","so_luong":90}  (biếu tặng — phụng
+  dưỡng cha mẹ già, quà cưới, cứu đói người thân... không cần hợp đồng)
 
 Văn phạm dieu_khoan (9 loại — ghép tự do thành mọi kiểu thỏa thuận):
 chuyen_giao_dinh_ky{tu,den,tai_san,so_luong,moi_n_tick} ·
@@ -145,9 +149,17 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   (+30% năng suất, mòn dần). Gỗ ~10 công/cây (rừng), quặng ~20 công (mỏ).
 - Đời người hữu hạn (già là chết). KHÔNG kết hôn thì không con cái — của cải về công,
   dòng họ tuyệt tự. Cầu hôn ở mùa nào cũng được; người kia trả lời tick sau.
+- CHĂN NUÔI: bắt gà rừng về nuôi (30 công/con, làng có rừng). Gà ăn 4kg thóc/tick
+  (đói thì chết), no đủ thì đàn đẻ +15%/tick. Giết 1 gà → 8kg thịt (1kg thịt no bằng
+  3kg thóc) nhưng thịt ôi nhanh (hao 20%/tick) — giết vừa ăn, còn lại bán gà sống.
+  Nhà nhiều thóc nuôi đàn gà là một nguồn thu nhập khôn ngoan.
+- TUỔI TÁC: trẻ dưới 15 KHÔNG làm đồng — cho đi học (day_cho + hoc) là đầu tư đời
+  người. Từ 15 tuổi phụ giúp được 30% sức. Quá 60 tuổi sức yếu dần (nửa công, hao sức
+  mỗi tick), quá 70 gần như nghỉ hẳn — con cháu phải PHỤNG DƯỠNG cha mẹ già (chu cấp
+  thóc, thẻ chính sách có sẵn phung_duong_cha_me).
 - SẮP ĐÓI thì đừng ngồi chờ chết: đi VAY (đề nghị hợp đồng: nhận thóc ngay ký kết,
   hứa trả nhiều hơn khi đáo hạn, có thể thế chấp đất), xin LÀM THUÊ đổi công lấy thóc,
-  BÁN gỗ/công cụ/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
+  BÁN gỗ/công cụ/gà/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
 
 [BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
 mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, phụng dưỡng cha mẹ già,
@@ -158,6 +170,7 @@ là tùy TÍNH CÁCH bạn. Muốn có con: đặt y_dinh_sinh_con (0/0.5/1) tro
 - Nông dân: khai hoang/canh ruộng nhà. Tá điền: thuê đất người khác (quyen_su_dung +
   chia_san_luong hoặc + tô cố định). Người làm thuê: gop_cong đổi thóc định kỳ.
 - Thợ thủ công: khai gỗ → chế công cụ/nhà đem bán. Thợ mỏ: đào quặng bán / đúc xu.
+- Người chăn nuôi: gây đàn gà, bán gà sống/thịt cho làng — nhà dư thóc càng nên nuôi.
 - Lái buôn: mua rẻ bán đắt trên chợ (dat_lenh 2 chiều).
 - THẦY ĐỒ (giáo viên): biết chữ (E cao) thì dạy người khác — day_cho trong phan_bo_cong,
   kèm hợp đồng học phí (học trò trả thóc định kỳ). Học trò thăng E, bạn có thu nhập.
@@ -360,6 +373,47 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
             f"{thoc_ho:.0f}kg thóc — cầm cự được ~{so_tick:.1f} tick. Lo cái ăn TRƯỚC "
             f"mọi việc khác: {'; '.join(cach)}."
         )
+    # hàng xóm quanh nhà — biết ƯỚC LƯỢNG tài sản của nhau (nhiễu ±30%, không biết
+    # chính xác; thóc trong kho chỉ đoán mờ qua nếp sống)
+    hang_xom = w.hang_xom_cua(aid)
+    if hang_xom:
+        nam_nay = w.tick // 2
+        mo_ta_hx = []
+        for hx in hang_xom:
+            b = w.agents[hx]
+            g_nx = w.rng.get(f"nhin_hx:{aid}:{hx}", nam_nay)
+            ga = w.ledger.so_du(hx, "ga")
+            ruong = sum(1 for p in w.parcels.values() if p.chu == hx)
+            thoc_b = w.ledger.so_du(hx, "thoc")
+            nep = ("có vẻ dư dả" if thoc_b > 1500 else
+                   "đủ ăn" if thoc_b > 400 else "trông túng bấn")
+            chi_tiet = [f"{b.ten} ({hx}, {b.tuoi_nam:.0f}t, {nep}"]
+            if ruong:
+                chi_tiet.append(f"~{max(1, round(ruong * float(g_nx.uniform(0.7, 1.3))))} thửa ruộng")
+            if ga >= 1:
+                chi_tiet.append(f"nuôi ~{max(1, round(ga * float(g_nx.uniform(0.7, 1.3))))} con gà")
+            if w.ledger.so_du(hx, "may") >= 1:
+                chi_tiet.append("có máy")
+            mo_ta_hx.append(", ".join(chi_tiet) + ")")
+        dong.append("HÀNG XÓM QUANH BẠN (ước chừng qua mắt thấy tai nghe): "
+                    + "; ".join(mo_ta_hx) + ".")
+    # rao vặt phong thanh từ phiên chợ trước — "muốn mua thì biết tìm đến ai"
+    rao_vat = getattr(w, "rao_vat", [])
+    if rao_vat:
+        g_rv = w.rng.get(f"tin_don:{aid}", w.tick)
+        nhieu = float(w.cfg.get("thuong_mai.nhieu_tin_don_gia"))
+        tin = [
+            f"{ai} {'đang rao bán' if chieu == 'ban' else 'đang hỏi mua'} "
+            f"{sl:.0f} {ts} (giá nghe đâu ~{gia * (1 + float(g_rv.uniform(-nhieu, nhieu))):.0f})"
+            for ai, chieu, ts, sl, gia in rao_vat[:6] if ai != aid
+        ]
+        if tin:
+            dong.append("NGHE PHONG THANH Ở CHỢ: " + "; ".join(tin) + ".")
+    # dự định dài hạn tự ghi lần trước — sống có mục tiêu, đừng quên mình định làm gì
+    the_cu = w.policy_cards.get(aid) or {}
+    if the_cu.get("du_dinh"):
+        dong.append(f"DỰ ĐỊNH BẠN TỰ GHI LẦN TRƯỚC: “{the_cu['du_dinh']}” — cập nhật "
+                    f"bằng the_chinh_sach.du_dinh nếu đổi ý.")
     # phản hồi việc không thành tick trước (đọc xong thì xóa)
     if a.su_co:
         dong.append(f"Chuyện vừa rồi KHÔNG THÀNH (rút kinh nghiệm): {a.su_co}")

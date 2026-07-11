@@ -8,15 +8,23 @@ from engine.world import World
 
 
 def sinh_cong(w: World) -> None:
-    """Công sinh mỗi tick theo health; trẻ ≥10 tuổi góp 30%; không tích trữ qua tick."""
+    """Công sinh mỗi tick theo health & TUỔI: trẻ ≥15 phụ giúp 30%; già >60 giảm sức,
+    >70 gần như nghỉ hẳn (con cháu phụng dưỡng); không tích trữ qua tick."""
     ngay_cong = w.cfg.get("nhu_cau.ngay_cong_moi_tick")
     tuoi_gop = w.cfg.get("nhu_cau.tre_em_gop_cong_tu_tuoi")
     ty_le_tre = w.cfg.get("nhu_cau.ty_le_cong_tre_em")
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    ld = w.cfg.raw().get("lao_dong_theo_tuoi", {})
+    tuoi_giam = float(ld.get("tuoi_giam_suc", 60))
+    tuoi_nghi = float(ld.get("tuoi_nghi", 70))
     for a in w.agents.values():
         if not a.con_song:
             continue
-        if a.truong_thanh(tt):
+        if a.tuoi_nam > tuoi_nghi:
+            he_so = float(ld.get("he_so_sau_nghi", 0.15))
+        elif a.tuoi_nam > tuoi_giam:
+            he_so = float(ld.get("he_so_sau_giam", 0.5))
+        elif a.truong_thanh(tt):
             he_so = 1.0
         elif a.tuoi_nam >= tuoi_gop:
             he_so = ty_le_tre
@@ -133,13 +141,23 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 den = ben_hien_tai(w, hd.id, ck.den)
                 qsd_map.setdefault(den, set()).add(ck.tai_san.split(":", 1)[1])
 
-    # 0) Trẻ em góp công cho cha mẹ
+    # 0) Trẻ em góp công cho cha mẹ + biếu tặng (phụng dưỡng, quà cáp)
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
         if kh.gop_cong_cho and kh.gop_cong_cho in w.agents:
             sl = w.ledger.so_du(aid, "cong")
             if sl > 0:
                 w.ledger.chuyen(aid, kh.gop_cong_cho, "cong", sl, "con góp công", w.tick)
+        for den, ts, sl in kh.bieu:
+            if ts == "cong" or not w.chu_the_hoat_dong(den) or den == aid:
+                continue
+            sl = min(float(sl), w.ledger.so_du(aid, ts))
+            if sl > 0:
+                w.ledger.chuyen(aid, den, ts, sl, f"biếu {den}", w.tick)
+                w.cong_quan_he(aid, den, w.cfg.get("quan_he.cong_moi_tuong_tac"))
+                w.events.ghi(w.tick, "bieu", tu=aid, den=den, tai_san=ts,
+                             so_luong=round(sl, 1))
+                w.ghi_ky_uc(den, f"{aid} biếu tôi {sl:.0f} {ts} — ơn nghĩa phải nhớ")
 
     da_canh_tick_nay: dict[str, str] = {}  # parcel id → người canh
 
@@ -255,7 +273,18 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 _ghi_su_co(w, aid, f"xây nhà không thành: {_thieu_gi(w, aid, tieu)}")
                 break
             ghi_cong_dung(w, "phi_nong", cong_can)
-            w.events.ghi(w.tick, "xay_nha", id=aid)
+            # nhà dựng TRÊN thửa của mình (làng xóm 2D) — ưu tiên thửa gần làng
+            ag = w.agents.get(aid)
+            if ag is not None and ag.nha_thua is None:
+                lang = w.villages[ag.lang if ag.lang < len(w.villages) else 0]
+                thua_minh = sorted(
+                    (p for p in w.parcels.values() if p.chu == aid),
+                    key=lambda p: (abs(p.r - lang.r) + abs(p.c - lang.c), p.id),
+                )
+                if thua_minh:
+                    ag.nha_thua = thua_minh[0].id
+            w.events.ghi(w.tick, "xay_nha", id=aid,
+                         thua=(ag.nha_thua if ag is not None else None))
         for _ in range(int(kh.duc_xu)):
             r = sx["recipe"]["xu"]
             cong_can = float(r["cong"]) * giam_vl

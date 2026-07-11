@@ -56,6 +56,18 @@ def an_va_suc_khoe(w: World) -> None:
             if tru > 0:
                 w.ledger.huy(m, "thoc", tru, "an", "ăn", w.tick)
                 con_phai_tru -= tru
+        # thiếu thóc → ăn THỊT (1kg thịt no bằng 3kg thóc)
+        if an_duoc < tong_nhu_cau - 1e-9:
+            quy_doi = float(w.cfg.raw()["chan_nuoi"]["thit_quy_doi_dinh_duong"])
+            thieu = tong_nhu_cau - an_duoc
+            for m in ho:
+                thit_co = w.ledger.so_du(m, "thit")
+                if thit_co <= 0 or thieu <= 1e-9:
+                    continue
+                an_thit = min(thit_co, thieu / quy_doi)
+                w.ledger.huy(m, "thit", an_thit, "an", "ăn thịt", w.tick)
+                thieu -= an_thit * quy_doi
+            an_duoc = tong_nhu_cau - max(0.0, thieu)
         ty_le_no = an_duoc / tong_nhu_cau if tong_nhu_cau > 0 else 1.0
         # hàng "tiện nghi": mỗi tick hộ tiêu dùng 1 đơn vị/loại → cộng health nhỏ
         bonus_tien_nghi = 0.0
@@ -67,10 +79,16 @@ def an_va_suc_khoe(w: World) -> None:
                     w.ledger.huy(m, bp.hang_moi, 1.0, "tieu_dung", "tiện nghi", w.tick)
                     bonus_tien_nghi += bp.hieu_ung_do_lon * 10.0
                     break
+        hao_gia = float(w.cfg.raw().get("lao_dong_theo_tuoi", {})
+                        .get("hao_suc_gia_moi_tick", 0))
+        tuoi_giam = float(w.cfg.raw().get("lao_dong_theo_tuoi", {})
+                          .get("tuoi_giam_suc", 60))
         for m in ho:
             ag = w.agents[m]
             if bonus_tien_nghi > 0:
                 ag.health = min(100.0, ag.health + bonus_tien_nghi)
+            if ag.tuoi_nam > tuoi_giam:  # tuổi già hao sức — cần được chăm sóc, ăn đủ
+                ag.health = max(0.0, ag.health - hao_gia)
             if ty_le_no >= 1.0 - 1e-9:
                 ag.health = min(100.0, ag.health + sk["hoi_khi_an_du"])
             else:

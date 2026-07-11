@@ -41,3 +41,6 @@
 | 2026-07-11 | real | Bộ phiên dịch intent lạ: gom cả tick → ≤1 call model rẻ, ánh xạ về 15 nguyên tố, cache loại bó tay; kết quả vẫn qua validator engine | Yêu cầu trực tiếp của chủ dự án. Đã thấy 3 intent được dịch thành công trong run thật. |
 | 2026-07-11 | real | Đề nghị công khai lan theo đồ thị quan hệ (trigger `nghe_tin_bang_rao` cho 4 người quen nhất của người đăng) | SPEC 2.1: "thứ tự tiếp cận bảng rao theo quan hệ". Trước đó đề nghị công khai không trigger ai → chết ế; sau sửa: ký tăng 1 → 10. |
 | 2026-07-11 | 4 | Ngưỡng nhãn `cong_nghiep_hoa.ty_le_lao_dong_trong_entity_5_nguoi` 0.25 → 0.10 | Ngưỡng quan sát là THAM SỐ world.yaml theo đúng SPEC 9.2 ("Mọi ngưỡng ở world.yaml"). 25% lao động trong hãng ≥5 người là mức giữa thế kỷ 20; nước Anh ở đỉnh cách mạng công nghiệp (~1850) lao động nhà máy chỉ ~10-15%. Đo đạc mock: tỷ lệ thực dao động 8.5–30% — ngưỡng 10% phân biệt được xã hội có/không có xưởng, ngưỡng 25% thì không xã hội mock nào chạm nổi (đã thử 12 cấu hình). |
+- 2026-07-11: Thêm tử suất tự nhiên đàn gà (`ga_chet_gia_moi_tick: 0.05`) + hạ trần đàn 60→25/hộ.
+  Lý do: mock 120 tick cho thấy đàn toàn làng phình 2.180 con (sinh 15%/tick, không sink ngoài giết
+  thịt) — đàn quy mô hộ gia đình tiền công nghiệp hợp lý hơn và gà tiêu thóc không nuốt hết thặng dư.

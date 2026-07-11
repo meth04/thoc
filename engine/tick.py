@@ -90,6 +90,17 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     production.sinh_cong(w)
     contracts.gop_cong_dau_san_xuat(w)
     production.thi_hanh_san_xuat(w, ke_hoach)
+    # chăn nuôi: bắt gà / giết thịt theo kế hoạch
+    from engine import chan_nuoi as cn_mod
+
+    for aid in sorted(ke_hoach):
+        kh = ke_hoach[aid]
+        if not w.chu_the_hoat_dong(aid):
+            continue
+        if kh.bat_ga_cong > 0:
+            cn_mod.bat_ga(w, aid, kh.bat_ga_cong)
+        if kh.giet_ga > 0:
+            cn_mod.giet_ga(w, aid, kh.giet_ga)
     from engine import research as research_mod
 
     for aid in sorted(ke_hoach):
@@ -118,6 +129,11 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
             tra_gia.append((aid, thua, float(gia)))
         for hd_id, sl in kh.yeu_cau_rut.items():
             w.yeu_cau_rut_tick[(hd_id, aid)] = float(sl)
+    # rao vặt: ai đang rao bán/cần mua gì — tick sau cả làng nghe phong thanh
+    w.rao_vat = [
+        (le.ai, le.chieu, le.tai_san, le.so_luong, le.gia)
+        for le in lenh_tick if le.tai_san != "cong"
+    ][:20]
     kl_cho = market.phien_cho(w, lenh_tick)
     market.phien_dat(w, w.niem_yet_dat, tra_gia)
 
@@ -133,7 +149,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     for hid in xong:
         w.hop_dong_xong[hid] = w.hop_dong.pop(hid)
 
-    # 8. tieu_dung_suc_khoe
+    # 8. tieu_dung_suc_khoe (đàn gà ăn/đẻ trước, rồi người ăn — thóc lẫn thịt)
+    cn_mod.buoc_chan_nuoi(w)
+    cn_mod.hao_thit(w)
     consumption.hao_hut_kho(w)
     consumption.an_va_suc_khoe(w)
 

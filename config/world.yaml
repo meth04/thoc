@@ -34,8 +34,24 @@ nhu_cau:
   nguoi_lon_kg_tick: 90
   tre_em_kg_tick: 45
   ngay_cong_moi_tick: 180
-  tre_em_gop_cong_tu_tuoi: 10
+  tre_em_gop_cong_tu_tuoi: 15   # 10→15: trẻ đi học, 15 tuổi mới phụ việc đồng áng
   ty_le_cong_tre_em: 0.3
+
+lao_dong_theo_tuoi:              # người già dưỡng sức — sức lao động giảm tự nhiên
+  tuoi_giam_suc: 60              # >60: công sinh ×0.5
+  he_so_sau_giam: 0.5
+  tuoi_nghi: 70                  # >70: gần như nghỉ hẳn
+  he_so_sau_nghi: 0.15
+  hao_suc_gia_moi_tick: 1.5      # >60 mỗi tick hao nhẹ sức khỏe (tuổi tác)
+
+chan_nuoi:                       # vật lý chăn nuôi (gà) — nguồn thu nhập phụ
+  ga_an_thoc_moi_tick: 4         # mỗi con ăn 4kg thóc/tick; thiếu ăn thì chết dần
+  ga_sinh_san_moi_tick: 0.15     # đàn tăng 15%/tick nếu no đủ
+  ga_toi_da_moi_ho: 25           # quá đông thì dịch bệnh kìm đàn
+  bat_ga_cong_moi_con: 30        # bắt gà rừng: 30 công/con (cần ô rừng trong làng)
+  thit_moi_ga_kg: 8              # giết 1 gà → 8kg thịt
+  thit_hao_moi_tick: 0.2         # thịt không trữ lâu được (hao 20%/tick)
+  thit_quy_doi_dinh_duong: 3.0   # 1kg thịt no bằng 3kg thóc
 
 suc_khoe:
   hoi_khi_an_du: 10

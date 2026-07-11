@@ -44,3 +44,8 @@ class KeHoach:
     quyet_dinh_entity: list = field(default_factory=list)  # [(entity_id, KeHoach con)]
     viet_di_chuc: dict | None = None  # {phan_bo: {id: %}, gia_huan}
     di_cu: bool = False
+    # chăn nuôi
+    bat_ga_cong: float = 0.0  # công dành đi bắt gà rừng về nuôi
+    giet_ga: int = 0  # giết bao nhiêu con lấy thịt
+    # biếu tặng (phụng dưỡng cha mẹ già, quà cưới, cứu đói hàng xóm...)
+    bieu: list = field(default_factory=list)  # [(den, tai_san, so_luong)]

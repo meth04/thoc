@@ -135,6 +135,35 @@ class World:
         gan = [x for x in ls if x[0] >= self.tick - 4]
         return sum(x[1] for x in gan) / len(gan) if gan else ls[-1][1]
 
+    def vi_tri_cua(self, aid: str) -> tuple[int, int]:
+        """Vị trí cư trú: thửa đặt nhà → thửa sở hữu đầu tiên → trung tâm làng."""
+        a = self.agents.get(aid)
+        if a is None:
+            v = self.villages[0]
+            return (v.r, v.c)
+        if a.nha_thua and a.nha_thua in self.parcels:
+            p = self.parcels[a.nha_thua]
+            return (p.r, p.c)
+        for p in self.parcels.values():
+            if p.chu == aid:
+                return (p.r, p.c)
+        v = self.villages[a.lang if a.lang < len(self.villages) else 0]
+        return (v.r, v.c)
+
+    def hang_xom_cua(self, aid: str, ban_kinh: int = 4, toi_da: int = 5) -> list[str]:
+        """Hàng xóm theo khoảng cách cư trú thật (làng xóm 2D)."""
+        r0, c0 = self.vi_tri_cua(aid)
+        ung_vien = []
+        for b in self.agents.values():
+            if not b.con_song or b.id == aid or b.tuoi_nam < 16:
+                continue
+            r, c = self.vi_tri_cua(b.id)
+            kc = abs(r - r0) + abs(c - c0)
+            if kc <= ban_kinh:
+                ung_vien.append((kc, b.id))
+        ung_vien.sort()
+        return [bid for _kc, bid in ung_vien[:toi_da]]
+
     def ghi_ky_uc(self, aid: str, noi_dung: str) -> None:
         """Khắc một biến cố vào ký ức đời agent (≤10 mục, kèm mốc năm)."""
         a = self.agents.get(aid)
@@ -257,6 +286,15 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("cong", "boc_hoi", "sink")
     f.dang_ky("cong_cu", "che_tac", "nguon")
     f.dang_ky("cong_cu", "hao_mon", "sink")
+    # chăn nuôi: gà bắt từ rừng, sinh sản; giết lấy thịt; thịt ăn được, mau hỏng
+    f.dang_ky("ga", "bat_rung", "nguon")
+    f.dang_ky("ga", "sinh_san", "nguon")
+    f.dang_ky("ga", "chet_doi_ga", "sink")
+    f.dang_ky("ga", "giet_thit", "sink")
+    f.dang_ky("thoc", "nuoi_ga", "sink")
+    f.dang_ky("thit", "giet_thit", "nguon")
+    f.dang_ky("thit", "an", "sink")
+    f.dang_ky("thit", "hao_thit", "sink")
     f.dang_ky("nha", "xay", "nguon")
     f.dang_ky("may", "che_tac", "nguon")
     f.dang_ky("may", "hao_mon", "sink")
