@@ -31,6 +31,18 @@ def quet_trigger(w: World) -> dict[str, list[str]]:
         if dn.den is not None:
             de_nghi_den[dn.den] = de_nghi_den.get(dn.den, 0) + 1
 
+    # đề nghị CÔNG KHAI mới đăng → lan tới người quen của người đăng trước
+    # (SPEC 2.1: thứ tự tiếp cận bảng rao theo đồ thị quan hệ)
+    nghe_tin_rao: set[str] = set()
+    for dn in w.bang_rao.values():
+        if dn.den is None and w.tick - dn.tick <= 1:
+            quen = sorted(
+                (b.id for b in w.agents.values()
+                 if b.con_song and b.id != dn.tu and b.truong_thanh(16)),
+                key=lambda bid: (-w.uy_tin(dn.tu, bid), bid),
+            )[:4]
+            nghe_tin_rao.update(quen)
+
     # nghĩa vụ đáo hạn tick này + đối tác vi phạm (tick trước ghi trong quan_he? dùng events
     # không tiện — dùng hợp đồng trạng thái) — đáo hạn:
     dao_han_cua: set[str] = set()
@@ -59,6 +71,8 @@ def quet_trigger(w: World) -> dict[str, list[str]]:
             them(aid, "gia_lech")
         if de_nghi_den.get(aid):
             them(aid, "nhan_de_nghi")
+        if aid in nghe_tin_rao:
+            them(aid, "nghe_tin_bang_rao")
         if aid in dao_han_cua:
             them(aid, "dao_han")
         if aid in cau_hon_den:

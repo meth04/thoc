@@ -73,6 +73,9 @@ def build_user_chung(w: World) -> str:
     loai_tt, he_so = w.thoi_tiet(w.tick)
     gia = {ts: w.gia_gan_nhat(ts) for ts in ("go", "cong_cu", "dat")}
     gia_str = ", ".join(f"{ts}: {g:.0f} thóc" for ts, g in gia.items() if g)
+    if not gia_str:
+        gia_str = ("chưa có phiên chợ nào — ai rao trước người ấy định giá "
+                   "(dat_lenh sẽ khớp khi có người mua-bán gặp giá nhau)")
     so_rao = len(w.bang_rao)
     mau = mau_hop_dong_luu_hanh(w, int(w.cfg.get("minds.mau_hop_dong_trong_prompt_top_k")))
     return (

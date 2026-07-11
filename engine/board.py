@@ -109,6 +109,8 @@ def khop_bang_rao(w) -> None:
             # chỉ hết hạn khi KHÔNG có trả lời đang chờ xử lý
             if w.tick - dn.tick > HET_HAN_DE_NGHI:
                 del w.bang_rao[dn_id]
+                w.ghi_ky_uc(dn.tu, f"đề nghị {dn.id} ({dn.motif}) của tôi hết hạn, "
+                                   f"chẳng ai nhận — có lẽ điều kiện chưa hấp dẫn")
             continue
         # thứ tự ưu tiên: quan hệ với người đăng giảm dần, tie-break seeded
         nguoi_tra_loi = sorted(

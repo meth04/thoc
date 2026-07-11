@@ -89,7 +89,8 @@ class MindReal(MindMock):
                 khoi.append(
                     f"- {a.id}: {a.ten}, {a.tuoi_nam:.0f} tuổi, E{a.e_bac}, "
                     f"{len(a.con)} con, {thoc:.0f}kg thóc, {dat} thửa. "
-                    f"Hồi ký cũ: {a.hoi_ky or '(trống)'}"
+                    f"Hồi ký cũ: {a.hoi_ky or '(trống)'}. "
+                    f"Biến cố gần đây: {a.ky_uc[-4:] or '(không)'}"
                 )
             prompt = (
                 f"Năm {w.tick // 2}. Nén hồi ký cho từng người dưới đây thành ≤2 câu "
