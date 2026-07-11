@@ -7,7 +7,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from engine.audit import LoiBaoToan, kiem_toan
-from engine.ledger import ButToan, DongSinhHuy, Ledger, LoiSoKep, Transaction
+from engine.ledger import ButToan, Ledger, LoiSoKep, Transaction
 
 
 def lam_ledger() -> Ledger:
