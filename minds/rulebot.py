@@ -531,9 +531,9 @@ def _tra_loi_bang_rao(w: World, a, kh: KeHoach, g, thoc: float, an_ninh: float,
                     and tra.tai_san == "thoc"
                     and gia_cong_moi_cong >= 1.6 + 0.1 * p5.cham_chi
                     and (
-                        # thanh niên chưa điền sản: làm thuê tích vốn trước khi lập nghiệp
-                        (so_ruong == 0 and a.tuoi_nam <= 28)
-                        or (so_ruong == 0 and (dat_con < 40 or an_ninh < 1.0))
+                        # người ít đất tuổi lao động: lương xưởng > canh 1 thửa lẻ
+                        (so_ruong <= 1 and a.tuoi_nam <= 35)
+                        or (so_ruong <= 1 and (dat_con < 40 or an_ninh < 1.0))
                         or (so_ruong <= 2 and dat_con == 0)
                     )
                 )

@@ -192,6 +192,15 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     if w.tick % int(w.cfg.get("minds.chronicle_moi_n_tick")) == 0:
         doan = viet_chronicle(w, m)
         w.events.ghi(w.tick, "chronicle", van=doan)
+    # snapshot giai cấp + của cải mỗi 10 tick — tools/analyze dựng ma trận dịch chuyển
+    if w.tick % 10 == 0:
+        from engine.entities import tai_san_quy_thoc
+
+        snap = {
+            aid: [obs["phan_loai"].get(aid, "?"), round(tai_san_quy_thoc(w, aid), 1)]
+            for aid, ag in w.agents.items() if ag.con_song
+        }
+        w.events.ghi(w.tick, "giai_cap_snapshot", du_lieu=snap)
     return m
 
 
