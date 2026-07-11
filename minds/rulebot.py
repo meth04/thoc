@@ -432,10 +432,11 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g)
     co_may = w.ledger.so_du(eid, "may") >= 1
     muc_tieu_nhan_cong = 8 if co_may else min(8, max(2, len(ruong) // 2))
     if thoc > 800 and so_nhan_cong < muc_tieu_nhan_cong:
-        # thuê người: TẠM ỨNG khi ký (người đói ăn ngay, giữ sức) + lương mỗi tick
+        # thuê người: TẠM ỨNG khi ký + lương mỗi tick; hợp đồng DÀI HẠN (12 năm)
+        # để đội thợ tích lũy được — churn 8 tick giữ mãi mức 1-2 người/xưởng
         gia_cong_thue = 2.0 + 0.6 * float(g.random())
         _dang_neu_chua_treo(kh, bc, eid, HopDong(
-            cac_ben=[eid, "?"], hinh_thuc="mieng", thoi_han=8,
+            cac_ben=[eid, "?"], hinh_thuc="mieng", thoi_han=24,
             dieu_khoan=[
                 ClauseChuyenGiaoMotLan(tu=eid, den="?", tai_san="thoc",
                                        so_luong=180.0, tai="ky_ket"),

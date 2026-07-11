@@ -206,6 +206,7 @@ def quet_milestones(w: World, nhan: dict[str, list[str]]) -> None:
     def ghi(ten: str, **chi_tiet) -> None:
         if ten in da_co:
             return
+        da_co.add(ten)
         w.milestones.append({"ten": ten, "tick": w.tick, **chi_tiet})
         w.events.ghi(w.tick, "milestone", ten=ten, **chi_tiet)
 

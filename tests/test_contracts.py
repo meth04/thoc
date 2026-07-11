@@ -127,6 +127,7 @@ def test_a_cay_re_chia_dung_tung_kg():
     """(a) quyền_sử_dụng + chia_sản 40%, 8 tick: chia đúng từng kg, xong đúng hạn."""
     w = the_gioi_test(seed=13, giu_lai=2, thoc_moi_nguoi=4000)
     a, b = sorted(x for x, ag in w.agents.items() if ag.con_song)
+    w.agents[a].tuoi_tick = w.agents[b].tuoi_tick = 36  # tre — tranh chet gia giua kich ban
     (pid,) = cap_ruong(w, a, 1)
 
     hd_mau = HopDong(

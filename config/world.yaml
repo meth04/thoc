@@ -3,7 +3,7 @@
 
 ban_do:
   kich_thuoc: [30, 30]
-  ty_le_ruong: 0.39
+  ty_le_ruong: 0.30   # 0.39→0.30 (hiệu chỉnh Phase 4): đất phải khan thì mới có làm thuê
   mau_mo: {min: 0.6, max: 1.4, bonus_ven_song: 0.2}
   so_o_mo_dong: 2
   so_lang_ban_dau: 1
