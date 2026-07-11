@@ -1,0 +1,109 @@
+# world.yaml — mọi tham số thế giới. KHÔNG hardcode số nào trong code.
+# Phase 1/4 được phép hiệu chỉnh để run đối chứng ổn định — mọi thay đổi ghi DECISIONS.md.
+
+ban_do:
+  kich_thuoc: [30, 30]
+  ty_le_ruong: 0.39
+  mau_mo: {min: 0.6, max: 1.4, bonus_ven_song: 0.2}
+  so_o_mo_dong: 2
+  so_lang_ban_dau: 1
+
+thoi_gian:
+  thang_moi_tick: 6
+  tong_tick: 600
+  thoi_tiet: {duoc_mua: {p: 0.2, he_so: 1.25},
+              binh_thuong: {p: 0.6, he_so: 1.0},
+              han_lu: {p: 0.2, he_so: 0.55}}
+
+san_xuat:
+  giong_kg_moi_thua: 60
+  san_luong_goc_kg: 600
+  thua_toi_da_tu_canh: 3
+  hieu_suat_thua_2_3: [0.85, 0.70]
+  hao_hut_kho_moi_tick: 0.03
+  homestead_tick_lien_tiep: 2
+  recipe:                      # vật lý cố định cho hàng CƠ BẢN (hàng mới → blueprint)
+    cong_cu: {cong: 60, go: 2, tang_nang_suat: 1.3, hao_mon_moi_tick_dung: 0.05}
+    nha:     {cong: 120, go: 6}
+    xu:      {quang_dong: 1, cong: 5, ra: 10}
+  khai_thac: {go_moi_10_cong: 1, quang_moi_20_cong: 1, can_cong_cu: true,
+              hieu_suat_khong_cong_cu: 0.5}   # không công cụ vẫn khai thác được, nửa hiệu suất
+
+nhu_cau:
+  nguoi_lon_kg_tick: 90
+  tre_em_kg_tick: 45
+  ngay_cong_moi_tick: 180
+  tre_em_gop_cong_tu_tuoi: 10
+  ty_le_cong_tre_em: 0.3
+
+suc_khoe:
+  hoi_khi_an_du: 10
+  mat_toi_da_khi_doi: 25
+  mat_khi_vo_gia_cu_mua_mua: 10
+  nguong_nguy_kich: 20
+  p_chet_khi_nguy_kich: 0.35
+
+nhan_khau:
+  dan_so_ban_dau: 50
+  tuoi_ban_dau: [16, 28]
+  ty_le_nu: 0.52
+  tuoi_truong_thanh: 16
+  sinh_san: {p_goc: 0.22, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20}
+  tu_vong_gompertz: {q20: 0.005, q60: 0.03, q75: 0.12}
+  di_chuc: {tuoi_trigger: 50, health_trigger: 30}
+
+giao_duc:                      # bac: [hoc_phi_goi_y_thoc_tick, so_tick, phan_cong_mat]
+  E1: [40, 2, 0.5]             # học phí THẬT do hợp đồng hai bên quyết — số này chỉ là
+  E2: [80, 4, 0.5]             # gợi ý trong prompt & giá của rulebot/mock
+  E3: [160, 6, 0.5]
+  E4: [320, 8, 0.5]
+  ban_kinh_thay: 5
+  cha_me_day_E1_tai_nha: true
+
+hop_dong:
+  van_ban_can_E_nguoi_soan: 1
+  uy_tin: {phat_vi_pham_mieng: -0.5, lan_tin_don_buoc: 2, decay_moi_nam: 0.05}
+  mac_ca_toi_da_vong: 3
+  mau_khoi_dau:                # imitation pool khởi đầu — CHỈ 2 mẫu tối giản
+    - "doi_cong_lay_thoc_mot_lan"
+    - "cho_muon_co_hoan_tra"
+
+thuong_mai:
+  phi_van_chuyen_moi_khoang_cach: 0.02
+  nhieu_tin_don_gia: 0.15
+
+quan_sat:                      # ngưỡng để OBSERVATORY dán nhãn (không phải cơ chế engine)
+  ngan_hang: {nghia_vu_hoan_tra_toi_thieu_thoc: 1500, so_chu_no_toi_thieu: 5}
+  bao_hiem: {so_hop_dong_su_kien_toi_thieu: 5}
+  xuong: {so_hop_dong_gop_cong_toi_thieu: 3}
+  thi_truong_co_phan: {giao_dich_moi_nam_toi_thieu: 4}
+  tien_te_hoa: {ty_le_gia_tri_thanh_toan_bang_xu: 0.5}
+  cong_nghiep_hoa:
+    ty_trong_cong_phi_nong_toi_thieu: 0.40
+    so_may_hoat_dong_toi_thieu: 5
+    ty_le_lao_dong_trong_entity_5_nguoi: 0.25
+
+giai_cap:                      # ngưỡng classifier (SPEC 9.1)
+  chu_xuong_gop_cong_toi_thieu: 3
+  dia_chu_percentile_dat: 90
+  dia_chu_ty_le_thu_nhap_dat: 0.5
+  phu_nong_percentile_dat: 75
+  cong_nhan_ty_le_thu_nhap_gop_cong: 0.6
+  ta_dien_ty_le_dat_thue: 0.5
+  cua_so_thu_nhap_tick: 4
+
+quan_he:
+  ban_kinh_lang_gieng: 3
+  cong_moi_tuong_tac: 0.1
+  decay_moi_nam: 0.02
+
+minds:
+  batch_toi_da: 8
+  nghi_dinh_ky_moi_n_tick: 4
+  nguong_trigger_gia: 0.30
+  hoi_ky_token_toi_da: 250
+  gia_huan_token_toi_da: 100
+  nhieu_tham_so_so: 0.10
+  mau_hop_dong_trong_prompt_top_k: 5   # mẫu ĐANG LƯU HÀNH thật, ẩn danh hóa
+  chronicle_moi_n_tick: 20
+  checkpoint_moi_n_tick: 10

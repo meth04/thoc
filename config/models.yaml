@@ -1,0 +1,47 @@
+# models.yaml — thang trí tuệ, ID model THẬT theo xác nhận của chủ dự án.
+# Gateway hỗ trợ nhiều route/tier: thử route đầu còn ngân sách, cạn thì tràn route sau.
+# Code KHÔNG hardcode tên model — chỉ đọc file này.
+
+tiers:
+  T0:
+    ten: "mù chữ"
+    routes:
+      - {provider: aistudio, model: "gemma-4-31b-it"}
+    temperature: 0.9
+    max_output_tokens: 1600
+  T1:
+    ten: "biết chữ (E1)"
+    routes:                       # gộp 2 đường: ưu tiên 8 API key, cạn thì tràn sang 9router
+      - {provider: aistudio,  model: "gemini-3.1-flash-lite"}
+      - {provider: ninerouter, model: "gc/gemini-3.1-flash-lite-preview"}
+    temperature: 0.9
+    max_output_tokens: 2000
+  T2:
+    ten: "E2"
+    routes:
+      - {provider: ninerouter, model: "gc/gemini-2.5-flash"}
+    temperature: 0.9
+    max_output_tokens: 2000
+  T3:
+    ten: "E3"
+    routes:
+      - {provider: ninerouter, model: "gc/gemini-2.5-pro"}   # chậm hơn nhưng T3 hiếm người
+    temperature: 0.9
+    max_output_tokens: 2200
+  T4:
+    ten: "E4 — đỉnh"
+    routes:
+      - {provider: ninerouter, model: "gc/gemini-3-flash-preview"}
+    temperature: 0.9
+    max_output_tokens: 2400
+# 💡 Nếu thực chiến thấy gc/gemini-2.5-pro mạnh hơn gc/gemini-3-flash-preview (hoặc ngược
+# lại), chỉ cần hoán đổi 2 dòng model của T3 và T4 — không đụng code.
+
+# Việc nền (không phải "não" của agent nào)
+nen_hoi_ky: {provider: aistudio, model: "gemma-4-31b-it", temperature: 0.6, max_output_tokens: 400}
+chronicle:  {provider: aistudio, model: "gemini-3.1-flash-lite", temperature: 0.8, max_output_tokens: 300}
+
+mock:
+  p_malformed_mac_dinh: 0.05
+  p_malformed_test: 0.15
+  gia_lap_latency: {mean_s: 1.2, std_s: 0.3}   # tắt bằng --fast

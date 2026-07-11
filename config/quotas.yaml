@@ -1,0 +1,25 @@
+# quotas.yaml — ngân sách gọi API, đặt DƯỚI trần công bố. Bộ đếm persist SQLite,
+# reset theo reset_hour_local (xem giờ reset thật trên trang quota của bạn).
+
+chung:
+  safety_margin: 0.85
+  reset_hour_local: 8
+  timezone: "Asia/Ho_Chi_Minh"
+
+aistudio:                       # ⚠️ QUOTA TÍNH CHO TỪNG KEY — gateway tự nhân với số key
+  concurrency: 6                # tìm thấy trong .env (mỗi cặp key×model một bộ đếm riêng)
+  models:
+    "gemma-4-31b-it":        {rpm: 10, rpd: 1350}    # trần thật: 1.500/key/ngày → đặt 90%;
+                                                     # chỉnh RPM theo trang quota nếu khác
+    "gemini-3.1-flash-lite": {rpm: 4,  rpd: 450}     # trần bạn nêu: 5 RPM / 500 RPD
+ 
+
+ninerouter:                     # NGÂN SÁCH TỔNG (9router tự xoay 3 tài khoản CLI phía sau;
+  concurrency: 4                # ảnh quota: 1.000/ngày/model/tài khoản → 3.000 × 0.9)
+  models:
+    "gc/gemini-3.1-flash-lite-preview": {rpm: 20, rpd: 3000}
+    "gc/gemini-2.5-flash":              {rpm: 20, rpd: 1500}
+    "gc/gemini-2.5-pro":                {rpm: 8,  rpd: 900}   # pro chậm → RPM thấp hơn
+    "gc/gemini-3-flash-preview":        {rpm: 20, rpd: 1500}
+
+retry: {toi_da: 2, backoff_s: 2.0, jitter_s: 1.0, cooldown_429_s: 60}

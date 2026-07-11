@@ -1,0 +1,46 @@
+# research.yaml — hệ SÁNG CHẾ mở, thay thế hoàn toàn cây công nghệ định sẵn.
+# KHÔNG có danh sách phát minh, KHÔNG có thứ tự bắt buộc, KHÔNG có "kỷ nguyên".
+# Xã hội đầu tư vào đâu thì tiến ở đó; không đầu tư thì giậm chân — đó là thiết kế.
+
+linh_vuc:                    # tham số vật lý mà blueprint lĩnh vực đó nhân lên
+  nong_nghiep:      {tham_so: san_luong_nong}
+  cong_cu_may_moc:  {tham_so: nang_suat_cong}      # nền vật lý của "máy" và xưởng
+  luu_kho:          {tham_so: giam_hao_hut_kho}
+  van_chuyen:       {tham_so: giam_phi_van_chuyen}
+  y_te:             {tham_so: giam_tu_vong_benh_va_sinh_no}
+  vat_lieu:         {tham_so: giam_chi_phi_xay_che_tac}
+  che_bien:         {tham_so: null, sinh_hang_moi: true}   # blueprint đẻ ra HÀNG MỚI
+
+diem_nghien_cuu:
+  cong_moi_diem: 30
+  thoc_moi_diem: 20
+  he_so_E: {E1: 1.0, E2: 1.5, E3: 2.2, E4: 3.2}    # người học cao nghiên cứu hiệu quả hơn
+
+xac_suat_thanh_cong:         # p = 1 - exp(-diem_tich_luy / (k0 * (1 + muc_linh_vuc)^d))
+  k0: 40
+  d: 1.6                      # lợi suất giảm dần — càng tiến sâu càng khó
+
+blueprint:
+  do_lon_lognormal: {mu: 0.12, sigma: 0.5}          # engine RÚT, LLM không tự đặt số
+  do_lon_tran: 0.8
+
+hang_moi:                    # chỉ cho lĩnh vực che_bien
+  input_menu: [thoc, go, quang_dong]
+  hieu_ung_menu: [tien_nghi, cong_cu, luu_kho, vat_lieu]
+  do_lon_hieu_ung: {mu: 0.08, sigma: 0.4}
+
+khuech_tan:
+  giam_chi_phi_moi_blueprint_luu_hanh: 0.9          # sao chép rẻ dần
+  san: 0.4
+
+may:                         # "máy" — hạt giống vật lý của xưởng (không phải định chế)
+  recipe: {go: 10, quang_hoac_xu: 8, cong: 200}
+  can_blueprint_linh_vuc: cong_cu_may_moc
+  pham_vi: nhan_nang_suat_cong_cua_nguoi_lam_cho_chu_may
+
+tri_thuc:                    # sàn trí tuệ NỘI SINH (thay era kịch bản)
+  cong_thuc: "sum(log(1+do_lon_blueprint)) + 3.0 * ty_le_biet_chu"
+  nguong_san_tier: [{tri_thuc: 6.0, san: T1}, {tri_thuc: 16.0, san: T2}]
+
+hieu_chinh:                  # Phase 4 — chỉnh CÁC SỐ TRONG FILE NÀY, không sửa hành vi bot
+  muc_tieu: "seed trung vị (5 seeds mock) đạt nhãn cong_nghiep_hoa trong năm [160, 280]"
