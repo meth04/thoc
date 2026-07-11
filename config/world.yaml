@@ -17,6 +17,7 @@ thoi_gian:
 
 san_xuat:
   giong_kg_moi_thua: 60
+  cong_moi_thua: 60            # 180 công/tick ÷ 60 = tự canh tối đa 3 thửa, khớp thua_toi_da
   san_luong_goc_kg: 600
   thua_toi_da_tu_canh: 3
   hieu_suat_thua_2_3: [0.85, 0.70]
@@ -48,7 +49,8 @@ nhan_khau:
   tuoi_ban_dau: [16, 28]
   ty_le_nu: 0.52
   tuoi_truong_thanh: 16
-  sinh_san: {p_goc: 0.22, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20}
+  sinh_san: {p_goc: 0.13, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20}
+  # p_goc 0.22 → 0.13: hiệu chỉnh Phase 1 để dân số cân bằng ≤500 (xem DECISIONS.md)
   tu_vong_gompertz: {q20: 0.005, q60: 0.03, q75: 0.12}
   di_chuc: {tuoi_trigger: 50, health_trigger: 30}
 

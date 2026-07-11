@@ -12,3 +12,9 @@
 | 2026-07-11 | 1 | Tự học: người E=k tự học lên k+1 với số tick GẤP ĐÔI (vẫn mất 50% công), không cần thầy | SPEC chỉ cho 2 đường học đều cần người E≥mục tiêu → E cao nhất t0 là trần vĩnh viễn (deadlock). Tự học đắt gấp đôi giữ vai trò thầy/trường tự phát vẫn kinh tế hơn. |
 | 2026-07-11 | 1 | Khai thác không công cụ vẫn được nhưng hiệu suất 0.5 (thêm `khai_thac.hieu_suat_khong_cong_cu` vào world.yaml) | Công cụ cần gỗ, gỗ cần công cụ → deadlock vật lý ở t0. `can_cong_cu` hiểu là "cần để đạt hiệu suất đủ". |
 | 2026-07-11 | 1 | Tài sản khởi đầu (200kg thóc/người) mint qua luồng đăng ký `khoi_tao` (chỉ tick 0) | Bảo toàn vẫn kiểm được: mọi kg thóc đều có nguồn ghi sổ. |
+| 2026-07-11 | 1 | Hiệu chỉnh `sinh_san.p_goc` 0.22 → 0.13 trong world.yaml | Nghiệm thu Phase 1 yêu cầu dân số cuối ∈ [60,500]; với 0.22 cân bằng ~600–700 (thức ăn quá dồi dào nên sinh sản luôn max). PHASES cho phép chỉnh world.yaml. |
+| 2026-07-11 | 1 | health_mult trong công thức gặt = 0.5 + 0.5×(health/100) | Công sinh ra đã tỷ lệ theo health; nhân thẳng health/100 nữa là phạt kép quá nặng. |
+| 2026-07-11 | 1 | Nhà là tài sản đếm được trong sổ (không gắn thửa cụ thể); "có nhà ở" = hộ sở hữu ≥1 nhà | Đơn giản nhất; thị trường nhà Phase 2 = mua bán tài sản `nha` trên chợ. |
+| 2026-07-11 | 1 | Trẻ em góp công = chuyển tài sản `cong` cho cha/mẹ qua ledger | Công là tài sản chuyển nhượng được (SPEC 2.3 coi công như tài sản sinh mỗi tick); giữ mọi dịch chuyển trong sổ kép. |
+| 2026-07-11 | 1 | Tài sản vô thừa nhận → tài khoản `VO_THUA_NHAN`; đất vô thừa nhận → về công (chu=None) | SPEC chỉ nói "đất về công"; tài sản khác cần đích ghi sổ để không phá bảo toàn. |
+| 2026-07-11 | 1 | Audit dùng dung sai tương đối `max(1e-6, tổng×1e-9)` | Seed 43 vỡ audit ở tick 489 do trôi float64 1e-6 trên tổng 1.36 triệu kg (sai số tương đối 7e-13 — không phải luồng lậu). Luồng lậu thật luôn ≥ gram nên vẫn bị bắt. |

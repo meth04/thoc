@@ -1,0 +1,357 @@
+"""HỢP ĐỒNG — văn phạm 9 clause + executor + cưỡng chế (SPEC 3.2).
+
+Engine KHÔNG biết "ngân hàng", "làm thuê", "bảo hiểm"... — chỉ thi hành MỌI tổ hợp
+clause hợp lệ. Định chế là nhãn do observatory dán lên sau, từ log.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Literal, Union
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# ---------------------------------------------------------------- văn phạm
+
+
+class ClauseChuyenGiaoDinhKy(BaseModel):
+    loai: Literal["chuyen_giao_dinh_ky"] = "chuyen_giao_dinh_ky"
+    tu: str
+    den: str
+    tai_san: str
+    so_luong: float = Field(gt=0)
+    moi_n_tick: int = Field(ge=1, default=1)
+
+
+class ClauseChuyenGiaoMotLan(BaseModel):
+    loai: Literal["chuyen_giao_mot_lan"] = "chuyen_giao_mot_lan"
+    tu: str
+    den: str
+    tai_san: str
+    so_luong: float = Field(gt=0)
+    tai: str = "ky_ket"  # "ky_ket" | "dao_han" | "tick_T" (T = số tick sau ký)
+    tick_t: int | None = None
+
+
+class ClauseQuyenSuDung(BaseModel):
+    loai: Literal["quyen_su_dung"] = "quyen_su_dung"
+    tai_san: str  # "thua:P01_02" | "nha" | "cong_cu" | "may:M1" | "blueprint:B1"
+    tu: str
+    den: str
+
+
+class ClauseGopCong(BaseModel):
+    loai: Literal["gop_cong"] = "gop_cong"
+    tu: str
+    den: str
+    so_cong_moi_tick: float = Field(gt=0)
+
+
+class ClauseChiaSanLuong(BaseModel):
+    loai: Literal["chia_san_luong"] = "chia_san_luong"
+    nguon: str  # "thua:P01_02" | "hoat_dong_cua_ben:A0003"
+    ty_le: float = Field(gt=0, le=1)
+    den: str
+
+
+class ClauseChiaLoiNhuan(BaseModel):
+    loai: Literal["chia_loi_nhuan"] = "chia_loi_nhuan"
+    entity: str
+    theo_co_phan: bool = True
+    ty_le: dict[str, float] | None = None
+
+
+class ClauseDieuKienSuKien(BaseModel):
+    loai: Literal["dieu_kien_su_kien"] = "dieu_kien_su_kien"
+    neu: dict  # {loai: han_lu | chet | vo_no | gia, ...tham số}
+    thi: ClauseChuyenGiaoDinhKy | ClauseChuyenGiaoMotLan
+
+
+class ClauseHoanTraTheoYeuCau(BaseModel):
+    loai: Literal["hoan_tra_theo_yeu_cau"] = "hoan_tra_theo_yeu_cau"
+    tu: str
+    den: str
+    tai_san: str
+    tran_rut_moi_tick: float = Field(gt=0)
+
+
+class ClauseKhiPhaVo(BaseModel):
+    loai: Literal["khi_pha_vo"] = "khi_pha_vo"
+    phat: str = "khong"  # "xiet_the_chap" | "khong" | "phat_chuyen_giao"
+    phat_chuyen_giao: ClauseChuyenGiaoMotLan | None = None
+
+
+Clause = Annotated[
+    Union[
+        ClauseChuyenGiaoDinhKy,
+        ClauseChuyenGiaoMotLan,
+        ClauseQuyenSuDung,
+        ClauseGopCong,
+        ClauseChiaSanLuong,
+        ClauseChiaLoiNhuan,
+        ClauseDieuKienSuKien,
+        ClauseHoanTraTheoYeuCau,
+        ClauseKhiPhaVo,
+    ],
+    Field(discriminator="loai"),
+]
+
+
+class HopDong(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = ""
+    cac_ben: list[str] = Field(min_length=2)
+    hinh_thuc: Literal["mieng", "van_ban"] = "mieng"
+    thoi_han: int | None = None  # K tick; None = đến khi hủy
+    bao_truoc: int = 1  # số tick báo trước khi hủy (hợp đồng vô hạn)
+    the_chap: list[str] = Field(default_factory=list)  # ["thoc:200", "thua:P01_02", "nha:1"]
+    dieu_khoan: list[Clause] = Field(min_length=1)
+    # trạng thái runtime (engine quản lý)
+    trang_thai: str = "hieu_luc"  # hieu_luc | hoan_thanh | vi_pham | huy
+    tick_ky: int = -1
+    nguoi_soan: str = ""
+    huy_bao_truoc_tu: int | None = None  # tick bắt đầu báo hủy
+
+
+# ---------------------------------------------------------------- validate
+
+
+def validate_hop_dong(hd: HopDong, w) -> str | None:
+    """Trả None nếu hợp lệ, ngược lại là lý do từ chối (engine bỏ qua + log)."""
+    ben = set(hd.cac_ben)
+    if len(ben) < 2:
+        return "cần ≥2 bên"
+    for b in ben:
+        if b not in w.agents and b not in getattr(w, "entities", {}):
+            return f"bên không tồn tại: {b}"
+        if b in w.agents and not w.agents[b].con_song:
+            return f"bên đã chết: {b}"
+    if hd.hinh_thuc == "van_ban":
+        can_e = int(w.cfg.get("hop_dong.van_ban_can_E_nguoi_soan"))
+        soan = hd.nguoi_soan or hd.cac_ben[0]
+        if soan in w.agents and w.agents[soan].e_bac < can_e:
+            return f"người soạn {soan} chưa biết chữ (E<{can_e})"
+    if hd.the_chap and hd.hinh_thuc != "van_ban":
+        return "thế chấp chỉ hiệu lực với văn bản"
+    for ck in hd.dieu_khoan:
+        for vai in ("tu", "den"):
+            v = getattr(ck, vai, None)
+            if v is not None and v not in ben:
+                return f"clause nhắc tới {v} không phải một bên"
+        if ck.loai == "quyen_su_dung" and ck.tai_san.startswith("thua:"):
+            pid = ck.tai_san.split(":", 1)[1]
+            p = w.parcels.get(pid)
+            if p is None:
+                return f"thửa không tồn tại: {pid}"
+            if p.chu != ck.tu:
+                return f"{ck.tu} không sở hữu {pid}"
+        if ck.loai == "chia_loi_nhuan" and ck.entity not in getattr(w, "entities", {}):
+            return f"entity không tồn tại: {ck.entity}"
+        if ck.loai == "chuyen_giao_mot_lan" and ck.tai == "dao_han" and hd.thoi_han is None:
+            return "chuyển giao tại đáo hạn nhưng hợp đồng vô thời hạn"
+    for tc in hd.the_chap:
+        if ":" not in tc:
+            return f"thế chấp sai định dạng: {tc}"
+        loai_tc, gia_tri = tc.split(":", 1)
+        if loai_tc == "thua":
+            p = w.parcels.get(gia_tri)
+            if p is None or p.chu not in ben:
+                return f"thế chấp thửa không hợp lệ: {tc}"
+    return None
+
+
+# ---------------------------------------------------------------- executor
+
+
+def _chuyen_an_toan(w, tu: str, den: str, tai_san: str, so_luong: float, ly_do: str) -> bool:
+    """Chuyển nếu đủ; trả False nếu thiếu (→ vi phạm)."""
+    from engine.ledger import LoiSoKep
+
+    if so_luong <= 0:
+        return True
+    try:
+        w.ledger.chuyen(tu, den, tai_san, so_luong, ly_do, w.tick)
+        return True
+    except LoiSoKep:
+        return False
+
+
+def _su_kien_xay_ra(w, neu: dict, vo_no_tick: set[str], chet_tick: set[str]) -> bool:
+    loai = neu.get("loai")
+    if loai == "han_lu":
+        return w.thoi_tiet(w.tick)[0] == "han_lu"
+    if loai == "chet":
+        return neu.get("ai") in chet_tick
+    if loai == "vo_no":
+        return neu.get("ai") in vo_no_tick
+    if loai == "gia":
+        gia = w.gia_gan_nhat(neu.get("tai_san", "thoc"))
+        if gia is None:
+            return False
+        nguong = float(neu.get("nguong", 0))
+        return gia > nguong if neu.get("chieu", ">") == ">" else gia < nguong
+    return False
+
+
+def gia_tri_thi_truong(w, tai_san: str, so_luong: float) -> float:
+    """Quy giá về kg thóc theo giá chợ gần nhất; không có giá → giá trị 0 khi xiết."""
+    if tai_san == "thoc":
+        return so_luong
+    gia = w.gia_gan_nhat(tai_san)
+    return so_luong * gia if gia is not None else 0.0
+
+
+def xiet_the_chap(w, hd: HopDong, chu_no: str, con_no: str, no_con_lai_thoc: float) -> None:
+    """Xiết thế chấp theo giá chợ gần nhất; thừa hoàn lại (SPEC 3.2)."""
+    for tc in hd.the_chap:
+        if no_con_lai_thoc <= 1e-9:
+            break
+        loai_tc, gia_tri = tc.split(":", 1)
+        if loai_tc == "thua":
+            p = w.parcels.get(gia_tri)
+            if p is None or p.chu != con_no:
+                continue
+            gia_dat = w.gia_gan_nhat(f"dat:{gia_tri}") or w.gia_gan_nhat("dat") or 0.0
+            p.chu = chu_no
+            w.events.ghi(w.tick, "xiet", hd=hd.id, mon=tc, gia_quy_thoc=gia_dat)
+            no_con_lai_thoc -= gia_dat
+        else:
+            so_luong = min(float(gia_tri), w.ledger.so_du(con_no, loai_tc))
+            if so_luong <= 0:
+                continue
+            gia_mot = 1.0 if loai_tc == "thoc" else (w.gia_gan_nhat(loai_tc) or 0.0)
+            gia_tri_xiet = so_luong * gia_mot
+            if gia_mot > 0 and gia_tri_xiet > no_con_lai_thoc:
+                so_luong = no_con_lai_thoc / gia_mot  # thừa hoàn lại — chỉ xiết đủ nợ
+                gia_tri_xiet = no_con_lai_thoc
+            _chuyen_an_toan(w, con_no, chu_no, loai_tc, so_luong, f"xiết thế chấp {hd.id}")
+            w.events.ghi(w.tick, "xiet", hd=hd.id, mon=f"{loai_tc}:{round(so_luong, 2)}",
+                         gia_quy_thoc=gia_tri_xiet)
+            no_con_lai_thoc -= gia_tri_xiet
+
+
+def phat_vi_pham(w, hd: HopDong, ke_vi_pham: str) -> None:
+    """Cưỡng chế: miệng → trừ uy tín + tin đồn; văn bản → thi hành khi_pha_vo."""
+    hd.trang_thai = "vi_pham"
+    nan_nhan = [b for b in hd.cac_ben if b != ke_vi_pham]
+    w.events.ghi(w.tick, "vi_pham", hd=hd.id, ai=ke_vi_pham, hinh_thuc=hd.hinh_thuc)
+    phat_mieng = float(w.cfg.get("hop_dong.uy_tin.phat_vi_pham_mieng"))
+    for nn in nan_nhan:
+        w.cong_quan_he(ke_vi_pham, nn, phat_mieng)
+    # tin đồn lan theo đồ thị (bước = 2): người quen của nạn nhân cũng dè chừng
+    for (a, b), trong_so in list(w.quan_he.items()):
+        if trong_so <= 0:
+            continue
+        for nn in nan_nhan:
+            if nn in (a, b):
+                nguoi_quen = b if a == nn else a
+                if nguoi_quen != ke_vi_pham:
+                    w.cong_quan_he(ke_vi_pham, nguoi_quen, phat_mieng * 0.2)
+    if hd.hinh_thuc == "van_ban":
+        khi_pha_vo = next((c for c in hd.dieu_khoan if c.loai == "khi_pha_vo"), None)
+        if khi_pha_vo is None:
+            return
+        if khi_pha_vo.phat == "xiet_the_chap" and hd.the_chap:
+            # nợ còn lại = tổng nghĩa vụ chuyển giao chưa hoàn thành quy thóc
+            no = sum(
+                gia_tri_thi_truong(w, c.tai_san, c.so_luong)
+                for c in hd.dieu_khoan
+                if c.loai in ("chuyen_giao_mot_lan", "chuyen_giao_dinh_ky")
+                and getattr(c, "tu", None) == ke_vi_pham
+            )
+            chu_no = nan_nhan[0] if nan_nhan else None
+            if chu_no:
+                xiet_the_chap(w, hd, chu_no, ke_vi_pham, max(no, 0.0))
+        elif khi_pha_vo.phat == "phat_chuyen_giao" and khi_pha_vo.phat_chuyen_giao:
+            c = khi_pha_vo.phat_chuyen_giao
+            _chuyen_an_toan(w, c.tu, c.den, c.tai_san, c.so_luong, f"phạt phá vỡ {hd.id}")
+
+
+def thi_hanh_hop_dong_tick(w, chet_tick: set[str] | None = None) -> None:
+    """Bước 7 pipeline: chạy clause định kỳ, đáo hạn, phát hiện vi phạm, cưỡng chế."""
+    chet_tick = chet_tick or set()
+    vo_no_tick: set[str] = set()
+    for hd in sorted(w.hop_dong.values(), key=lambda h: h.id):
+        if hd.trang_thai != "hieu_luc":
+            continue
+        tuoi = w.tick - hd.tick_ky
+        dao_han = hd.thoi_han is not None and tuoi >= hd.thoi_han
+        # một bên chết → hợp đồng chấm dứt (nghĩa vụ đáo hạn thi hành nốt nếu có thể)
+        ben_chet = [b for b in hd.cac_ben if b in w.agents and not w.agents[b].con_song]
+
+        vi_pham_boi: str | None = None
+        for ck in hd.dieu_khoan:
+            if ck.loai == "chuyen_giao_dinh_ky":
+                if tuoi > 0 and tuoi % ck.moi_n_tick == 0:
+                    if not _chuyen_an_toan(w, ck.tu, ck.den, ck.tai_san, ck.so_luong,
+                                           f"định kỳ {hd.id}"):
+                        vi_pham_boi = ck.tu
+            elif ck.loai == "chuyen_giao_mot_lan":
+                den_han = (
+                    (ck.tai == "dao_han" and dao_han)
+                    or (ck.tai == "tick_T" and ck.tick_t is not None and tuoi == ck.tick_t)
+                )
+                if den_han and not _chuyen_an_toan(w, ck.tu, ck.den, ck.tai_san, ck.so_luong,
+                                                   f"đáo hạn {hd.id}"):
+                    vi_pham_boi = ck.tu
+            elif ck.loai == "chia_san_luong":
+                if ck.nguon.startswith("thua:"):
+                    pid = ck.nguon.split(":", 1)[1]
+                    nguoi_gat, kg = w.gat_tick.get(pid, (None, 0.0))
+                    if nguoi_gat and kg > 0 and nguoi_gat != ck.den:
+                        phan = kg * ck.ty_le
+                        if not _chuyen_an_toan(w, nguoi_gat, ck.den, "thoc", phan,
+                                               f"chia sản {hd.id}"):
+                            vi_pham_boi = nguoi_gat
+            elif ck.loai == "dieu_kien_su_kien":
+                if _su_kien_xay_ra(w, ck.neu, vo_no_tick, chet_tick):
+                    c2 = ck.thi
+                    if not _chuyen_an_toan(w, c2.tu, c2.den, c2.tai_san, c2.so_luong,
+                                           f"điều kiện {hd.id}"):
+                        vi_pham_boi = c2.tu
+            elif ck.loai == "hoan_tra_theo_yeu_cau":
+                yeu_cau = w.yeu_cau_rut_tick.get((hd.id, ck.den), 0.0)
+                if yeu_cau > 0:
+                    rut = min(yeu_cau, ck.tran_rut_moi_tick)
+                    if not _chuyen_an_toan(w, ck.tu, ck.den, ck.tai_san, rut,
+                                           f"hoàn trả theo yêu cầu {hd.id}"):
+                        vi_pham_boi = ck.tu
+            # gop_cong thi hành ở bước 5 (sản xuất); quyen_su_dung là trạng thái, không luồng
+
+        if vi_pham_boi:
+            vo_no_tick.add(vi_pham_boi)
+            phat_vi_pham(w, hd, vi_pham_boi)
+            continue
+        if dao_han or ben_chet:
+            hd.trang_thai = "hoan_thanh" if not ben_chet else "huy"
+            w.events.ghi(w.tick, "huy_hd" if ben_chet else "hoan_thanh_hd", hd=hd.id)
+        elif hd.huy_bao_truoc_tu is not None and w.tick - hd.huy_bao_truoc_tu >= hd.bao_truoc:
+            hd.trang_thai = "huy"
+            w.events.ghi(w.tick, "huy_hd", hd=hd.id, ly_do="bao_truoc")
+    w.yeu_cau_rut_tick.clear()
+
+
+def gop_cong_dau_san_xuat(w) -> None:
+    """Clause gop_cong thi hành ĐẦU bước 5 để bên nhận dùng được công trong tick."""
+    for hd in sorted(w.hop_dong.values(), key=lambda h: h.id):
+        if hd.trang_thai != "hieu_luc":
+            continue
+        for ck in hd.dieu_khoan:
+            if ck.loai != "gop_cong":
+                continue
+            if not _chuyen_an_toan(w, ck.tu, ck.den, "cong", ck.so_cong_moi_tick,
+                                   f"góp công {hd.id}"):
+                phat_vi_pham(w, hd, ck.tu)
+                break
+
+
+def quyen_su_dung_thua(w, aid: str) -> set[str]:
+    """Các thửa aid được canh nhờ clause quyen_su_dung đang hiệu lực."""
+    ket_qua: set[str] = set()
+    for hd in w.hop_dong.values():
+        if hd.trang_thai != "hieu_luc":
+            continue
+        for ck in hd.dieu_khoan:
+            if ck.loai == "quyen_su_dung" and ck.den == aid and ck.tai_san.startswith("thua:"):
+                ket_qua.add(ck.tai_san.split(":", 1)[1])
+    return ket_qua
