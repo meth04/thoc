@@ -82,6 +82,16 @@ def _khop_mot_so_lenh(
                 w.events.ghi(w.tick, "khop_cho", tai_san=tai_san, thanh_toan=thanh_toan,
                              mua=nguoi_mua, ban=nguoi_ban, sl=round(khop, 3),
                              gia=round(p_sao, 3))
+                # thu nhập người bán + khối lượng theo phương tiện thanh toán (quy thóc)
+                gia_tt = 1.0 if thanh_toan == "thoc" else (w.gia_gan_nhat(thanh_toan) or 0.0)
+                quy_thoc = tien * gia_tt
+                nhom = ("che_tac" if tai_san == "cong_cu" or tai_san in w.ten_hang
+                        else "khai_thac" if tai_san in ("go", "quang_dong")
+                        else "ban_" + tai_san.split(":")[0])
+                w.ghi_thu_nhap(nguoi_ban, nhom, quy_thoc)
+                w.kl_thanh_toan_tick[thanh_toan] = (
+                    w.kl_thanh_toan_tick.get(thanh_toan, 0.0) + quy_thoc
+                )
             except LoiSoKep:
                 pass  # bên nào thiếu (đặt lệnh quá tay) → phần khớp đó bỏ
         con_mua[i] -= khop

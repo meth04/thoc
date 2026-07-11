@@ -35,7 +35,7 @@ def main() -> int:
     else:
         from minds.orchestrator import tao_mind_mock
 
-        mind_fn = tao_mind_mock(w, fast=True)
+        mind_fn = tao_mind_mock(w, fast=True, p_malformed=meta.get("p_malformed"))
     tong_thua = len(w.parcels)
     while w.tick < meta["tick_cuoi"]:
         chay_mot_tick(w, mind_fn, tong_thua)

@@ -47,9 +47,10 @@ class Agent:
     # trạng thái tạm theo tick
     vo_gia_cu: bool = False
     y_dinh_sinh_con: float = 0.5  # 0 | 0.5 | 1 — mind cập nhật
-    # hồi ký / gia huấn (Phase 3+)
+    # hồi ký / gia huấn / di chúc (Phase 3+)
     hoi_ky: str = ""
     gia_huan: str = ""
+    di_chuc: dict | None = None  # {"phan_bo": {id: %}, "gia_huan": str}
 
     @property
     def tuoi_nam(self) -> float:

@@ -29,7 +29,9 @@ def lay_mind_fn(mode: str, w: World, args: argparse.Namespace):
     if mode == "mock":
         from minds.orchestrator import tao_mind_mock
 
-        return tao_mind_mock(w, fast=args.fast)
+        run_dir = DATA_DIR / (args.run_name or f"mock_{args.seed}")
+        return tao_mind_mock(w, fast=args.fast, run_dir=run_dir,
+                             p_malformed=args.p_malformed)
     if mode == "real":
         raise SystemExit(
             "Mode real bị khóa trước HUMAN-GATE 1 (cần LLM_MODE=real trong .env VÀ --i-am-sure)."
@@ -49,6 +51,8 @@ def main() -> int:
     ap.add_argument("--i-am-sure", action="store_true")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--until-budget", action="store_true")
+    ap.add_argument("--p-malformed", type=float, default=None,
+                    help="tỷ lệ mock cố tình trả JSON hỏng (mặc định theo models.yaml)")
     args = ap.parse_args()
 
     tong_tick = args.ticks if args.ticks is not None else (args.years or 300) * 2
@@ -66,6 +70,7 @@ def main() -> int:
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
         w = tao_the_gioi(cfg, args.seed, events_path)
+    w.unrecognized_path = run_dir / "unrecognized_intents.jsonl"
 
     mind_fn = lay_mind_fn(args.mode, w, args)
     tong_thua = len(w.parcels)
@@ -107,6 +112,15 @@ def main() -> int:
         "world_hash": w.world_hash(),
         "thoi_gian_s": round(time.time() - t0, 1),
     }
+    if args.mode == "mock":
+        meta["p_malformed"] = mind_fn.p_malformed
+        meta["so_call"] = mind_fn.so_call
+        meta["so_luot_nghi"] = mind_fn.so_nghi
+        meta["so_fallback"] = mind_fn.so_fallback
+        meta["fallback_rate"] = round(mind_fn.fallback_rate, 4)
+        mind_fn.log.dong()
+        print(f"[mock] call={meta['so_call']} nghĩ={meta['so_luot_nghi']} "
+              f"fallback={meta['so_fallback']} ({meta['fallback_rate']:.2%})")
     (run_dir / "run_meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )

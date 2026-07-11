@@ -313,6 +313,17 @@ def thi_hanh_hop_dong_tick(w, chet_tick: set[str] | None = None) -> None:
 
         ben_chet = [b for b in hd.cac_ben if _ben_mat(_r(b))]
 
+        # phân loại thu nhập từ hợp đồng này cho người nhận (observatory dùng)
+        co_gop_cong_tu = {ck2.tu for ck2 in hd.dieu_khoan if ck2.loai == "gop_cong"}
+        co_qsd_tu = {ck2.tu for ck2 in hd.dieu_khoan if ck2.loai == "quyen_su_dung"}
+
+        def _nhom_thu_nhap(nguoi_goc: str, _gop=co_gop_cong_tu, _qsd=co_qsd_tu) -> str:
+            if nguoi_goc in _gop:
+                return "gop_cong"  # lương đổi công
+            if nguoi_goc in _qsd:
+                return "dat"  # tô / cho thuê tài sản
+            return "hop_dong"
+
         vi_pham_boi: str | None = None
         for ck in hd.dieu_khoan:
             if ck.loai == "chuyen_giao_dinh_ky":
@@ -320,6 +331,9 @@ def thi_hanh_hop_dong_tick(w, chet_tick: set[str] | None = None) -> None:
                     if not _chuyen_an_toan(w, _r(ck.tu), _r(ck.den), ck.tai_san, ck.so_luong,
                                            f"định kỳ {hd.id}"):
                         vi_pham_boi = _r(ck.tu)
+                    else:
+                        w.ghi_thu_nhap(_r(ck.den), _nhom_thu_nhap(ck.den),
+                                       gia_tri_thi_truong(w, ck.tai_san, ck.so_luong))
             elif ck.loai == "chuyen_giao_mot_lan":
                 den_han = (
                     (ck.tai == "dao_han" and dao_han)
@@ -338,6 +352,8 @@ def thi_hanh_hop_dong_tick(w, chet_tick: set[str] | None = None) -> None:
                         if not _chuyen_an_toan(w, nguoi_gat, den, "thoc", phan,
                                                f"chia sản {hd.id}"):
                             vi_pham_boi = nguoi_gat
+                        else:
+                            w.ghi_thu_nhap(den, "dat", phan)
             elif ck.loai == "dieu_kien_su_kien":
                 if _su_kien_xay_ra(w, ck.neu, vo_no_tick, chet_tick):
                     c2 = ck.thi

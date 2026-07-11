@@ -35,3 +35,12 @@ class KeHoach:
     niem_yet_dat: list = field(default_factory=list)  # [(thua, gia_ask)]
     tra_gia_dat: list = field(default_factory=list)  # [(thua, gia)]
     yeu_cau_rut: dict[str, float] = field(default_factory=dict)  # hd_id → số lượng
+    # ---- Phase 4: pháp nhân, R&D, máy, xu, di chúc, di cư ----
+    xay_may: int = 0
+    duc_xu: int = 0  # số mẻ đúc (1 quặng + 5 công → 10 xu)
+    che_hang: dict[str, int] = field(default_factory=dict)  # mã hàng mới → số lượng
+    nghien_cuu: tuple[str, float, float] | None = None  # (lĩnh vực, công, thóc)
+    lap_phap_nhan: dict | None = None  # {ten, co_phan, von_gop, dieu_le}
+    quyet_dinh_entity: list = field(default_factory=list)  # [(entity_id, KeHoach con)]
+    viet_di_chuc: dict | None = None  # {phan_bo: {id: %}, gia_huan}
+    di_cu: bool = False

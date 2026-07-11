@@ -96,24 +96,31 @@ def _chon_thua_canh(bc: _BoiCanhTick, aid: str, so_thua: int, da_nham: set[str])
 
 def quyet_dinh_tat_ca(w: World) -> dict[str, KeHoach]:
     """Kế hoạch cho mọi agent còn sống. Đất công được 'nhắm' tuần tự theo id — tất định."""
-    cfg = w.cfg
-    tt = cfg.get("nhan_khau.tuoi_truong_thanh")
-    nc = cfg.raw()["nhu_cau"]
-    sx = cfg.raw()["san_xuat"]
     ke_hoach: dict[str, KeHoach] = {}
     da_nham: set[str] = set()
     bc = _BoiCanhTick(w)
     cau_hon_den: dict[str, list[str]] = {}
     for tu, den, _t in w.cau_hon_cho:
         cau_hon_den.setdefault(den, []).append(tu)
-
     for aid in sorted(w.agents):
+        if w.agents[aid].con_song:
+            ke_hoach[aid] = ke_hoach_mot_nguoi(w, aid, bc, da_nham, cau_hon_den)
+    return ke_hoach
+
+
+def ke_hoach_mot_nguoi(
+    w: World, aid: str, bc: _BoiCanhTick, da_nham: set[str],
+    cau_hon_den: dict[str, list[str]],
+) -> KeHoach:
+    """Kế hoạch heuristic đầy đủ cho MỘT agent — lõi chung của rulebot & PersonaBot."""
+    cfg = w.cfg
+    tt = cfg.get("nhan_khau.tuoi_truong_thanh")
+    nc = cfg.raw()["nhu_cau"]
+    sx = cfg.raw()["san_xuat"]
+    if True:  # giữ thụt lề của thân vòng lặp cũ
         a = w.agents[aid]
-        if not a.con_song:
-            continue
         g = w.rng.get(f"rulebot:{aid}", w.tick)
         kh = KeHoach(id=aid)
-        ke_hoach[aid] = kh
         p5 = a.persona
 
         # ---- trẻ em ----
@@ -123,7 +130,7 @@ def quyet_dinh_tat_ca(w: World) -> dict[str, KeHoach]:
                 kh.hoc = True  # học chữ với cha mẹ
             elif a.tuoi_nam >= nc["tre_em_gop_cong_tu_tuoi"] and cha_me:
                 kh.gop_cong_cho = cha_me[0]
-            continue
+            return kh
 
         # ---- hộ & an ninh lương thực ----
         ho = w.ho_cua(aid)
@@ -221,8 +228,7 @@ def quyet_dinh_tat_ca(w: World) -> dict[str, KeHoach]:
 
         # ---- Phase 2: hợp đồng (8 công thức) + chợ ----
         _hop_dong_va_cho(w, a, kh, g, thoc_ho, nhu_cau_tick, an_ninh, bc)
-
-    return ke_hoach
+    return kh
 
 
 # ============================ Phase 2: rulebot v1 ============================

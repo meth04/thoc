@@ -115,8 +115,21 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         p = ss["p_goc"] * an_ninh * me.y_dinh_sinh_con
         if g.random() >= p:
             continue
-        # sinh nở
-        if g.random() < ss["rui_ro_me"]:
+        # sinh nở — rủi ro giảm nếu mua được dịch vụ y tế (blueprint y_te trong làng)
+        rui_ro = ss["rui_ro_me"]
+        thay_thuoc = next(
+            (bp.chu for bp in w.blueprints.values()
+             if bp.linh_vuc == "y_te" and bp.chu in w.agents
+             and w.agents[bp.chu].con_song),
+            None,
+        )
+        if thay_thuoc and thay_thuoc != aid and w.ledger.so_du(aid, "thoc") >= 20:
+            from engine.research import duoc_ap_dung
+
+            w.ledger.chuyen(aid, thay_thuoc, "thoc", 20.0, "dịch vụ đỡ đẻ", w.tick)
+            w.ghi_thu_nhap(thay_thuoc, "dich_vu", 20.0)
+            rui_ro *= max(0.2, 1.0 - duoc_ap_dung(w, thay_thuoc, "y_te"))
+        if g.random() < rui_ro:
             me.health = 0.0  # tử vong sinh nở — xử lý ở bước chết
             w.events.ghi(w.tick, "tu_vong_sinh_no", id=aid)
         cid = w.id_moi()
@@ -182,11 +195,30 @@ def cai_chet(w: World) -> list[str]:
 
 
 def thua_ke_mac_dinh(w: World, aid: str) -> None:
-    """Không di chúc: chia đều con → vợ/chồng → đất về công, của rơi vào VO_THUA_NHAN."""
+    """Thừa kế: theo DI CHÚC nếu có (phần trăm tự do); không di chúc → chia đều con
+    → vợ/chồng → đất về công, của rơi vào VO_THUA_NHAN."""
     a = w.agents[aid]
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    ty_trong: dict[str, float] | None = None
+    if a.di_chuc and a.di_chuc.get("phan_bo"):
+        hop_le = {
+            nid: max(0.0, float(pct))
+            for nid, pct in a.di_chuc["phan_bo"].items()
+            if nid in w.agents and w.agents[nid].con_song
+        }
+        tong = sum(hop_le.values())
+        if tong > 0:
+            ty_trong = {nid: pct / tong for nid, pct in sorted(hop_le.items())}
+        # gia huấn truyền đời cho người nhận
+        gia_huan = str(a.di_chuc.get("gia_huan", ""))[:400]
+        if gia_huan:
+            for nid in hop_le:
+                w.agents[nid].gia_huan = gia_huan
+        w.events.ghi(w.tick, "di_chuc", nguoi_mat=aid, phan_bo=a.di_chuc.get("phan_bo"))
     con_song = [c for c in a.con if c in w.agents and w.agents[c].con_song]
-    if con_song:
+    if ty_trong:
+        nguoi_nhan = list(ty_trong)
+    elif con_song:
         nguoi_nhan = sorted(con_song)
     elif a.vo_chong and a.vo_chong in w.agents and w.agents[a.vo_chong].con_song:
         nguoi_nhan = [a.vo_chong]
@@ -210,9 +242,10 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
             if du > 1e-9:
                 w.ledger.chuyen(aid, nguoi_nhan[0], ts, du, f"thừa kế {ts} lẻ", w.tick)
         else:
-            phan = sl / len(nguoi_nhan)
             for nid in nguoi_nhan:
-                w.ledger.chuyen(aid, nid, ts, phan, f"thừa kế {ts}", w.tick)
+                phan = sl * (ty_trong[nid] if ty_trong else 1.0 / len(nguoi_nhan))
+                if phan > 1e-12:
+                    w.ledger.chuyen(aid, nid, ts, phan, f"thừa kế {ts}", w.tick)
 
     # đất: chia round-robin cho người nhận; không ai → về công
     thua_cua = sorted(p.id for p in w.parcels.values() if p.chu == aid)

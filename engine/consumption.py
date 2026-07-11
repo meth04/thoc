@@ -6,9 +6,22 @@ from engine.world import World
 
 
 def hao_hut_kho(w: World) -> None:
-    ty_le = float(w.cfg.get("san_xuat.hao_hut_kho_moi_tick"))
+    from engine.research import duoc_ap_dung
+
+    ty_le_goc = float(w.cfg.get("san_xuat.hao_hut_kho_moi_tick"))
+    # hàng lưu kho (blueprint che_bien hiệu ứng luu_kho) người giữ được giảm thêm
+    hieu_ung_hang: dict[str, float] = {
+        bp.hang_moi: bp.hieu_ung_do_lon
+        for bp in w.blueprints.values()
+        if bp.hang_moi and bp.hieu_ung == "luu_kho"
+    }
     for (chu_the, ts), v in list(w.ledger._so_du.items()):
         if ts == "thoc" and v > 0:
+            giam = duoc_ap_dung(w, chu_the, "luu_kho")
+            for ma, do_lon in hieu_ung_hang.items():
+                if w.ledger.so_du(chu_the, ma) >= 1.0:
+                    giam += do_lon
+            ty_le = ty_le_goc * max(0.1, 1.0 - giam)
             w.ledger.huy(chu_the, "thoc", v * ty_le, "hao_kho", "hao hụt kho", w.tick)
 
 
@@ -44,8 +57,20 @@ def an_va_suc_khoe(w: World) -> None:
                 w.ledger.huy(m, "thoc", tru, "an", "ăn", w.tick)
                 con_phai_tru -= tru
         ty_le_no = an_duoc / tong_nhu_cau if tong_nhu_cau > 0 else 1.0
+        # hàng "tiện nghi": mỗi tick hộ tiêu dùng 1 đơn vị/loại → cộng health nhỏ
+        bonus_tien_nghi = 0.0
+        for bp in w.blueprints.values():
+            if not bp.hang_moi or bp.hieu_ung != "tien_nghi":
+                continue
+            for m in ho:
+                if w.ledger.so_du(m, bp.hang_moi) >= 1.0:
+                    w.ledger.huy(m, bp.hang_moi, 1.0, "tieu_dung", "tiện nghi", w.tick)
+                    bonus_tien_nghi += bp.hieu_ung_do_lon * 10.0
+                    break
         for m in ho:
             ag = w.agents[m]
+            if bonus_tien_nghi > 0:
+                ag.health = min(100.0, ag.health + bonus_tien_nghi)
             if ty_le_no >= 1.0 - 1e-9:
                 ag.health = min(100.0, ag.health + sk["hoi_khi_an_du"])
             else:

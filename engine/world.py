@@ -56,6 +56,30 @@ class World:
     niem_yet_dat: dict = field(default_factory=dict)  # thua → NiemYetDat
     chet_tick_truoc: set[str] = field(default_factory=set)
     unrecognized_path: Path | None = None
+    # kho trạng thái của tầng minds (engine không đọc — chỉ mang theo checkpoint)
+    policy_cards: dict[str, dict] = field(default_factory=dict)
+    # ---- Phase 4: pháp nhân, R&D, tri thức ----
+    entities: dict = field(default_factory=dict)  # id → Entity
+    _next_entity: int = 0
+    blueprints: dict = field(default_factory=dict)  # id → Blueprint
+    _next_bp: int = 0
+    diem_nc: dict[tuple[str, str], float] = field(default_factory=dict)
+    ten_hang: dict[str, str] = field(default_factory=dict)  # mã hàng mới → tên LLM đặt
+    tri_thuc: float = 0.0
+    san_tri_thuc_tier: int = 0
+    nhan_dinh_che: dict[str, list[str]] = field(default_factory=dict)  # nhãn → chủ thể
+    milestones: list[dict] = field(default_factory=list)
+    # thu nhập theo nguồn, cửa sổ 4 tick (observatory đọc để phân giai cấp)
+    thu_nhap_tick: dict = field(default_factory=dict)  # aid → {nguon: quy thóc}
+    thu_nhap_4: list = field(default_factory=list)  # 4 dict gần nhất
+    kl_thanh_toan_tick: dict[str, float] = field(default_factory=dict)
+    cong_dung_tick: dict[str, float] = field(default_factory=dict)
+
+    def ghi_thu_nhap(self, aid: str, nguon: str, quy_thoc: float) -> None:
+        if quy_thoc <= 0:
+            return
+        d = self.thu_nhap_tick.setdefault(aid, {})
+        d[nguon] = d.get(nguon, 0.0) + quy_thoc
 
     # ---------- id ----------
     def id_moi(self) -> str:
@@ -159,8 +183,16 @@ class World:
         gia_s = sorted(
             (ts, len(ls), round(ls[-1][1], 6)) for ts, ls in self.gia_lich_su.items() if ls
         )
+        p4_s = [
+            sorted((e.id, e.ten, e.con_hoat_dong) for e in self.entities.values()),
+            sorted((b.id, b.linh_vuc, round(b.do_lon, 6), b.chu)
+                   for b in self.blueprints.values()),
+            sorted((k[0], k[1], round(v, 6)) for k, v in self.diem_nc.items() if v > 1e-9),
+            round(self.tri_thuc, 6),
+            self.san_tri_thuc_tier,
+        ]
         blob = json.dumps(
-            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s],
+            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s, p4_s],
             ensure_ascii=False, default=str,
         )
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
