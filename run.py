@@ -78,8 +78,11 @@ def chay_smoke(args) -> int:
             so_call += 1
             print(f"{tier:<14} {route.model:<36} ok   {resp.tok_in}/{resp.tok_out:<7}"
                   f" {resp.latency_s:.2f}s")
-        except Exception as e:  # noqa: BLE001 — smoke báo cáo mọi lỗi
-            print(f"{tier:<14} {route.model:<36} LỖI  {type(e).__name__}: {e}")
+        except Exception as e:  # noqa: BLE001 — smoke báo cáo mọi lỗi (đã che key)
+            from minds.providers_real import che_key
+
+            print(f"{tier:<14} {route.model:<36} LỖI  {type(e).__name__}: "
+                  f"{che_key(str(e))[:160]}")
     print(f"[smoke] {so_call} call — xong.")
     return 0
 

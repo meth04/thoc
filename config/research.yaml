@@ -17,7 +17,7 @@ diem_nghien_cuu:
   he_so_E: {E1: 1.0, E2: 1.5, E3: 2.2, E4: 3.2}    # người học cao nghiên cứu hiệu quả hơn
 
 xac_suat_thanh_cong:         # p = 1 - exp(-diem_tich_luy / (k0 * (1 + muc_linh_vuc)^d))
-  k0: 120                     # 40→120 (hiệu chỉnh Phase 4): CNH năm 107 → kéo về [160,280]
+  k0: 160                     # 40→120→160 (hiệu chỉnh Phase 4): trung vị 140 → [160,280]
   d: 1.6                      # lợi suất giảm dần — càng tiến sâu càng khó
 
 blueprint:
@@ -37,7 +37,7 @@ khuech_tan:
   san: 0.4
 
 may:                         # "máy" — hạt giống vật lý của xưởng (không phải định chế)
-  recipe: {go: 8, quang_hoac_xu: 4, cong: 120}   # hiệu chỉnh Phase 4 (DECISIONS.md)
+  recipe: {go: 8, quang_hoac_xu: 6, cong: 200}   # hiệu chỉnh Phase 4 vòng 2 (DECISIONS.md)
   can_blueprint_linh_vuc: cong_cu_may_moc
   pham_vi: nhan_nang_suat_cong_cua_nguoi_lam_cho_chu_may
 
