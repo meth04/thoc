@@ -73,7 +73,19 @@ class QuyetDinh(BaseModel):
 
 
 def ap_patch(the_cu: TheChinhSach, patch: PolicyPatch) -> TheChinhSach:
+    """Áp patch AN TOÀN: trường nào ngoài khoảng hợp lệ thì bỏ TRƯỜNG ĐÓ (điều luật #3
+    — dữ liệu LLM là input không tin được; giá trị lạ không được làm sập run)."""
+    from pydantic import ValidationError
+
     du_lieu: dict[str, Any] = the_cu.model_dump()
-    for k, v in patch.model_dump(exclude_none=True).items():
-        du_lieu[k] = v
-    return TheChinhSach(**du_lieu)
+    moi = patch.model_dump(exclude_none=True)
+    for _ in range(len(moi) + 1):
+        try:
+            return TheChinhSach(**{**du_lieu, **moi})
+        except ValidationError as e:
+            truong_loi = {loi["loc"][0] for loi in e.errors() if loi["loc"]}
+            if not truong_loi:
+                break
+            for k in truong_loi:
+                moi.pop(k, None)
+    return the_cu  # không cứu nổi → giữ thẻ cũ

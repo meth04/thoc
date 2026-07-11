@@ -108,9 +108,12 @@ class MindMock:
             for aid, qd in ok.items():
                 kh = quyet_dinh_thanh_ke_hoach(w, qd)
                 if qd.the_chinh_sach is not None:
-                    the_moi = ap_patch(_the_cua(w, aid), qd.the_chinh_sach)
-                    w.policy_cards[aid] = the_moi.model_dump()
-                    kh.y_dinh_sinh_con = the_moi.y_dinh_sinh_con
+                    try:
+                        the_moi = ap_patch(_the_cua(w, aid), qd.the_chinh_sach)
+                        w.policy_cards[aid] = the_moi.model_dump()
+                        kh.y_dinh_sinh_con = the_moi.y_dinh_sinh_con
+                    except Exception as e:  # noqa: BLE001 — thẻ hỏng thì giữ thẻ cũ
+                        w.ghi_unrecognized(aid, "the_chinh_sach", f"patch hỏng: {e}")
                 ke_hoach[aid] = kh
 
         # --- người không nghĩ: thẻ chính sách ---

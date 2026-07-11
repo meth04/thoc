@@ -110,3 +110,14 @@ def test_mind_real_het_ngan_sach_dung_em(tmp_path):
     chay_tick(w, mind, 1)
     assert mind.het_ngan_sach, "thiếu ngân sách phải dừng êm, không degrade"
     assert mind.so_call == 0 or mind.so_fallback == 0  # không call liều
+
+
+def test_patch_the_ngoai_khoang_khong_sap(tmp_path):
+    """LLM trả thẻ vượt khoảng hợp lệ → bỏ trường lỗi, KHÔNG crash (điều luật #3)."""
+    from minds.schemas import PolicyPatch, TheChinhSach, ap_patch
+
+    the_cu = TheChinhSach()
+    patch = PolicyPatch(du_tru_muc_tieu=50.0, canh_toi_da=3, y_dinh_sinh_con=1.0)
+    the_moi = ap_patch(the_cu, patch)
+    assert the_moi.du_tru_muc_tieu == the_cu.du_tru_muc_tieu  # trường lỗi bị bỏ
+    assert the_moi.canh_toi_da == 3 and the_moi.y_dinh_sinh_con == 1.0  # trường tốt giữ

@@ -130,17 +130,44 @@ hoan_tra_theo_yeu_cau{tu,den,tai_san,tran_rut_moi_tick} ·
 khi_pha_vo{phat:"xiet_the_chap"|"khong"} · chia_loi_nhuan{entity,theo_co_phan:true}"""
 
 
+LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
+- Mỗi tick = 6 tháng. Người lớn PHẢI ăn 90kg thóc/tick (trẻ em 45kg) — thiếu ăn là mất
+  sức khỏe, sức khỏe cạn là CHẾT. Không ai phát chẩn cho bạn.
+- Kho thóc hao 3%/tick (mọt, chuột). Mỗi tick bạn có 180 ngày công (theo sức khỏe).
+- MÙA MƯA (tick lẻ): gieo + gặt cùng tick. Mỗi thửa cần 60kg thóc giống + 60 công,
+  thu ~600kg × màu mỡ. Tự canh tối đa 3 thửa (thửa 2-3 kém dần). MÙA KHÔ (tick chẵn):
+  không trồng được gì — dành cho khai thác gỗ/quặng, chế tác, xây, học, hôn sự.
+- Canh CÙNG MỘT thửa đất công 2 mùa mưa liên tiếp → thửa đó thành CỦA BẠN (khai hoang).
+- Nhà = 6 gỗ + 120 công (không nhà → mất sức mùa mưa). Công cụ = 2 gỗ + 60 công
+  (+30% năng suất, mòn dần). Gỗ ~10 công/cây (rừng), quặng ~20 công (mỏ).
+- Đời người hữu hạn (già là chết). KHÔNG kết hôn thì không con cái — của cải về công,
+  dòng họ tuyệt tự. Cầu hôn ở mùa nào cũng được; người kia trả lời tick sau.
+
+[BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
+mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, để lại gia sản); và vị thế
+(đất đai, của cải, chữ nghĩa, tiếng thơm). Nặng nhẹ ra sao là tùy TÍNH CÁCH bạn."""
+
+VI_DU_QUYET_DINH = """[VÍ DỤ một quyết định (đừng sao chép — hãy quyết theo hoàn cảnh CỦA BẠN)]
+{"id":"A0017","hanh_dong":[{"loai":"phan_bo_cong","canh_thua":["P14_25","P14_26"]},
+{"loai":"de_nghi_hop_dong","den":"A0031","hop_dong":{"cac_ben":["A0017","A0031"],
+"hinh_thuc":"mieng","thoi_han":8,"dieu_khoan":[{"loai":"quyen_su_dung","tai_san":"thua:P15_02",
+"tu":"A0017","den":"A0031"},{"loai":"chia_san_luong","nguon":"thua:P15_02","ty_le":0.4,
+"den":"A0017"}]}},{"loai":"cau_hon","den":"A0042"}],
+"ly_do":"Canh 2 thửa đủ ăn, thửa xa cho cấy rẽ lấy 4 phần, và đến tuổi phải tính chuyện gia đình."}"""
+
+
 def build_batch_prompt(w: World, ids: list[str], triggers: dict[str, list[str]]) -> str:
     """Prompt trọn gói cho một batch: luật chơi + tình hình chung + N khối riêng + schema."""
     dau = (
-        "Bạn sẽ đóng vai TỪNG NGƯỜI dưới đây trong một làng tự cung tự cấp (1 tick = 6 "
-        "tháng). Mỗi người chỉ biết những gì làng mình biết, quyết định như CHÍNH HỌ — "
+        "Bạn sẽ đóng vai TỪNG NGƯỜI dưới đây trong một làng khép kín thời sơ khai (1 tick "
+        "= 6 tháng). Mỗi người chỉ biết những gì làng mình biết, quyết định như CHÍNH HỌ — "
         "nhất quán với tính cách, ký ức, gia huấn riêng, kể cả khi khác số đông. "
         "Đơn vị giá trị: kg thóc.\n\n"
     )
     chung = build_user_chung(w)
     rieng = "\n\n".join(build_user_rieng(w, aid, triggers.get(aid, [])) for aid in ids)
-    return f"{dau}{chung}\n\n{rieng}\n\n{SCHEMA_QUYET_DINH}\n" \
+    return f"{dau}{LUAT_VAT_LY}\n\n{chung}\n\n{rieng}\n\n{SCHEMA_QUYET_DINH}\n\n" \
+           f"{VI_DU_QUYET_DINH}\n" \
            f"Trả mảng JSON đúng {len(ids)} phần tử, id theo thứ tự: {ids}."
 
 
