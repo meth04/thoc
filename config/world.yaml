@@ -3,7 +3,7 @@
 
 ban_do:
   kich_thuoc: [30, 30]
-  ty_le_ruong: 0.30   # 0.39→0.30 (hiệu chỉnh Phase 4): đất phải khan thì mới có làm thuê
+  ty_le_ruong: 0.28   # 0.39→0.28 (hiệu chỉnh Phase 4): đất phải khan thì mới có làm thuê
   mau_mo: {min: 0.6, max: 1.4, bonus_ven_song: 0.2}
   so_o_mo_dong: 2
   so_lang_ban_dau: 1
@@ -49,8 +49,8 @@ nhan_khau:
   tuoi_ban_dau: [16, 28]
   ty_le_nu: 0.52
   tuoi_truong_thanh: 16
-  sinh_san: {p_goc: 0.13, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20}
-  # p_goc 0.22 → 0.13: hiệu chỉnh Phase 1 để dân số cân bằng ≤500 (xem DECISIONS.md)
+  sinh_san: {p_goc: 0.15, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20}
+  # p_goc 0.22 → 0.15: hiệu chỉnh Phase 1 để dân số cân bằng ≤500 (xem DECISIONS.md)
   tu_vong_gompertz: {q20: 0.005, q60: 0.03, q75: 0.12}
   di_chuc: {tuoi_trigger: 50, health_trigger: 30}
 
@@ -83,7 +83,9 @@ quan_sat:                      # ngưỡng để OBSERVATORY dán nhãn (không 
   cong_nghiep_hoa:
     ty_trong_cong_phi_nong_toi_thieu: 0.40
     so_may_hoat_dong_toi_thieu: 5
-    ty_le_lao_dong_trong_entity_5_nguoi: 0.25
+    # 0.25→0.10 (hiệu chỉnh Phase 4, DECISIONS.md): nước Anh giữa thế kỷ 19 —
+    # đỉnh cách mạng công nghiệp — lao động nhà máy cũng chỉ ~10-15% lực lượng
+    ty_le_lao_dong_trong_entity_5_nguoi: 0.10
 
 giai_cap:                      # ngưỡng classifier (SPEC 9.1)
   chu_xuong_gop_cong_toi_thieu: 3

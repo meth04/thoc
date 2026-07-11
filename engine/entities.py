@@ -118,7 +118,8 @@ def nghia_vu_quy_thoc(w: World, eid: str) -> float:
     """Tổng nghĩa vụ chưa thực hiện của entity trong các hợp đồng hiệu lực."""
     tong = 0.0
     for hd in w.hop_dong.values():
-        if hd.trang_thai != "hieu_luc":
+        # gồm cả hợp đồng vừa VI PHẠM trong tick (nghĩa vụ chưa đền chưa biến mất)
+        if hd.trang_thai not in ("hieu_luc", "vi_pham"):
             continue
         for ck in hd.dieu_khoan:
             tu = getattr(ck, "tu", None)
@@ -140,12 +141,9 @@ def kiem_tra_pha_san(w: World) -> None:
             continue
         nghia_vu = nghia_vu_quy_thoc(w, eid)
         tai_san = tai_san_quy_thoc(w, eid)
-        # phá sản khi nghĩa vụ vượt tài sản khả thi, HOẶC entity vừa vỡ nợ nghĩa vụ
-        vo_no_tick_nay = any(
-            hd.trang_thai == "vi_pham" and hd.ke_vi_pham == eid
-            for hd in w.hop_dong.values()
-        )
-        if nghia_vu > tai_san + 1e-9 or vo_no_tick_nay:
+        # phá sản CHỈ khi mất khả năng thanh toán (nghĩa vụ > tài sản khả thi) —
+        # hụt một kỳ lương lẻ thì chỉ hợp đồng đó vi phạm, xưởng không sập cả dàn
+        if nghia_vu > tai_san + 1e-9:
             thanh_ly(w, eid)
             continue
         # entity cạn vốn kéo dài, không đất → tự giải thể (máy trả về cổ đông)

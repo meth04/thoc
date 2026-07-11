@@ -17,7 +17,7 @@ diem_nghien_cuu:
   he_so_E: {E1: 1.0, E2: 1.5, E3: 2.2, E4: 3.2}    # người học cao nghiên cứu hiệu quả hơn
 
 xac_suat_thanh_cong:         # p = 1 - exp(-diem_tich_luy / (k0 * (1 + muc_linh_vuc)^d))
-  k0: 40
+  k0: 120                     # 40→120 (hiệu chỉnh Phase 4): CNH năm 107 → kéo về [160,280]
   d: 1.6                      # lợi suất giảm dần — càng tiến sâu càng khó
 
 blueprint:

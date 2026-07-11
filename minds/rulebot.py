@@ -428,9 +428,11 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g)
     cong_thue = bc.cong_thue_vao.get(eid, 0.0)
 
     # thuê người làm: có máy = xưởng, thuê hết cỡ; chưa máy = trại, thuê theo đất
-    so_nhan_cong = int(cong_thue // 120)
+    so_nhan_cong = int(cong_thue // 80)
     co_may = w.ledger.so_du(eid, "may") >= 1
-    muc_tieu_nhan_cong = 8 if co_may else min(8, max(2, len(ruong) // 2))
+    tran_theo_quy = int(thoc // 700)  # mỗi thợ cần ~700 thóc quỹ lương gối đầu
+    muc_tieu_nhan_cong = min(10 if co_may else min(8, max(2, len(ruong) // 2)),
+                             max(tran_theo_quy, 1))
     if thoc > 800 and so_nhan_cong < muc_tieu_nhan_cong:
         # thuê người: TẠM ỨNG khi ký + lương mỗi tick; hợp đồng DÀI HẠN (12 năm)
         # để đội thợ tích lũy được — churn 8 tick giữ mãi mức 1-2 người/xưởng
@@ -440,36 +442,53 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g)
             dieu_khoan=[
                 ClauseChuyenGiaoMotLan(tu=eid, den="?", tai_san="thoc",
                                        so_luong=180.0, tai="ky_ket"),
-                ClauseGopCong(tu="?", den=eid, so_cong_moi_tick=100.0),
+                # 80 cong/tick: nguoi health thap van giao du — giam vo no cong
+                ClauseGopCong(tu="?", den=eid, so_cong_moi_tick=80.0),
                 ClauseChuyenGiaoDinhKy(tu=eid, den="?", tai_san="thoc",
-                                       so_luong=round(100 * gia_cong_thue, 0), moi_n_tick=1),
+                                       so_luong=round(80 * gia_cong_thue, 0), moi_n_tick=1),
             ], nguoi_soan=eid))
-    # mua đất niêm yết — mở rộng điền sản là ưu tiên số một của entity
-    if thoc > 2500 and w.niem_yet_dat:
+    # mua đất niêm yết — nhưng LUÔN giữ quỹ lương (dự phòng theo số nhân công)
+    du_phong = 1500.0 + 600.0 * so_nhan_cong
+    if thoc > du_phong + 800 and w.niem_yet_dat:
         re_nhat = min(w.niem_yet_dat.values(), key=lambda ny: (ny.gia_ask, ny.thua))
-        if re_nhat.chu != eid and re_nhat.gia_ask <= thoc - 1500:
+        if re_nhat.chu != eid and re_nhat.gia_ask <= thoc - du_phong:
             kh.tra_gia_dat.append((re_nhat.thua, round(re_nhat.gia_ask * 1.1, 0)))
     # canh tác bằng công thuê: đất entity trước, thiếu thì khai hoang đất công
     if w.mua_mua() and cong_thue > 0:
         so_thua = min(int(cong_thue // 60), int(max(0, thoc - 400) // 60), 10)
         if so_thua > 0:
             kh.canh_thua = _chon_thua_canh(bc, eid, so_thua, da_nham)
-    # có máy + công thuê → xưởng: mùa khô chế công cụ/hàng hết công suất
+    # có máy + công thuê → XƯỞNG: chủ lực là HÀNG TIÊU DÙNG (cầu lặp lại mỗi tick);
+    # công cụ chỉ chế khi giá còn trên chi phí (tránh chất đống hàng ế)
     if co_may and cong_thue >= 60 and not w.mua_mua():
         from engine.production import he_so_may as _hsm
 
-        cong_moi_cu = 60.0 / max(_hsm(w, eid), 1.0)
-        suc = max(1, int(cong_thue // cong_moi_cu))
-        go_e = w.ledger.so_du(eid, "go")
-        kh.che_tao_cong_cu = min(suc, int(go_e // 2))
-        if go_e < suc * 2:
-            gia_go = w.gia_gan_nhat("go") or 12.0
-            kh.dat_lenh.append(Lenh(eid, "mua", "go", round(suc * 2 - go_e, 1),
-                                    round(gia_go * 1.1, 1)))
-        # chế hàng tiện nghi nếu entity nắm blueprint che_bien
-        for bp in w.blueprints.values():
-            if bp.chu == eid and bp.hang_moi:
-                kh.che_hang[bp.hang_moi] = 4
+        he_may_e = max(_hsm(w, eid), 1.0)
+        gia_go = w.gia_gan_nhat("go") or 12.0
+        bp_hang = [bp for bp in w.blueprints.values() if bp.chu == eid and bp.hang_moi]
+        cong_con = cong_thue
+        for bp in bp_hang:
+            cong_mot = float(bp.recipe.get("cong", 30)) / he_may_e
+            suc = int(cong_con // max(cong_mot, 1.0))
+            if suc > 0:
+                kh.che_hang[bp.hang_moi] = suc
+                cong_con -= suc * cong_mot
+                # gom nguyên liệu cho mẻ sau
+                for ts, sl in bp.recipe.items():
+                    if ts == "cong":
+                        continue
+                    thieu = suc * float(sl) - w.ledger.so_du(eid, ts)
+                    if thieu > 0 and ts != "thoc":
+                        gia_nl = w.gia_gan_nhat(ts) or 12.0
+                        kh.dat_lenh.append(Lenh(eid, "mua", ts, round(thieu, 1),
+                                                round(gia_nl * 1.1, 1)))
+        if cong_con >= 60 / he_may_e:
+            suc_cu = int(cong_con // (60.0 / he_may_e))
+            go_e = w.ledger.so_du(eid, "go")
+            kh.che_tao_cong_cu = min(suc_cu, int(go_e // 2))
+            if go_e < suc_cu * 2:
+                kh.dat_lenh.append(Lenh(eid, "mua", "go", round(suc_cu * 2 - go_e, 1),
+                                        round(gia_go * 1.1, 1)))
     ton_cu = w.ledger.so_du(eid, "cong_cu")
     if ton_cu >= 1:
         gia_cu = w.gia_gan_nhat("cong_cu") or 100.0
@@ -493,9 +512,13 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g)
             if quang < can_kl and xu < can_kl:
                 kh.dat_lenh.append(Lenh(eid, "mua", "quang_dong", round(can_kl - quang, 1),
                                         round(gia_quang * 1.15, 1)))
-    # entity chưa có blueprint máy → R&D chỉ khi đã có điền sản vững (đất ≥4) + vốn dày
-    elif len(ruong) >= 4 and thoc > 4000 and g.random() < 0.5:
+    # entity chưa có blueprint máy → R&D máy; có máy rồi mà chưa có hàng → R&D chế biến
+    elif thoc > du_phong + 2000 and g.random() < 0.6:
         kh.nghien_cuu = ("cong_cu_may_moc", min(cong_thue, 120.0), round(thoc * 0.05, 0))
+    if (co_may and thoc > du_phong + 1500
+            and not any(bp.chu == eid and bp.hang_moi for bp in w.blueprints.values())
+            and kh.nghien_cuu is None and g.random() < 0.6):
+        kh.nghien_cuu = ("che_bien", min(cong_thue, 120.0), round(thoc * 0.05, 0))
     return kh
 
 
@@ -510,6 +533,8 @@ def _tra_loi_bang_rao(w: World, a, kh: KeHoach, g, thoc: float, an_ninh: float,
                       so_ruong: int, bc: _BoiCanhTick) -> bool:
     """Đánh giá đề nghị trên bảng rao theo mô-típ; trả True nếu đã nhận một cái."""
     p5 = a.persona
+    ung_tuyen: list[str] = []  # gom mọi đề nghị chấp nhận được rồi CHỌN NGẪU NHIÊN một
+    viec_lam: list[str] = []  # đề nghị TUYỂN NGƯỜI — ưu tiên tuyệt đối cho người ít đất
     for dn_id in sorted(w.bang_rao):
         dn = w.bang_rao[dn_id]
         if dn.tu == a.id or (dn.den is not None and dn.den != a.id):
@@ -528,16 +553,15 @@ def _tra_loi_bang_rao(w: World, a, kh: KeHoach, g, thoc: float, an_ninh: float,
                     gop.so_cong_moi_tick * tra.moi_n_tick, 1e-9)
                 da_co_viec = a.id in bc.dang_lam_thue
                 nhan = (
-                    not da_co_viec  # 120 công/việc — nhận 2 việc là vỡ nợ công ngay
+                    not da_co_viec  # nhận 2 việc là vỡ nợ công ngay
                     and tra.tai_san == "thoc"
                     and gia_cong_moi_cong >= 1.6 + 0.1 * p5.cham_chi
-                    and (
-                        # người ít đất tuổi lao động: lương xưởng > canh 1 thửa lẻ
-                        (so_ruong <= 1 and a.tuoi_nam <= 35)
-                        or (so_ruong <= 1 and (dat_con < 40 or an_ninh < 1.0))
-                        or (so_ruong <= 2 and dat_con == 0)
-                    )
+                    # đất khan thì người ít đất mọi lứa tuổi sống bằng lương
+                    and (so_ruong <= 1 or (so_ruong <= 2 and dat_con == 0))
                 )
+                if nhan:
+                    viec_lam.append(dn_id)
+                    nhan = False
             else:
                 # người khác xin làm công cho "?": tôi thuê nếu nhiều đất + dư thóc
                 nhan = (
@@ -591,8 +615,16 @@ def _tra_loi_bang_rao(w: World, a, kh: KeHoach, g, thoc: float, an_ninh: float,
             # nhận niên kim: cầm cục thóc trước, trả dòng nhỏ về sau — dân liều thích
             nhan = p5.lieu_linh >= 5 and an_ninh > 1.0
         if nhan:
-            kh.tra_loi_de_nghi[dn_id] = "chap_nhan"
-            return True
+            ung_tuyen.append(dn_id)
+    if viec_lam:  # có việc thì nhận việc trước — miếng cơm hằng ngày
+        chon = viec_lam[int(g.integers(0, len(viec_lam)))]
+        kh.tra_loi_de_nghi[chon] = "chap_nhan"
+        return True
+    if ung_tuyen:
+        # chọn ngẫu nhiên seeded — tránh cả làng dồn vào cùng một đề nghị
+        chon = ung_tuyen[int(g.integers(0, len(ung_tuyen)))]
+        kh.tra_loi_de_nghi[chon] = "chap_nhan"
+        return True
     return False
 
 
@@ -734,14 +766,14 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
     # chợ nhà: vô gia cư có tiền thì MUA; thợ dựng nhà thừa đem bán
     co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in w.ho_cua(aid))
     gia_nha = w.gia_gan_nhat("nha") or 450.0
-    if not co_nha and thoc > gia_nha * 1.3:
+    if not co_nha and thoc > gia_nha * 1.05:
         kh.dat_lenh.append(Lenh(aid, "mua", "nha", 1.0, round(gia_nha * 1.1, 0)))
     if co_nha and p5.cham_chi >= 7 and not w.mua_mua():
         so_nha = w.ledger.so_du(aid, "nha")
         if so_nha >= 2:
             kh.dat_lenh.append(Lenh(aid, "ban", "nha", round(so_nha - 1, 1),
                                     round(max(gia_nha * 0.95, 350), 0)))
-        elif w.ledger.so_du(aid, "go") >= 6 and an_ninh > 1.2 and g.random() < 0.3:
+        elif w.ledger.so_du(aid, "go") >= 6 and an_ninh > 1.0 and g.random() < 0.5:
             kh.xay_nha = max(kh.xay_nha, 1)
 
     cong_cu_co = w.ledger.so_du(aid, "cong_cu")
