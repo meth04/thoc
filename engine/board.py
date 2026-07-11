@@ -27,6 +27,11 @@ class DeNghi:
 def dang_de_nghi(w, tu: str, hd: HopDong, den: str | None = None, vong: int = 0) -> str | None:
     """Mind đề nghị hợp đồng; engine validate cấu trúc trước khi lên bảng."""
     hd.nguoi_soan = hd.nguoi_soan or tu
+    # NGƯỜI ĐĂNG PHẢI LÀ MỘT BÊN — không ai được soạn hợp đồng ràng buộc người khác
+    # rồi đem rao hộ (LLM ảo giác hay thử trò này; mock không bao giờ)
+    if tu not in hd.cac_ben:
+        w.ghi_unrecognized(tu, "de_nghi_hop_dong", "người đăng không phải một bên")
+        return None
     ly_do = validate_hop_dong(hd, w)
     if ly_do is not None:
         w.ghi_unrecognized(tu, "de_nghi_hop_dong", ly_do)
@@ -113,6 +118,10 @@ def khop_bang_rao(w) -> None:
                 continue
             if tl == "chap_nhan":
                 hd = dn.hd.model_copy(deep=True)
+                # người chấp nhận phải LÀ bên còn thiếu ("?") hoặc một bên đích danh —
+                # không được "ký hộ" hợp đồng ràng buộc người khác
+                if "?" not in hd.cac_ben and ai not in hd.cac_ben:
+                    continue
                 # đề nghị công khai: người nhận thế chỗ "?"
                 hd.cac_ben = [ai if b == "?" else b for b in hd.cac_ben]
                 for ck in hd.dieu_khoan:

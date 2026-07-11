@@ -31,9 +31,13 @@ def test_a_entity_50_30_20_chia_loi_nhuan_va_ban_co_phan():
     """(a) lập entity 50/30/20, 2 hợp đồng góp công, chia lợi nhuận đúng kg, bán 20%."""
     w = the_gioi_test(seed=41, giu_lai=6, thoc_moi_nguoi=3000)
     a, b, c, d, e, f = sorted(x for x, ag in w.agents.items() if ag.con_song)
+    # vốn góp người khác phải do CHÍNH HỌ chuyển (đồng thuận) — intent một chiều
+    # chỉ được rút túi người lập (chống LLM tiêu tiền người khác, DECISIONS.md)
     eid = lap_phap_nhan(w, a, "Hội Ba Nhà", {a: 50.0, b: 30.0, c: 20.0},
-                        {a: {"thoc": 500}, b: {"thoc": 300}, c: {"thoc": 200}})
+                        {a: {"thoc": 500}})
     assert eid is not None
+    w.ledger.chuyen(b, eid, "thoc", 300, "b tự góp vốn (đồng thuận)", w.tick)
+    w.ledger.chuyen(c, eid, "thoc", 200, "c tự góp vốn (đồng thuận)", w.tick)
     cd = co_dong_cua(w, eid)
     assert cd[a] == pytest.approx(50) and cd[b] == pytest.approx(30)
     assert cd[c] == pytest.approx(20)

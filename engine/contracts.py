@@ -126,6 +126,8 @@ def validate_hop_dong(hd: HopDong, w) -> str | None:
             return f"người soạn {soan} chưa biết chữ (E<{can_e})"
     if hd.the_chap and hd.hinh_thuc != "van_ban":
         return "thế chấp chỉ hiệu lực với văn bản"
+    if hd.thoi_han is not None and hd.thoi_han < 1:
+        return f"thời hạn không hợp lệ: {hd.thoi_han}"
     for ck in hd.dieu_khoan:
         for vai in ("tu", "den"):
             v = getattr(ck, vai, None)

@@ -14,32 +14,32 @@ tiers:
     routes:
       - {provider: aistudio, model: "gemini-3.1-flash-lite"}
     temperature: 0.9
-    max_output_tokens: 1600
+    max_output_tokens: 4096  # batch 8 quyết định ~2.4-3k tok — trần thấp sẽ cắt cụt
   T1:
     ten: "biết chữ (E1)"
     routes:                       # gộp 2 đường: ưu tiên key AI Studio, cạn thì tràn 9router
       - {provider: aistudio,  model: "gemini-3.1-flash-lite"}
       - {provider: ninerouter, model: "gc/gemini-3.1-flash-lite-preview"}
     temperature: 0.9
-    max_output_tokens: 2000
+    max_output_tokens: 4096
   T2:
     ten: "E2"
     routes:
       - {provider: ninerouter, model: "gc/gemini-2.5-flash-lite"}
     temperature: 0.9
-    max_output_tokens: 2000
+    max_output_tokens: 4096
   T3:
     ten: "E3"
     routes:
       - {provider: ninerouter, model: "gc/gemini-2.5-flash"}
     temperature: 0.9
-    max_output_tokens: 2200
+    max_output_tokens: 4096
   T4:
     ten: "E4 — đỉnh"
     routes:
       - {provider: ninerouter, model: "gc/gemini-2.5-pro"}
     temperature: 0.9
-    max_output_tokens: 2400
+    max_output_tokens: 4096
 # 💡 Muốn hoán đổi sức mạnh T3/T4: chỉ cần đổi 2 dòng model — không đụng code.
 
 # Việc nền (không phải "não" của agent nào)

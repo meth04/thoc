@@ -37,6 +37,12 @@ def lap_phap_nhan(w: World, nguoi_lap: str, ten: str, co_phan: dict[str, float],
     if abs(tong - 100.0) > 1.0 and abs(tong - 1.0) > 0.02:
         w.ghi_unrecognized(nguoi_lap, "lap_phap_nhan", f"cổ phần cộng {tong} ≠ 100%")
         return None
+    # vốn góp CHỈ được rút từ túi người ra quyết định — không tiêu tiền người khác
+    for aid in von_gop:
+        if aid != nguoi_lap:
+            w.ghi_unrecognized(nguoi_lap, "lap_phap_nhan",
+                               f"vốn góp từ {aid} không phải người lập")
+            return None
     he_so = 100.0 / tong
     for aid in co_phan:
         if aid not in w.agents or not w.agents[aid].con_song:

@@ -12,7 +12,7 @@ from engine.intents import KeHoach
 from engine.world import World
 from minds.gateway import LLMCallLog, LLMRequest, MockProvider
 from minds.policy_cards import thi_hanh_the
-from minds.prompts import build_system, build_user_chung, build_user_rieng
+from minds.prompts import build_batch_prompt
 from minds.repair import parse_batch
 from minds.schemas import TheChinhSach, ap_patch
 from minds.translate import quyet_dinh_thanh_ke_hoach
@@ -40,6 +40,11 @@ class MindMock:
         self.so_call = 0
         self.so_fallback = 0
         self.so_nghi = 0
+        self.het_ngan_sach = False
+
+    def _du_ngan_sach(self, w: World, cac_batch: list) -> bool:
+        """Mock luôn đủ; MindReal override bằng budget guard thật."""
+        return True
 
     def __call__(self, w: World) -> dict[str, KeHoach]:
         from minds.rulebot import _BoiCanhTick
@@ -71,12 +76,17 @@ class MindMock:
             for i in range(0, len(ids), batch_max):
                 cac_batch.append((tier, ids[i:i + batch_max]))
 
+        # hook ngân sách (real: budget guard; mock: luôn đủ)
+        if not self._du_ngan_sach(w, cac_batch):
+            self.het_ngan_sach = True
+            for aid in sorted(triggers):
+                if w.chu_the_hoat_dong(aid) and aid not in ke_hoach:
+                    ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
+            cac_batch = []
+
         for tier, ids in cac_batch:
             self.so_nghi += len(ids)
-            prompt = build_user_chung(w) + "\n" + "\n".join(
-                build_user_rieng(w, aid, triggers[aid]) for aid in ids
-            )
-            _ = build_system(w, ids[0], "QuyetDinh")  # system mẫu (log/token)
+            prompt = build_batch_prompt(w, ids, triggers)
             req = LLMRequest(prompt=prompt, ctx=ctx, tier=tier, batch_ids=ids)
             resp = self.provider.goi(req, attempt=0)
             self.so_call += 1

@@ -33,7 +33,20 @@ def lay_mind_fn(mode: str, w: World, args: argparse.Namespace):
         return tao_mind_mock(w, fast=args.fast, run_dir=run_dir,
                              p_malformed=args.p_malformed)
     if mode == "real":
-        raise SystemExit("Mode real: dùng --smoke (Phase 5) hoặc pilot Phase 7.")
+        from minds.keypool import nap_env
+        from minds.real import tao_mind_real
+
+        env = nap_env(Path(__file__).resolve().parent / ".env")
+        if env.llm_mode != "real" or not args.i_am_sure:
+            raise SystemExit(
+                "Mode real yêu cầu ĐỒNG THỜI LLM_MODE=real trong .env VÀ cờ --i-am-sure."
+            )
+        if not env.co_key_that():
+            raise SystemExit("PENDING KEYS — chưa có key thật trong .env.")
+        run_dir = DATA_DIR / (args.run_name or f"real_{args.seed}")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return tao_mind_real(w, run_dir, w.cfg, env,
+                             quota_db=DATA_DIR / "quota_counters.sqlite")
     raise SystemExit(f"Mode không hỗ trợ: {mode}")
 
 
@@ -105,8 +118,6 @@ def main() -> int:
 
     if args.smoke:
         return chay_smoke(args)
-    if args.mode == "real":
-        raise SystemExit("Pilot real là Phase 7 — sau HUMAN-GATE 1. Hiện chỉ --smoke.")
     tong_tick = args.ticks if args.ticks is not None else (args.years or 300) * 2
     run_name = args.run_name or f"{args.mode}_{args.seed}"
     run_dir = DATA_DIR / run_name
@@ -139,10 +150,15 @@ def main() -> int:
     t0 = time.time()
     while w.tick < tong_tick and not ngat["flag"]:
         m = chay_mot_tick(w, mind_fn, tong_thua)
+        if getattr(mind_fn, "het_ngan_sach", False):
+            print(f"[budget] hết ngân sách: {getattr(mind_fn, 'ly_do_dung', '')} "
+                  f"— checkpoint và dừng êm (không degrade).")
+            break
         if w.tick % ck_moi_n == 0:
             w.luu_checkpoint(ck_dir)
             w.events.flush()
-        if w.tick % 50 == 0 or w.tick == tong_tick:
+        buoc_in = 5 if args.mode == "real" else 50
+        if w.tick % buoc_in == 0 or w.tick == tong_tick:
             print(
                 f"tick {w.tick:4d} (năm {m['nam']:3d}) | dân {m['dan_so']:4d} | "
                 f"thóc/người {m['thoc_moi_nguoi']:7.1f} | gini đất {m['gini_dat']:.2f} | "
@@ -164,14 +180,15 @@ def main() -> int:
         "world_hash": w.world_hash(),
         "thoi_gian_s": round(time.time() - t0, 1),
     }
-    if args.mode == "mock":
+    if args.mode in ("mock", "real"):
         meta["p_malformed"] = mind_fn.p_malformed
         meta["so_call"] = mind_fn.so_call
         meta["so_luot_nghi"] = mind_fn.so_nghi
         meta["so_fallback"] = mind_fn.so_fallback
         meta["fallback_rate"] = round(mind_fn.fallback_rate, 4)
+        meta["het_ngan_sach"] = bool(getattr(mind_fn, "het_ngan_sach", False))
         mind_fn.log.dong()
-        print(f"[mock] call={meta['so_call']} nghĩ={meta['so_luot_nghi']} "
+        print(f"[{args.mode}] call={meta['so_call']} nghĩ={meta['so_luot_nghi']} "
               f"fallback={meta['so_fallback']} ({meta['fallback_rate']:.2%})")
     (run_dir / "run_meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
