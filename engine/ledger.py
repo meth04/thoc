@@ -140,7 +140,10 @@ class Ledger:
         # --- cam kết ---
         for key, delta in thay_doi.items():
             moi = self._so_du.get(key, 0.0) + delta
-            self._so_du[key] = 0.0 if abs(moi) <= EPSILON else moi
+            if abs(moi) <= EPSILON:
+                self._so_du.pop(key, None)  # dọn key 0 — sổ không phình vô hạn
+            else:
+                self._so_du[key] = moi
         for sh in tx.sinh_huy:
             if abs(sh.so_luong) > EPSILON:
                 self.flows.ghi(sh.tai_san, sh.luong, sh.so_luong)

@@ -25,3 +25,13 @@ class KeHoach:
     cau_hon: str | None = None
     tra_loi_cau_hon: dict[str, bool] = field(default_factory=dict)
     y_dinh_sinh_con: float = 0.5
+    # ---- Phase 2: hợp đồng + chợ ----
+    # đề nghị hợp đồng: list (HopDong, den | None)
+    de_nghi_hop_dong: list = field(default_factory=list)
+    # trả lời đề nghị trên bảng rao: ref → "chap_nhan" | "tu_choi" | HopDong (mặc cả)
+    tra_loi_de_nghi: dict = field(default_factory=dict)
+    don_phuong_pha_vo: list[str] = field(default_factory=list)  # hd ids
+    dat_lenh: list = field(default_factory=list)  # list[Lenh]
+    niem_yet_dat: list = field(default_factory=list)  # [(thua, gia_ask)]
+    tra_gia_dat: list = field(default_factory=list)  # [(thua, gia)]
+    yeu_cau_rut: dict[str, float] = field(default_factory=dict)  # hd_id → số lượng

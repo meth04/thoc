@@ -35,10 +35,18 @@ def kiem_toan_the_gioi(w, tong_thua_ban_dau: int) -> None:
 def kiem_toan(ledger: Ledger, tick: int = -1) -> None:
     """Assert bảo toàn từng tài sản + không âm số dư. Lệch → raise LoiBaoToan."""
     loi: list[str] = []
-    tai_san_all = ledger.cac_tai_san() | ledger.flows.cac_tai_san()
-    for ts in sorted(tai_san_all):
-        thuc_te = ledger.tong_tai_san(ts)
-        ky_vong = ledger.flows.tong_ky_vong(ts)
+    # một lượt qua sổ + một lượt qua registry — O(n), không O(n×tài sản)
+    tong_thuc_te: dict[str, float] = {}
+    for (chu_the, ts), v in ledger._so_du.items():
+        tong_thuc_te[ts] = tong_thuc_te.get(ts, 0.0) + v
+        if v < -EPSILON:
+            loi.append(f"Âm số dư: {chu_the}/{ts} = {v}")
+    tong_ky_vong: dict[str, float] = {}
+    for (ts, _), v in ledger.flows._tich_luy.items():
+        tong_ky_vong[ts] = tong_ky_vong.get(ts, 0.0) + v
+    for ts in sorted(tong_thuc_te.keys() | tong_ky_vong.keys()):
+        thuc_te = tong_thuc_te.get(ts, 0.0)
+        ky_vong = tong_ky_vong.get(ts, 0.0)
         # dung sai tương đối: float64 trôi ~1e-13/phép tính; luồng lậu thật luôn ≥ gram
         dung_sai = max(DUNG_SAI, abs(ky_vong) * 1e-9)
         if abs(thuc_te - ky_vong) > dung_sai:
@@ -46,8 +54,5 @@ def kiem_toan(ledger: Ledger, tick: int = -1) -> None:
                 f"'{ts}': sổ cái có {thuc_te}, FlowRegistry kỳ vọng {ky_vong} "
                 f"(lệch {thuc_te - ky_vong})"
             )
-    for (chu_the, ts), v in ledger._so_du.items():
-        if v < -EPSILON:
-            loi.append(f"Âm số dư: {chu_the}/{ts} = {v}")
     if loi:
         raise LoiBaoToan(f"[tick {tick}] Vi phạm bảo toàn:\n  " + "\n  ".join(loi))

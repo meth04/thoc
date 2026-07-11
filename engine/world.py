@@ -44,6 +44,18 @@ class World:
     cau_hon_cho: list[tuple[str, str, int]] = field(default_factory=list)
     # uy tín / quan hệ xã hội: (a,b) → trọng số (âm = ân oán)
     quan_he: dict[tuple[str, str], float] = field(default_factory=dict)
+    # ---- Phase 2: hợp đồng, bảng rao, chợ ----
+    hop_dong: dict = field(default_factory=dict)  # id → HopDong (đang hiệu lực)
+    hop_dong_xong: dict = field(default_factory=dict)  # lưu trữ hợp đồng đã kết thúc
+    bang_rao: dict = field(default_factory=dict)  # id → DeNghi
+    _next_hd: int = 0
+    _next_dn: int = 0
+    gia_lich_su: dict[str, list] = field(default_factory=dict)  # tài sản → [(tick, giá, kl)]
+    gat_tick: dict[str, tuple[str, float]] = field(default_factory=dict)  # thửa → (ai, kg)
+    yeu_cau_rut_tick: dict[tuple[str, str], float] = field(default_factory=dict)
+    niem_yet_dat: dict = field(default_factory=dict)  # thua → NiemYetDat
+    chet_tick_truoc: set[str] = field(default_factory=set)
+    unrecognized_path: Path | None = None
 
     # ---------- id ----------
     def id_moi(self) -> str:
@@ -66,6 +78,37 @@ class World:
     def mua_mua(self, tick: int | None = None) -> bool:
         t = self.tick if tick is None else tick
         return t % 2 == 1
+
+    # ---------- hợp đồng ----------
+    def tim_hop_dong(self, hd_id: str):
+        return self.hop_dong.get(hd_id) or self.hop_dong_xong.get(hd_id)
+
+    # ---------- giá chợ ----------
+    def ghi_gia(self, tai_san: str, gia_quy_thoc: float, khoi_luong: float,
+                thanh_toan: str = "thoc") -> None:
+        self.gia_lich_su.setdefault(tai_san, []).append(
+            (self.tick, round(gia_quy_thoc, 6), round(khoi_luong, 6), thanh_toan)
+        )
+
+    def gia_gan_nhat(self, tai_san: str) -> float | None:
+        ls = self.gia_lich_su.get(tai_san)
+        return ls[-1][1] if ls else None
+
+    def gia_tb_4_tick(self, tai_san: str) -> float | None:
+        ls = self.gia_lich_su.get(tai_san)
+        if not ls:
+            return None
+        gan = [x for x in ls if x[0] >= self.tick - 4]
+        return sum(x[1] for x in gan) / len(gan) if gan else ls[-1][1]
+
+    def ghi_unrecognized(self, ai: str, loai: str, ly_do: str) -> None:
+        """Intent không hợp lệ → bỏ qua + log (điều luật #3) — mỏ 'ý định mới lạ'."""
+        self.events.ghi(self.tick, "unrecognized_intent", ai=ai, intent=loai, ly_do=ly_do)
+        if self.unrecognized_path is not None:
+            with open(self.unrecognized_path, "a", encoding="utf-8") as f:
+                json.dump({"tick": self.tick, "ai": ai, "intent": loai, "ly_do": ly_do}, f,
+                          ensure_ascii=False)
+                f.write("\n")
 
     # ---------- quan hệ ----------
     def cong_quan_he(self, a: str, b: str, delta: float) -> None:
@@ -108,8 +151,17 @@ class World:
         so_du_s = sorted(
             (ct, ts, round(v, 6)) for (ct, ts), v in self.ledger._so_du.items() if abs(v) > 1e-9
         )
+        hd_s = sorted(
+            (h.id, h.trang_thai, h.tick_ky, tuple(h.cac_ben),
+             tuple(c.loai for c in h.dieu_khoan))
+            for h in self.hop_dong.values()
+        ) + [len(self.hop_dong_xong)]
+        gia_s = sorted(
+            (ts, len(ls), round(ls[-1][1], 6)) for ts, ls in self.gia_lich_su.items() if ls
+        )
         blob = json.dumps(
-            [self.tick, self.seed, agents_s, parcels_s, so_du_s], ensure_ascii=False, default=str
+            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s],
+            ensure_ascii=False, default=str,
         )
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 

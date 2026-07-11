@@ -200,7 +200,7 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
             continue  # công bốc hơi, không thừa kế
         if not nguoi_nhan:
             w.ledger.chuyen(aid, VO_THUA_NHAN, ts, sl, f"vô thừa nhận {ts}", w.tick)
-        elif ts in TAI_SAN_ROI:
+        elif ts in TAI_SAN_ROI or ts.startswith("vi_the:"):
             nguyen = int(sl)
             for i in range(nguyen):
                 w.ledger.chuyen(

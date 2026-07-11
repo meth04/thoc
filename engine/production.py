@@ -56,6 +56,18 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     _, he_so_tt = w.thoi_tiet(w.tick)
     mua_mua = w.mua_mua()
 
+    # quyền sử dụng thửa theo hợp đồng — tính MỘT lần cho cả tick
+    from engine.contracts import ben_hien_tai
+
+    qsd_map: dict[str, set[str]] = {}
+    for hd in w.hop_dong.values():
+        if hd.trang_thai != "hieu_luc":
+            continue
+        for ck in hd.dieu_khoan:
+            if ck.loai == "quyen_su_dung" and ck.tai_san.startswith("thua:"):
+                den = ben_hien_tai(w, hd.id, ck.den)
+                qsd_map.setdefault(den, set()).add(ck.tai_san.split(":", 1)[1])
+
     # 0) Trẻ em góp công cho cha mẹ
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
@@ -72,18 +84,19 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         if a is None or not a.con_song:
             continue
 
-        # 1) Canh tác (chỉ mùa mưa): gieo + gặt trong cùng tick
+        # 1) Canh tác (chỉ mùa mưa): gieo + gặt trong cùng tick.
+        # Quá 3 thửa: cần công đi thuê (gop_cong); hiệu suất thửa 4+ giữ sàn 0.7.
         if mua_mua and kh.canh_thua:
-            gioi_han = int(sx["thua_toi_da_tu_canh"])
+            duoc_dung = qsd_map.get(aid, set())
             hieu_suat = [1.0, *sx["hieu_suat_thua_2_3"]]
             dung_cong_cu = False
             so_thua_canh = 0
-            for pid in kh.canh_thua[:gioi_han]:
+            for pid in kh.canh_thua:
                 p = w.parcels.get(pid)
                 if p is None or p.loai != "ruong":
                     continue
-                if p.chu is not None and p.chu != aid:
-                    continue  # đất người khác — Phase 2 mới có thuê mướn
+                if p.chu is not None and p.chu != aid and pid not in duoc_dung:
+                    continue  # đất người khác, không có quyền sử dụng
                 if pid in da_canh_tick_nay:
                     continue
                 try:
@@ -106,6 +119,7 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     * _health_mult(a.health)
                 )
                 w.ledger.sinh(aid, "thoc", san_luong, "gat", f"gặt {pid}", w.tick)
+                w.gat_tick[pid] = (aid, san_luong)
                 w.events.ghi(w.tick, "gat", id=aid, thua=pid, kg=round(san_luong, 1))
                 # homestead trên đất công
                 if p.chu is None:
@@ -174,8 +188,7 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
 
 
 def boc_hoi_cong(w: World) -> None:
-    """Công không tích trữ — bốc hơi cuối tick."""
-    for a in list(w.agents.values()):
-        sl = w.ledger.so_du(a.id, "cong")
-        if sl > 0:
-            w.ledger.huy(a.id, "cong", sl, "boc_hoi", "công bốc hơi cuối tick", w.tick)
+    """Công không tích trữ — bốc hơi cuối tick, bất kể ai đang giữ."""
+    giu_cong = [(ct, v) for (ct, ts), v in w.ledger._so_du.items() if ts == "cong" and v > 0]
+    for ct, v in giu_cong:
+        w.ledger.huy(ct, "cong", v, "boc_hoi", "công bốc hơi cuối tick", w.tick)
