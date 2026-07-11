@@ -89,7 +89,6 @@ def build_user_chung(w: World) -> str:
 
 
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
-    a = w.agents[aid]
     tai_san = w.ledger.tai_san_cua(aid)
     tai_san_str = ", ".join(f"{ts}: {sl:.0f}" for ts, sl in sorted(tai_san.items()))
     dat = sorted(p.id for p in w.parcels.values() if p.chu == aid)
