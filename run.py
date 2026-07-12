@@ -83,7 +83,8 @@ def chay_smoke(args) -> int:
     print(f"{'route':<14} {'model':<36} {'ok':<4} {'tok i/o':<10} latency")
     so_call = 0
     for tier, route in routes[:12]:
-        req = LLMRequest(prompt="Trả về đúng một mảng JSON rỗng: []", ctx={},
+        # JSON mode (PART 5.2): OpenAI json_object cần TOP-LEVEL OBJECT (không phải mảng)
+        req = LLMRequest(prompt='Trả về đúng một JSON object: {"ok": true}', ctx={},
                          tier=tier if tier.startswith("T") else "T0", batch_ids=["smoke"])
         try:
             resp = gw._goi_route(req, route, cfg.get("models.tiers.T0"))

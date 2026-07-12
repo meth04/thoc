@@ -115,9 +115,9 @@ def build_user_chung(w: World) -> str:
 
 
 SCHEMA_DAU = """[ĐỊNH DẠNG TRẢ LỜI — BẮT BUỘC]
-Trả về DUY NHẤT một MẢNG JSON (không lời dẫn, không markdown), mỗi phần tử là quyết định
-của MỘT người: {"id":"A0001","the_chinh_sach":{...tùy chọn},"hanh_dong":[...],"ly_do":"1 câu"}.
-Không hành động gì thì để "hanh_dong":[]. Mỗi người quyết định ĐỘC LẬP theo tính cách riêng.
+Trả về DUY NHẤT JSON (không lời dẫn, không markdown). Quyết định của một người có dạng:
+{"id":"A0001","the_chinh_sach":{...tùy chọn},"hanh_dong":[...],"ly_do":"1 câu"}.
+Không hành động gì thì để "hanh_dong":[]. Quyết định ĐỘC LẬP theo tính cách riêng của bạn.
 
 the_chinh_sach (thói quen tự chạy khi bạn không được hỏi — chỉ ghi trường muốn đổi):
 {"du_tru_muc_tieu":2.5,"canh_toi_da":3,"khai_go_khi_ranh":true,"hoc_khi_du_an":false,
@@ -254,7 +254,8 @@ def build_agent_prompt(w: World, aid: str, triggers: dict[str, list[str]]) -> st
     muc_xao = [MUC_HANH_DONG[i] for i in g_menu.permutation(len(MUC_HANH_DONG))]
     return f"{dau}{LUAT_VAT_LY}\n\n{chung}\n\n{rieng}\n\n{schema_quyet_dinh(muc_xao)}\n\n" \
            f"{VI_DU_QUYET_DINH}\n" \
-           f'Trả về DUY NHẤT một mảng JSON đúng 1 phần tử cho chính bạn (id "{aid}").'
+           f'Trả về DUY NHẤT một JSON object cho chính bạn (id "{aid}"): ' \
+           f'{{"id":"{aid}","hanh_dong":[...],"ly_do":"1 câu"}}.'
 
 
 def _mo_ta_clause(ck, aid: str) -> str:

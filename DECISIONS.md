@@ -159,3 +159,15 @@
   600/600 tick; fallback 0%; dân 182→259→179 (sống khỏe); 49.355 call 1-to-1 (batch_size=1);
   87/87 test; ruff sạch. Chi phí: ~82 người-nghĩ/tick × 600 = ~49k call (real sẽ nghẽn RPM —
   Bước 2 lo caching + budget per-agent).
+- 2026-07-12 (PART 5 Bước 2 — Structured Output, REPORTS.md §5.2): buộc provider trả JSON
+  hợp lệ → json_repair từ đường-chính thành lưới-an-toàn hiếm dùng (hết lỗi cú pháp).
+  - AIStudio: generationConfig.responseMimeType="application/json".
+  - NineRouter (OpenAI-compat): response_format={"type":"json_object"} (yêu cầu TOP-LEVEL
+    OBJECT — nên prompt 1-to-1 đổi từ "mảng 1 phần tử" sang MỘT JSON object; parse_batch
+    vốn đã bọc dict→[dict]). Smoke prompt cũng đổi [] → {"ok":true} cho khớp json_object.
+  - budget_guard per-agent đã có từ Bước 1. Context caching khối vật lý (~1.5k tok gửi lặp
+    mỗi call) GHI NHẬN là tối ưu chi phí về sau — chưa làm (9router có thể không hỗ trợ
+    Gemini context caching; ưu tiên đúng trước rẻ).
+  NGHIỆM THU: smoke thật ≤12 call — 8/8 route OK, mọi provider (AIStudio gemini-3.1-flash-lite
+  + 9router gc/gemini-2.5-*) chấp nhận JSON mode, trả JSON hợp lệ; FakeTransport e2e 14 test
+  xanh; 87/87 test; ruff sạch. Run 1-to-1 thật ĐẦY ĐỦ vẫn là HUMAN-GATE (tiền) — chưa kích hoạt.

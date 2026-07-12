@@ -68,8 +68,13 @@ class AIStudioProvider:
             params={"key": key},
             json={
                 "contents": [{"parts": [{"text": req.prompt}]}],
-                "generationConfig": {"temperature": temperature,
-                                     "maxOutputTokens": max_tokens},
+                "generationConfig": {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens,
+                    # JSON mode (Structured Output, PART 5.2): buộc trả JSON hợp lệ →
+                    # json_repair chỉ còn là lưới an toàn hiếm dùng, hết lỗi cú pháp
+                    "responseMimeType": "application/json",
+                },
             },
         )
         if r.status_code == 429:
@@ -125,6 +130,8 @@ class NineRouterProvider:
                 "max_tokens": max_tokens,
                 # 9router mặc định trả SSE stream kể cả khi không xin — phải tắt tường minh
                 "stream": False,
+                # JSON mode (Structured Output, PART 5.2) — OpenAI-compatible
+                "response_format": {"type": "json_object"},
             },
         )
         if r.status_code == 429:
