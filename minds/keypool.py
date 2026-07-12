@@ -83,6 +83,11 @@ class KeyPool:
     def so_key(self) -> int:
         return len(self._keys)
 
+    def key_kha_dung(self, now: float) -> list[str]:
+        """Danh sách key KHÔNG đang cooldown (thread-safe) — để tầng trên chấm điểm/giữ chỗ."""
+        with self._lock:
+            return [ts.key for ts in self._keys if ts.cooldown_den <= now]
+
     def lay_key(self, now: float) -> str | None:
         """Xoay vòng (chỉ tránh cooldown) — cho lối gọi đơn giản/nền một key."""
         with self._lock:

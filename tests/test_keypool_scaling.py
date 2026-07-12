@@ -53,6 +53,32 @@ def test_gateway_chon_key_ranh_hon_khi_mot_key_da_dung():
     assert chon is not None and chon != "gkey_0"  # chọn key rảnh hơn
 
 
+def test_giu_cho_trai_deu_khi_chon_song_song():
+    """30 lần chọn LIÊN TIẾP không release (mô phỏng 30 call ĐANG BAY cùng lúc) phải
+    TRẢI ĐỀU nhờ giữ chỗ đang-bay — không dội 1 key (chống thundering-herd)."""
+    from collections import Counter
+
+    gw = GatewayReal(load_config(), _env(15), QuotaCounter(None))
+    route = gw.routes_cua_tier("T0")[0]  # aistudio gemini-3.1-flash-lite, rpm=4/key
+    now = time.time()
+    chon = [gw._chon_key_aistudio(route, now) for _ in range(30)]
+    chon = [key_hash(k) for k in chon if k]
+    dem = Counter(chon)
+    assert len(chon) == 30                 # 15 key × rpm 4 = 60 slot ≥ 30
+    assert max(dem.values()) <= route.rpm  # KHÔNG key nào vượt RPM (trước đây 1 key ăn 28)
+    assert len(dem) >= 8                    # trải ra ≥ 8 key thay vì dồn 1
+
+
+def test_giai_phong_tra_slot():
+    gw = GatewayReal(load_config(), _env(3), QuotaCounter(None))
+    route = gw.routes_cua_tier("T0")[0]
+    now = time.time()
+    k = gw._chon_key_aistudio(route, now)
+    assert gw._dang_bay[key_hash(k)] == 1
+    gw._giai_phong(k)
+    assert gw._dang_bay[key_hash(k)] == 0
+
+
 def test_concurrency_co_gian_theo_so_key():
     cap = 48
     assert GatewayReal(load_config(), _env(2), QuotaCounter(None)).concurrency_de_xuat(cap) == 8

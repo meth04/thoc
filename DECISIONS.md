@@ -222,3 +222,13 @@
   NGHIỆM THU: 6 test (chọn rảnh nhất, bỏ key cạn/cooldown, gateway tránh key đã dùng,
   concurrency co giãn 8/44/48, an toàn luồng 8 thread×500 lần) + 103/103 test + ruff sạch +
   smoke thật 8/8 route OK với selector mới.
+- 2026-07-12 (fix bão-429 đa-key sau run thật 15 năm dừng ở tick 3): telemetry lộ rõ chỉ
+  4/15 key được dùng, lệch 28/17/3/2 call → thundering-herd. Gốc: fan-out 34 song song,
+  MỌI worker chọn key TRƯỚC khi có ai ghi nhận RPM → cùng thấy headroom bằng nhau → cùng
+  dồn 1 key (tie-break hash) → 28 call/1 key ≫ RPM 4 (gemini-3.1-flash-lite chỉ 4 RPM/key)
+  → bão 429 → cooldown lũy tiến → cạn slot → dừng êm. FIX: GIỮ CHỖ NGUYÊN TỬ — GatewayReal
+  đếm call ĐANG BAY mỗi key (_dang_bay), _chon_key_aistudio tính headroom = RPM − đã_dùng
+  − đang_bay dưới _sel_lock, +1 khi chọn, −1 (try/finally) khi call xong. Worker sau thấy
+  slot giảm → trải đều. Test: 30 chọn song song → ≥8 key, không key nào vượt RPM 4 (trước
+  1 key ăn 28). Cơ chế least-loaded + cooldown + budget_guard giữ nguyên; đây là lớp reserve
+  còn thiếu. NGHIỆM THU: 22/22 test key+provider + toàn bộ test + ruff sạch.
