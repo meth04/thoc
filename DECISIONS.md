@@ -295,3 +295,10 @@
   (GDP value-added/velocity/gini động/phi-lý-trí), Phase 2 (bầu cử/thuế/hối lộ/nghiệp đoàn/đình
   công/bạo động), Phase 3 (demographic persona + RAG get_phan_bo_cua_cai), Part 6 (system prompt
   kỷ luật, P4 sạch) — HOÀN TẤT.
+
+## 2026-07-12 — Hiệu chỉnh tần suất nghĩ vì bi kịch của cải chung (real20)
+
+| Ngày | Phase | Quyết định | Lý do |
+|---|---|---|---|
+| 2026-07-12 | run-real | `minds.nghi_dinh_ky_moi_n_tick` 1 → 4 | Run real20 với nghi_dinh_ky=1 (MỌI agent dùng LLM MỖI tick) sụp dân số 49→2 ở tick 7-9: 47 chết đói. Nguyên nhân gốc: gỡ bỏ lớp ổn định của thẻ-chính-sách (rulebot canh tác kỷ luật) → 100% agent LLM cùng "hoảng-loạn-đánh-cá" khi cạn thóc giống (188 lần đánh cá vs 15 lần canh tác ở tick 3-6) → sông cạn (tài nguyên chung logistic) → chết đói tập thể TRƯỚC khi định chế chính trị kịp hình thành. Đây là **bi kịch của cải chung THẬT** (phát hiện khoa học hợp lệ), nhưng cold-start every-agent chết quá nhanh để dùng được. nghi_dinh_ky=4 giữ ~60% agent chạy thẻ (canh tác bền) — thẻ là CƠ CHẾ HỢP LỆ, không phải "nắn kết quả". MCP vẫn cho 40% người-nghĩ deliberate sâu 1-10 lượt (tự chủ). Nghiệm: val8 (4 năm) dân 41/49 sống, thóc/người 1192 (vs 82 khi sụp). |
+| 2026-07-12 | run-real | `chinh_tri.bau_cu_moi_n_tick` 20 → 10, `nhiem_ky_tick` 20 → 10 | Bầu cử ở tick 20 quá muộn: trong run 20 năm (40 tick) chỉ kịp 2 chu kỳ, và commons sụp trước tick 20 thì chính quyền không bao giờ hình thành để điều tiết. Hạ xuống 10 tick (5 năm/nhiệm kỳ) → 4 chu kỳ bầu cử trong 20 năm, chính quyền kịp hình thành sớm để (nếu agent muốn) điều tiết đánh cá. Chỉ đổi TẦN SUẤT thể chế, không đổi AI THẮNG hay CÓ đánh thuế/nổi dậy hay không — vẫn tự phát. |

@@ -196,8 +196,8 @@ quan_he:
   nguong_xoa_canh: 0.05          # |trọng số| dưới ngưỡng → cạnh bị quên hẳn
 
 chinh_tri:                       # nhà nước TỰ PHÁT SINH — engine chỉ cấp cơ chế trung lập
-  bau_cu_moi_n_tick: 20          # chu kỳ bầu cử (10 năm); ứng cử/bỏ phiếu do agent tự phát
-  nhiem_ky_tick: 20              # nhiệm kỳ trưởng làng (bằng chu kỳ bầu → tái cử mỗi kỳ)
+  bau_cu_moi_n_tick: 10          # chu kỳ bầu cử (10 năm); ứng cử/bỏ phiếu do agent tự phát
+  nhiem_ky_tick: 10              # nhiệm kỳ trưởng làng (bằng chu kỳ bầu → tái cử mỗi kỳ)
   thue_suat_toi_da: 0.5          # trần thuế suất trưởng làng được đặt (engine cưỡng chế)
   gini_nguong_bao_dong: 0.85     # HẰNG VẬT LÝ: Gini thóc trên ngưỡng này mới có thể bạo động
   ty_le_so_dong_bao_dong: 0.3    # cần ≥30% người lớn cùng bạo động thì mới thành sung công
@@ -213,7 +213,9 @@ minds:
   dung_cong_cu_the_gioi: true   # PART 5 MCP BẬT: mỗi agent tự hỏi thế giới nhiều lượt rồi
                                 # mới quyết — call/agent LINH ĐỘNG 1..cong_cu_max_luot
   cong_cu_max_luot: 10       # trần số lượt gọi công cụ/agent/tick (LLM tự dừng khi đủ)
-  nghi_dinh_ky_moi_n_tick: 1   # 4→1: MỌI người lớn nghĩ MỖI tick (tự chủ hoàn toàn, REPORTS.md 5.1)
+  nghi_dinh_ky_moi_n_tick: 4   # 1→4: giữ ~60% agent chạy thẻ (canh tác ổn định) — every-agent
+                               # gây bi kịch commons cold-start (LLM hoảng-loạn đánh cá); MCP
+                               # vẫn cho 40% người-nghĩ deliberate sâu 1-10 lượt
   nguong_trigger_gia: 0.30
   hoi_ky_token_toi_da: 250
   gia_huan_token_toi_da: 100
