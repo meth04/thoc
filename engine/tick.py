@@ -10,9 +10,11 @@ from engine import (
     consumption,
     contracts,
     demography,
+    economy,
     education,
     market,
     metrics,
+    metrics_research,
     production,
 )
 from engine.intents import KeHoach
@@ -118,8 +120,18 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     w.gat_tick.clear()
     w.cong_dung_tick = {}
     w.kl_thanh_toan_tick = {}
+    w.settlement_fail_tick = 0  # reset đếm thất bại thanh toán mỗi tick (observation, T07)
+    w.ben_kia_tick = set()  # reset ai-qua-sông (ADR 0005) — ferry bên dưới nạp lại
     production.sinh_cong(w)
     contracts.gop_cong_dau_san_xuat(w)
+    # chi công (fiscal.bat): trưởng làng chi treasury xây thủy lợi TRƯỚC canh tác (trưởng đã
+    # có công; treasury từ các tick trước) — thủy lợi xây tick này giúp ngay vụ tick này.
+    politics.thi_hanh_chi_cong(w, ke_hoach)
+    # đò (khong_gian.bat): đóng thuyền + chở khách qua sông SAU khi công đã sinh/góp, TRƯỚC
+    # canh tác/khai thác bờ kia (khách qua rồi mới hoạt động bờ đối diện). TẮT → no-op.
+    from engine import spatial
+
+    spatial.buoc_qua_song(w, ke_hoach)
     production.thi_hanh_san_xuat(w, ke_hoach)
     # thuế SAU thu hoạch: thu theo suất trên sản lượng gặt → công quỹ → chia đều đầu người
     politics.thu_thue_va_chia(w)
@@ -204,6 +216,7 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     cn_mod.hao_thit(w)
     consumption.hao_hut_kho(w)
     consumption.an_va_suc_khoe(w)
+    consumption.dich_benh(w)
 
     # 9. nhan_khau (ghi lại người chết tick này cho điều kiện sự kiện tick sau)
     truoc = {aid for aid, a in w.agents.items() if not a.con_song}
@@ -220,12 +233,32 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     production.phuc_hoi_dat(w)
     xa_hoi.decay_quan_he(w)
     production.boc_hoi_cong(w)
+    # thủy lợi công hao mòn cuối tick (fiscal.bat) — SINK đã đăng ký, có event; TẮT → no-op
+    politics.hao_mon_thuy_loi(w)
     # bạo động: cơ chế trung lập — sung công + chia lại QUA LEDGER khi Gini quá ngưỡng
     # VÀ đủ số đông bạo động (chuyển CÂN nên audit vẫn xanh)
     politics.buoc_bao_dong(w, ke_hoach)
     audit.kiem_toan_the_gioi(w, tong_thua_ban_dau)
     research_mod.cap_nhat_san_tier(w)
     m = metrics.buoc_ket_toan(w)
+    # Metric nghiên cứu T04–T08 (Lớp-5 quan sát): CHỈ ĐỌC world SAU audit, KHÔNG vào
+    # world_hash (chỉ nằm trong m/metrics_lich_su) — không đổi determinism/replay.
+    m["research"] = metrics_research.research_metrics(w)
+    # poverty_streak (observation state, T04 ADR 0003 §E): cập nhật SAU audit + SAU
+    # metrics_research. Streak = số tick LIÊN TIẾP food_security<1 per hộ-head; reset 0 khi
+    # đủ ăn. KHÔNG vào world_hash (engine không đọc lại → không đụng determinism). Head mới
+    # → bắt đầu 0; head biến mất (hộ tan/chết) → dọn khỏi dict. Giá trị research surface phản
+    # ánh streak tới HẾT tick TRƯỚC (lag 1 tick — đúng bản chất state đóng sổ cuối ket_toan).
+    heads_song: set[str] = set()
+    for row in sorted(economy.household_snapshot(w), key=lambda r: r["head"]):
+        head = str(row["head"])
+        heads_song.add(head)
+        if float(row["food_security"]) < 1.0:
+            w.poverty_streak[head] = w.poverty_streak.get(head, 0) + 1
+        else:
+            w.poverty_streak[head] = 0
+    for head in [h for h in w.poverty_streak if h not in heads_song]:
+        del w.poverty_streak[head]
     m["kl_cho"] = round(kl_cho, 3)
     m["kl_giao_dich"] = round(kl_cho + getattr(w, "kl_hd_tick", 0.0), 3)
     hieu_luc = [h for h in w.hop_dong.values() if h.trang_thai == "hieu_luc"]

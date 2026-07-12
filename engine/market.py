@@ -93,8 +93,11 @@ def _khop_mot_so_lenh(
                     )
                 )
                 tong_khop += khop
+                # `lang` = sổ lệnh (làng) khớp lệnh — cho phép observatory/analysis đo
+                # phân tán giá GIỮA LÀNG offline (ADR 0003 §D đường D1). Chỉ thêm field
+                # event journal; KHÔNG đụng world_hash/logic khớp/Lenh/gia_lich_su.
                 w.events.ghi(w.tick, "khop_cho", tai_san=tai_san, thanh_toan=thanh_toan,
-                             mua=nguoi_mua, ban=nguoi_ban, sl=round(khop, 3),
+                             lang=lang, mua=nguoi_mua, ban=nguoi_ban, sl=round(khop, 3),
                              gia=round(p_sao, 3))
                 # thu nhập người bán + khối lượng theo phương tiện thanh toán (quy thóc)
                 gia_tt = 1.0 if thanh_toan == "thoc" else (w.gia_gan_nhat(thanh_toan) or 0.0)
@@ -114,7 +117,9 @@ def _khop_mot_so_lenh(
                         nguoi_mua, nguoi_ban,
                         float(w.cfg.get("quan_he.cong_moi_tuong_tac")))
             except LoiSoKep:
-                pass  # bên nào thiếu (đặt lệnh quá tay) → phần khớp đó bỏ
+                # bên nào thiếu (đặt lệnh quá tay) → phần khớp đó bỏ. CHỈ đếm quan sát
+                # (observation state, ngoài world_hash) — KHÔNG đổi hành vi khớp lệnh.
+                w.settlement_fail_tick += 1
         con_mua[i] -= khop
         con_ban[j] -= khop
         if con_mua[i] <= 1e-9:
@@ -138,6 +143,23 @@ def _lang_cua(w, aid: str) -> int:
     return a.lang if a is not None else 0  # entity: chợ làng 0 (làng lập entity)
 
 
+def _toi_duoc_cho(w, aid: str, lang_cho: int) -> bool:
+    """Người đặt lệnh có tới được chợ ``lang_cho``? (ADR 0005 §2.2: sông chặn liên bờ.)
+
+    TẮT không_gian ⇒ luôn True (không rào). BẬT ⇒ chợ bờ đối diện chỉ tới được khi đã qua
+    đò tick này (``ben_kia_tick``) hoặc tự sở hữu thuyền — nếu không, HÀNG kẹt bờ (bỏ lệnh,
+    không âm sổ, không teleport). Đơn-bờ (một làng bờ dân cư) ⇒ inert.
+    """
+    from engine.spatial import _hai_bo_bat, co_the_o_bo
+
+    if not _hai_bo_bat(w) or not (0 <= lang_cho < len(w.villages)):
+        return True
+    v = w.villages[lang_cho]
+    p = w.parcels.get(f"P{v.r:02d}_{v.c:02d}")
+    bo_cho = p.bo if p is not None else None
+    return co_the_o_bo(w, aid, bo_cho) or w.ledger.so_du(aid, "thuyen") >= 1.0
+
+
 def phien_cho(w, lenh_tick: list[Lenh]) -> float:
     """Bước 6: MỖI LÀNG một chợ — gom lệnh theo (làng, tài sản, thanh toán), khớp từng sổ.
 
@@ -152,6 +174,8 @@ def phien_cho(w, lenh_tick: list[Lenh]) -> float:
             continue
         lang = le.lang if le.lang is not None else _lang_cua(w, le.ai)
         if not (0 <= lang < len(w.villages)):
+            continue
+        if not _toi_duoc_cho(w, le.ai, lang):  # chợ bờ kia không đò ⇒ hàng kẹt bờ
             continue
         mua, ban = cap.setdefault((lang, le.tai_san, le.thanh_toan), ([], []))
         (mua if le.chieu == "mua" else ban).append(le)
@@ -202,6 +226,17 @@ def phien_dat(w, niem_yet: dict[str, NiemYetDat], tra_gia: list[tuple[str, str, 
             p.chu = ai
             p.homestead_ai, p.homestead_dem = None, 0
             del niem_yet[thua]
+            # Metric kiểm định vốn hóa đất: ghi năng suất vật chất *trước* khi đổi chủ.
+            # Không dùng nó để đặt giá hay chấp nhận bid.
+            from engine.economy import expected_parcel_net_output
+
+            w.giao_dich_dat.append({
+                "tick": w.tick,
+                "parcel": thua,
+                "price": float(gia),
+                "expected_net_output": expected_parcel_net_output(w, thua),
+                "fertility": float(p.mau_mo),
+            })
             w.ghi_gia("dat", gia, 1.0, "thoc")
             w.events.ghi(w.tick, "ban_dat", thua=thua, tu=ny.chu, den=ai, gia=gia)
             w.ghi_ky_uc(ny.chu, f"tôi bán thửa {thua} được {gia:.0f}kg thóc", doi=True)

@@ -95,7 +95,9 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
     if the.nguong_rao_dat is not None and an_ninh < the.nguong_rao_dat:
         ruong = bc.ruong_cua.get(aid, ())
         if len(ruong) >= 2:
-            gia_dat = w.gia_gan_nhat("dat") or 600.0
+            from engine.economy import expected_land_value
+
+            gia_dat = expected_land_value(w, ruong[-1].id)
             kh.niem_yet_dat.append((ruong[-1].id, round(gia_dat, 0)))
 
     # phụng dưỡng cha mẹ già thiếu ăn (thẻ mặc định bật)

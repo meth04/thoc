@@ -20,6 +20,7 @@ from minds.policy_cards import thi_hanh_the
 from minds.prompts import build_agent_prompt
 from minds.providers_real import LoiHetQuota, che_key
 from minds.repair import parse_batch
+from minds.safety import ap_dung_san_an_toi_thieu
 from minds.schemas import TheChinhSach, ap_patch
 from minds.translate import quyet_dinh_thanh_ke_hoach
 from minds.triggers import quet_trigger
@@ -170,6 +171,11 @@ class MindMock:
 
         # --- entity: việc thường nhật chạy MỖI tick (thẻ của pháp nhân) ---
         bo_sung_ke_hoach_entity(w, ke_hoach, bc, da_nham)
+
+        # Survival floor công khai: bổ sung một vụ canh khả thi cho hộ chưa có kế hoạch
+        # sinh kế khi kho xuống dưới ngưỡng config. Cần chạy SAU LLM/thẻ để không thay
+        # thế lựa chọn tự nguyện, chỉ lấp một ràng buộc vật chất bị bỏ quên.
+        ap_dung_san_an_toi_thieu(w, ke_hoach, bc, da_nham)
 
         # --- nén hồi ký mỗi 4 tick (mock nén — heuristic, vẫn log call) ---
         if w.tick % 4 == 0:

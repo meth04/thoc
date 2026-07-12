@@ -3,6 +3,13 @@
 thiết kế. Code mâu thuẫn SPEC → SPEC thắng. SPEC im lặng → chọn phương án đơn giản nhất đúng
 nguyên tắc tự phát, ghi DECISIONS.md.*
 
+> **⚠️ SUPERSEDED một phần (2026-07-12).** Xem `docs/MODEL_CHARTER.md` + `docs/adr/0001`.
+> Các quyết định §0 bị điều chỉnh: row 1 ("không nhà nước") và row 9 ("engine không chứa định
+> chế có tên") → nay là *cổng định chế minh bạch* + scenario-gate (ADR §B/§C); row 10 (hiệu
+> chỉnh tới nhãn công-nghiệp-hóa 160–280) → **không còn là tiêu chí khoa học** (ADR §E). Phần
+> vật lý/hợp đồng/ledger/replay/observatory vẫn hiệu lực. `preindustrial_closed_v1` giữ SPEC
+> này làm legacy; `agrarian_transition_v1` theo charter.
+
 ## 0. Quyết định đã chốt
 
 | # | Quyết định |
@@ -16,7 +23,7 @@ nguyên tắc tự phát, ghi DECISIONS.md.*
 | 7 | Run đối chứng rule-bot cùng seed. |
 | 8 | `.env`: `GEMINI-API-KEY-1..n` + `NINE_ROUTER_*`. `LLM_MODE=mock` mặc định; mock hoàn hảo trước khi call thật. |
 | 9 | **Nguyên tắc tự phát triệt để**: engine chỉ có VẬT LÝ + 3 NGUYÊN TỐ (hợp đồng, pháp nhân, sáng chế). Mọi định chế — ngân hàng, doanh nghiệp, bảo hiểm, thị trường cổ phần, "công nghiệp hóa" — chỉ tồn tại như NHÃN do đài quan sát dán lên cấu trúc đo được. Engine không được chứa định chế có tên. |
-| 10 | Công nghiệp hóa là kết quả MONG ĐỢI chứ không bảo đảm: hiệu chỉnh `research.yaml` bằng mock (miễn phí) để seed trung vị đạt nhãn trong khoảng năm 160–280. Xã hội thất bại công nghiệp hóa là một phát hiện hợp lệ. |
+| 10 | Công nghiệp hóa là kết quả MONG ĐỢI chứ không bảo đảm: ~~hiệu chỉnh `research.yaml` bằng mock để seed trung vị đạt nhãn trong khoảng năm 160–280~~ **(SUPERSEDED — ADR 0001 §E: KHÔNG còn là tiêu chí khoa học; chỉ là legacy regression label trên `preindustrial_closed_v1`, không áp cho `agrarian_transition_v1`)**. Xã hội thất bại công nghiệp hóa là một phát hiện hợp lệ. |
 | 11 | Model routes thật (mục 4.1): T0 gemma-4-31b-it (key); T1 gemini-3.1-flash-lite (key, tràn sang gc/…-preview qua 9router); T2 gc/gemini-2.5-flash; T3 gc/gemini-2.5-pro; T4 gc/gemini-3-flash-preview. |
 
 Sản phẩm: (a) thống kê phân bố tài sản theo giai cấp qua 300 năm (giai cấp = nhãn tính từ số

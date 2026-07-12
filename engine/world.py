@@ -56,6 +56,8 @@ class World:
     parcels: dict[str, Parcel] = field(default_factory=dict)
     villages: list[Village] = field(default_factory=list)
     thoi_tiet_nam: dict[int, str] = field(default_factory=dict)  # năm → loại
+    dich_benh_nam: dict[int, bool] = field(default_factory=dict)  # năm → có dịch hay không
+    dich_benh_tick: bool = False
     _next_id: int = 0
     events: EventLog = field(default_factory=lambda: EventLog(None))
     metrics_lich_su: list[dict[str, Any]] = field(default_factory=list)
@@ -76,6 +78,8 @@ class World:
     gat_tick: dict[str, tuple[str, float]] = field(default_factory=dict)  # thửa → (ai, kg)
     yeu_cau_rut_tick: dict[tuple[str, str], float] = field(default_factory=dict)
     niem_yet_dat: dict = field(default_factory=dict)  # thua → NiemYetDat
+    # giao dịch đất đã khớp kèm năng suất kỳ vọng lúc bán; chỉ metric/analysis đọc.
+    giao_dich_dat: list[dict] = field(default_factory=list)
     chet_tick_truoc: set[str] = field(default_factory=set)
     unrecognized_path: Path | None = None
     # kho trạng thái của tầng minds (engine không đọc — chỉ mang theo checkpoint)
@@ -105,6 +109,17 @@ class World:
     cong_dung_tick: dict[str, float] = field(default_factory=dict)
     cong_dung_4: list = field(default_factory=list)  # cửa sổ 4 tick (mùa mưa+khô)
     kl_thanh_toan_4: list = field(default_factory=list)
+    # ---- observation state (Lớp-5, ADR 0003 §E + 0004 §T07 C): KHÔNG vào world_hash ----
+    # poverty_streak: số tick LIÊN TIẾP food_security<1 per hộ-head (T04). settlement_fail_tick:
+    # số lần LoiSoKep bị nuốt ở khớp chợ trong tick (T07). Engine KHÔNG đọc lại hai field này
+    # ⇒ không ảnh hưởng hành vi ⇒ NGOÀI hash; nhưng vào pickle checkpoint + migration.
+    poverty_streak: dict[str, int] = field(default_factory=dict)
+    settlement_fail_tick: int = 0
+    # ben_kia_tick (ADR 0005 §2.3): tập agent ĐÃ QUA SÔNG tick này (trả phí đò thành công
+    # hoặc tự chèo thuyền). Transient — reset đầu pha sản xuất, KHÔNG vào world_hash (như
+    # settlement_fail_tick); các pha sau đọc để biết ai được hoạt động bờ đối diện. Không
+    # teleport: không có chuyến ⇒ không vào set ⇒ kẹt bờ cư trú.
+    ben_kia_tick: set[str] = field(default_factory=set)
 
     def ghi_thu_nhap(self, aid: str, nguon: str, quy_thoc: float) -> None:
         if quy_thoc <= 0:
@@ -133,6 +148,23 @@ class World:
     def mua_mua(self, tick: int | None = None) -> bool:
         t = self.tick if tick is None else tick
         return t % 2 == 1
+
+    def co_dich_benh(self, tick: int | None = None) -> bool:
+        """Cú sốc dịch bệnh theo năm, tắt mặc định và tất định theo seed.
+
+        Cấu hình scenario quyết định có bật, xác suất và cường độ; engine không suy
+        luận dịch từ kết quả kinh tế. Trạng thái cache vào world để checkpoint/replay
+        không phụ thuộc thứ tự gọi RNG.
+        """
+        t = self.tick if tick is None else tick
+        disease = self.cfg.get("cu_soc.dich_benh")
+        if not bool(disease["bat"]):
+            return False
+        year = t // 2
+        if year not in self.dich_benh_nam:
+            g = self.rng.get("dich_benh", year)
+            self.dich_benh_nam[year] = bool(g.random() < float(disease["xac_suat_moi_nam"]))
+        return self.dich_benh_nam[year]
 
     def chu_the_hoat_dong(self, cid: str) -> bool:
         """Người còn sống hoặc entity còn hoạt động."""
@@ -371,6 +403,24 @@ class World:
             w.chinh_quyen = None
         if not hasattr(w, "so_bao_dong_tick"):
             w.so_bao_dong_tick = 0
+        if not hasattr(w, "giao_dich_dat"):
+            w.giao_dich_dat = []
+        if not hasattr(w, "dich_benh_nam"):
+            w.dich_benh_nam = {}
+        if not hasattr(w, "dich_benh_tick"):
+            w.dich_benh_tick = False
+        # migration: observation state (ngoài hash) — checkpoint cũ thiếu → default an toàn
+        if not hasattr(w, "poverty_streak"):
+            w.poverty_streak = {}
+        if not hasattr(w, "settlement_fail_tick"):
+            w.settlement_fail_tick = 0
+        # migration ADR 0005: bờ sông (static) + qua-sông transient — checkpoint cũ (OFF)
+        # nạp lại ⇒ field trung tính ⇒ replay + world_hash bất biến (§11.3)
+        if not hasattr(w, "ben_kia_tick"):
+            w.ben_kia_tick = set()
+        for p in w.parcels.values():
+            if not hasattr(p, "bo"):
+                p.bo = None
         return w
 
 
@@ -418,12 +468,39 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("nha", "xay", "nguon")
     f.dang_ky("may", "che_tac", "nguon")
     f.dang_ky("may", "hao_mon", "sink")
+    # tài khóa (fiscal.bat) — thủy lợi là TÀI SẢN của CONG_QUY, chỉ dùng khi bật; đăng ký
+    # vô điều kiện KHÔNG đổi hash (registry không vào world_hash; luồng không dùng → không tích lũy)
+    f.dang_ky("thoc", "chi_cong", "sink")        # thóc treasury tiêu để xây thủy lợi
+    f.dang_ky("go", "chi_cong", "sink")          # gỗ trưởng làng góp vào công trình
+    f.dang_ky("cong", "chi_cong", "sink")        # công trưởng làng góp vào công trình
+    f.dang_ky("thuy_loi", "chi_cong", "nguon")   # thủy lợi được xây (đối ứng thóc/gỗ/công)
+    f.dang_ky("thuy_loi", "hao_mon", "sink")     # thủy lợi hao mòn mỗi tick
+    # đò (khong_gian.bat) — thuyền là TÀI SẢN (recipe công+gỗ), phí đò = chuyen CÂN (không
+    # mint tiền công). Đăng ký vô điều kiện KHÔNG đổi hash (không dùng → không tích lũy)
+    f.dang_ky("thuyen", "dong_thuyen", "nguon")  # đóng thuyền (đối ứng công/gỗ)
+    f.dang_ky("thuyen", "hao_mon_thuyen", "sink")  # thuyền hao mòn mỗi tick vận hành
 
 
 def _ca_suc_chua(w: World) -> float:
     """Sức chứa trữ lượng cá của sông (K) = số ô sông × sức chứa mỗi ô."""
     so_o = sum(1 for p in w.parcels.values() if p.loai == "song")
     return so_o * float(w.cfg.get("danh_ca.suc_chua_moi_o_kg"))
+
+
+def _endowment_t0_kg(cfg: Config, la_nguoi_lon: bool) -> float:
+    """Tồn kho thóc t0 mỗi thành viên. OFF (mặc định) ⇒ ``thoc_moi_nguoi`` PHẲNG (200 kg
+    legacy). ON (``khong_gian.endowment.bat``, ADR 0005 §7) ⇒ một-NĂM khẩu phần
+    food-equivalent quy từ ``nhu_cau``×(tick/năm) theo tuổi (design_assumption) — là tồn kho
+    THẬT (giữ/tiêu/bán/vay được), KHÔNG food-mint sau tick 0 (chỉ luồng ``khoi_tao`` t0)."""
+    kt = cfg.raw()["khoi_tao"]
+    if not bool(cfg.get("khong_gian.endowment.bat", False)):
+        return float(kt["thoc_moi_nguoi"])
+    tick_moi_nam = 12.0 / float(cfg.get("thoi_gian.thang_moi_tick"))
+    theo_tuoi = bool(cfg.get("khong_gian.endowment.food_equiv_theo_tuoi", True))
+    kg_tick = (float(cfg.get("nhu_cau.nguoi_lon_kg_tick"))
+               if (la_nguoi_lon or not theo_tuoi)
+               else float(cfg.get("nhu_cau.tre_em_kg_tick")))
+    return kg_tick * tick_moi_nam
 
 
 def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> World:
@@ -441,6 +518,7 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
     kt = cfg.raw()["khoi_tao"]
     p_min, p_max = int(kt["persona_min"]), int(kt["persona_max"])
     nguong_e1, nguong_e2 = (float(x) for x in kt["phan_bo_e"])
+    tuoi_tt = int(cfg.get("nhan_khau.tuoi_truong_thanh"))
     for i in range(n):
         aid = w.id_moi()
         gioi = "nu" if g.random() < ty_le_nu else "nam"
@@ -457,7 +535,7 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
             lang=0,
             e_bac=e0,
         )
-        w.ledger.sinh(aid, "thoc", float(kt["thoc_moi_nguoi"]), "khoi_tao",
-                      "tài sản khởi đầu", tick=0)
+        endow = _endowment_t0_kg(cfg, w.agents[aid].truong_thanh(tuoi_tt))
+        w.ledger.sinh(aid, "thoc", endow, "khoi_tao", "tài sản khởi đầu", tick=0)
         w.events.ghi(0, "sinh", id=aid, ten=w.agents[aid].ten, khoi_tao=True)
     return w

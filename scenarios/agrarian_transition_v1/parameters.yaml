@@ -1,0 +1,16 @@
+# parameters.yaml — overlay ghi đè config/world.yaml cho agrarian_transition_v1.
+# Ghép qua deep_merge (engine/config.py): dict ghép theo khóa, list/scalar thay trọn.
+# NGUYÊN TẮC: chỉ override khi có LÝ DO tường minh; không override để "ép" kết quả đẹp.
+# Nếu không chắc một giá trị nào, ĐỪNG override — kế thừa nguyên gốc từ world.yaml.
+#
+# Track này chỉ đặt MỘT override có chủ đích: tắt tầng chính trị/bạo động mặc định.
+# Mọi tham số kinh tế khác (sản xuất, thời tiết, nhân khẩu, đất, hành vi) KẾ THỪA gốc để
+# scenario không âm thầm khác cấu hình đã công bố.
+
+chinh_tri:
+  # ADR 0001 §C (anti-teleology): tầng chính trị/bạo động/thuế Gini-gate TẮT mặc định ở
+  # track này. Ngưỡng Gini không được TRỰC TIẾP gây tịch thu/tái phân phối; chỉ bật lại
+  # như experimental_treatment (T08) có action + tham gia tập thể + chi phí + đường kế toán.
+  # Flag `bat` do engine-surgeon thêm song song (T08); nếu chưa có trong engine, overlay vẫn
+  # là YAML hợp lệ và không đổi hành vi replay của preindustrial_closed_v1 (mặc định giữ nguyên).
+  bat: false

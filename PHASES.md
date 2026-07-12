@@ -4,6 +4,12 @@ Quy tắc: làm tuần tự; kết thúc phase = chạy ĐỦ lệnh nghiệm th
 commit `phase-N: ...`. Mọi lệnh qua conda env `thoc-env`. `--fast` tắt latency mock.
 Chỉ 2 HUMAN-GATE (trước call thật quy mô).
 
+> **⚠️ SUPERSEDED một phần (2026-07-12).** Đây là lộ trình xây dựng *legacy* (Phase 0–8) và đã
+> hoàn tất tới mock (xem PROGRESS.md). Phiên nghiên cứu hiện tại theo `TASKS.md` (T00–T12) và
+> `docs/MODEL_CHARTER.md`. Cụ thể: tiêu chí "hiệu chỉnh median công-nghiệp-hóa 160–280" ở Phase
+> 4 KHÔNG còn là tiêu chí khoa học (ADR 0001 §E) — giữ như legacy regression label. Không chạy
+> Phase 5–8 (provider/real/pilot) trong phiên nghiên cứu không-mạng.
+
 ---
 
 ## Phase 0 — Khung xương, sổ kép, FlowRegistry
@@ -74,10 +80,11 @@ di chúc LLM + gia huấn; di cư; observatory (nhãn định chế 9.2 + milest
 - (d) blueprint `che_bien` → hàng mới có tên xuất hiện, được mua bán, hiệu ứng đúng;
 - (e) hợp đồng dieu_kien_su_kien (mất mùa → bồi thường) chi trả đúng khi hạn hán → nhãn
   `bao_hiem` khi đủ 5 hợp đồng.
-- **Hiệu chỉnh:** chạy mock 300 năm với seeds {41..45} (--fast): seed TRUNG VỊ đạt nhãn
-  `cong_nghiep_hoa` trong năm [160, 280]. Chưa đạt → CHỈ chỉnh `research.yaml`/giá máy
-  (không sửa hành vi bot để ép), ghi DECISIONS.md, chạy lại. Xuất
-  `reports/calibration.md`: năm đạt nhãn từng seed + phân bố mô-típ hợp đồng.
+- **Hiệu chỉnh:** ~~chạy mock 300 năm với seeds {41..45} (--fast): seed TRUNG VỊ đạt nhãn
+  `cong_nghiep_hoa` trong năm [160, 280]~~ **(SUPERSEDED — ADR 0001 §E: KHÔNG còn là tiêu chí
+  khoa học; chỉ giữ như legacy regression label, không áp cho `agrarian_transition_v1`)**.
+  Chưa đạt → CHỈ chỉnh `research.yaml`/giá máy (không sửa hành vi bot để ép), ghi DECISIONS.md,
+  chạy lại. Xuất `reports/calibration.md`: năm đạt nhãn từng seed + phân bố mô-típ hợp đồng.
 - mock300 full-feature: audit xanh; milestones không rỗng; `tools/analyze` ra ma trận dịch
   chuyển giai cấp + wealth-share + thu nhập theo tier.
 

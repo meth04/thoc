@@ -1,0 +1,3 @@
+# Để trống có chủ ý: chưa có calibration với dữ liệu thực chứng.
+# Khi thêm target, ghi rõ statistic, đơn vị, thời gian, nguồn và trọng số loss.
+targets: []

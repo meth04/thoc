@@ -118,3 +118,20 @@ def an_va_suc_khoe(w: World) -> None:
                 w.agents[m].health = max(
                     0.0, w.agents[m].health - sk["mat_khi_vo_gia_cu_mua_mua"]
                 )
+
+
+def dich_benh(w: World) -> None:
+    """Áp cú sốc dịch bệnh đã được scenario kích hoạt trước bước tử vong.
+
+    Cú sốc tác động sức khỏe chứ không tạo/hủy tài sản, vì vậy không đi qua ledger.
+    Event ghi một lần mỗi năm để đối chiếu với dữ liệu dịch bệnh khi scenario có nguồn.
+    """
+    w.dich_benh_tick = w.co_dich_benh()
+    if not w.dich_benh_tick:
+        return
+    loss = float(w.cfg.get("cu_soc.dich_benh.mat_suc_khoe_moi_tick"))
+    for agent in w.agents.values():
+        if agent.con_song:
+            agent.health = max(0.0, agent.health - loss)
+    if w.mua_mua():
+        w.events.ghi(w.tick, "dich_benh", mat_suc_khoe=loss)

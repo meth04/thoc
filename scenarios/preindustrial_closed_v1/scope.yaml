@@ -1,0 +1,16 @@
+name: preindustrial_closed_v1
+scope: >-
+  Thế giới giả định gồm một cộng đồng nông nghiệp tiền công nghiệp, khép kín một phần.
+  Đây là benchmark cơ chế, không đại diện trực tiếp cho một địa phương hay quốc gia lịch sử.
+unit_of_analysis: hộ gia đình và cá nhân trong một cộng đồng có đất hữu hạn
+period: 300 năm mô phỏng, mỗi tick tương đương 6 tháng
+boundaries:
+  geography: bản đồ nội sinh 30×30, một hoặc nhiều làng hình thành từ di cư
+  trade: chỉ thương mại nội bộ; chưa có thị trường ngoại vùng
+  money: xu hàng hóa; chưa mô hình hóa ngân hàng hay tiền pháp định
+  institutions: quyền đất, hợp đồng, pháp nhân và chính trị là các cơ chế nội sinh/treatment
+exclusions:
+  - Không dùng để dự báo GDP, lạm phát hay chính sách tiền tệ của nền kinh tế hiện đại.
+  - Không có dịch bệnh, chiến tranh, ngoại thương hoặc chuỗi cung ứng toàn cầu.
+  - Không được diễn giải là tái dựng lịch sử Việt Nam nếu chưa có dữ liệu và scenario riêng.
+validation_tier: mechanism_benchmark

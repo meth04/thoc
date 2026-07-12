@@ -1,13 +1,15 @@
 """tools/analyze — ma trận dịch chuyển giai cấp, β thừa kế, kỷ lục, PNGs (SPEC 9.4).
 
   python -m tools.analyze mock300
-→ reports/final_analysis.md + reports/*.png
+→ data/runs/mock300/reports/final_analysis.md + PNG cùng run
+
+Thêm ``--global`` chỉ khi cần bản sao tiện xem ở reports/final_analysis_<run>.md.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -97,8 +99,8 @@ def beta_thua_ke(sinh, snapshots) -> tuple[float, int]:
     return float(np.polyfit(x, y, 1)[0]), len(x)
 
 
-def ve_bieu_do(metrics, run: str) -> list[str]:
-    REPORT_DIR.mkdir(exist_ok=True)
+def ve_bieu_do(metrics, run: str, output_dir: Path) -> list[str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
     files = []
     nam = [m["nam"] for m in metrics]
 
@@ -114,7 +116,7 @@ def ve_bieu_do(metrics, run: str) -> list[str]:
     axes[1][1].plot(nam, [m.get("tri_thuc", 0) for m in metrics])
     axes[1][1].set_title("Tri thức")
     fig.tight_layout()
-    f1 = REPORT_DIR / f"{run}_tong_quan.png"
+    f1 = output_dir / f"{run}_tong_quan.png"
     fig.savefig(f1, dpi=110)
     plt.close(fig)
     files.append(f1.name)
@@ -126,19 +128,19 @@ def ve_bieu_do(metrics, run: str) -> list[str]:
     ax.stackplot(nam, dem.T, labels=cac_gc)
     ax.legend(loc="upper left", fontsize=7, ncols=4)
     ax.set_title("Cơ cấu giai cấp theo thời gian (số người)")
-    f2 = REPORT_DIR / f"{run}_giai_cap.png"
+    f2 = output_dir / f"{run}_giai_cap.png"
     fig.savefig(f2, dpi=110)
     plt.close(fig)
     files.append(f2.name)
     return files
 
 
-def main() -> int:
-    run = sys.argv[1]
+def analyze_run(run: str, output_dir: Path) -> Path:
+    """Phân tích một run vào thư mục riêng; không đè output của run khác."""
     metrics, sinh, snapshots, milestones, chronicles = doc_run(run)
     mt, n_mt = ma_tran_dich_chuyen(sinh, snapshots)
     beta, n_beta = beta_thua_ke(sinh, snapshots)
-    pngs = ve_bieu_do(metrics, run)
+    pngs = ve_bieu_do(metrics, run, output_dir)
     cuoi = metrics[-1]
 
     lines = [f"# Phân tích cuối run `{run}`", ""]
@@ -164,11 +166,30 @@ def main() -> int:
         lines.append(f"> {ch['van']}")
         lines.append("")
     lines += ["## Biểu đồ", ""] + [f"![{p}]({p})" for p in pngs]
-    ra = REPORT_DIR / "final_analysis.md"
+    ra = output_dir / "final_analysis.md"
     ra.write_text("\n".join(lines), encoding="utf-8")
-    print(f"[xong] {ra} + {len(pngs)} PNG")
+    return ra
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Phân tích một run THÓC mà không ghi đè run khác")
+    parser.add_argument("run")
+    parser.add_argument("--output-dir", type=Path,
+                        help="thư mục output tùy chọn; mặc định là data/runs/<run>/reports")
+    parser.add_argument("--global", dest="global_output", action="store_true",
+                        help="sao chép tiện xem vào reports/final_analysis_<run>.md")
+    args = parser.parse_args(argv)
+    output_dir = args.output_dir or DATA_DIR / args.run / "reports"
+    ra = analyze_run(args.run, output_dir)
+    if args.global_output:
+        REPORT_DIR.mkdir(exist_ok=True)
+        global_path = REPORT_DIR / f"final_analysis_{args.run}.md"
+        global_path.write_text(ra.read_text(encoding="utf-8"), encoding="utf-8")
+        print(f"[xong] {ra} + bản sao {global_path}")
+    else:
+        print(f"[xong] {ra}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

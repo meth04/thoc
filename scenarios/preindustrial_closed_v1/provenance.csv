@@ -1,0 +1,4 @@
+parameter,unit,status,source,notes
+san_xuat.san_luong_goc_kg,kg/thửa/vụ,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa phương lịch sử.
+thoi_gian.thoi_tiet,probability/năm,design_assumption,,Phân phối cú sốc benchmark nội bộ.
+nhan_khau.sinh_san.p_goc,probability/tick,design_assumption,,Chưa là ước lượng nhân khẩu học.

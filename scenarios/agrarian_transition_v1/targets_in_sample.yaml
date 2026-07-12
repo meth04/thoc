@@ -1,0 +1,5 @@
+# RỖNG CÓ CHỦ ĐÍCH: agrarian_transition_v1 là mechanism_benchmark — CHƯA có dữ liệu thực
+# chứng để hiệu chuẩn in-sample. Không được coi bất kỳ output mô hình nào là target khi
+# chưa có nguồn + holdout split (MODEL_CHARTER §2, ADR 0001 §Compliance).
+# Khi thêm target: ghi rõ id, metric, tick/year, unit, source, expected hoặc [lower, upper], weight.
+targets: []

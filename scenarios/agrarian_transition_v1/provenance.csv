@@ -1,0 +1,7 @@
+parameter,unit,status,source,notes
+san_xuat.san_luong_goc_kg,kg/thửa/vụ,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa bàn/thời đoạn.
+san_xuat.giong_kg_moi_thua,kg/thửa/vụ,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa bàn/thời đoạn.
+thoi_gian.thoi_tiet.han_lu.p,probability/tick,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa bàn/thời đoạn.
+nhan_khau.sinh_san.p_goc,probability/tick,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa bàn/thời đoạn.
+ban_do.ty_le_ruong,ratio,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa bàn/thời đoạn.
+hanh_vi.dat_dai.chiet_khau_moi_tick,discount rate/tick,design_assumption,,Cần thay bằng nguồn dữ liệu khi chọn địa bàn/thời đoạn.

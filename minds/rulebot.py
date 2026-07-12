@@ -24,6 +24,7 @@ from engine.contracts import (
 from engine.demography import can_huyet
 from engine.intents import KeHoach
 from engine.market import Lenh
+from engine.spatial import _bo_cua, _hai_bo_bat
 from engine.world import World
 
 
@@ -34,7 +35,12 @@ class _BoiCanhTick:
         self.ruong_cua: dict[str, list] = {}
         self.homestead_cua: dict[str, list] = {}
         dat_cong = []
+        # bờ nào CÒN tài nguyên công chưa khai (rừng/đồi/mỏ chủ None) — động cơ qua sông
+        # (ADR 0005 §9). OFF ⇒ mọi p.bo None ⇒ set rỗng ⇒ nhánh không-gian không kích hoạt.
+        self.tai_nguyen_bo: set[str] = set()
         for p in w.parcels.values():
+            if p.bo is not None and p.chu is None and p.loai in ("rung", "doi", "mo_dong"):
+                self.tai_nguyen_bo.add(p.bo)
             if p.loai != "ruong":
                 continue
             if p.chu is not None:
@@ -305,7 +311,74 @@ def ke_hoach_mot_nguoi(
 
         # ---- phụng dưỡng cha mẹ già + chăn nuôi + đánh cá + tiệc + đường cùng ----
         _phung_duong_va_chan_nuoi(w, a, kh, g, an_ninh, bc)
+
+        # ---- Không gian (ADR 0005 §9): đò-dịch-vụ + qua sông khai thác bờ hoang ----
+        # Gác ``_hai_bo_bat``: TẮT (mặc định) ⇒ KHÔNG chạy, KHÔNG tiêu RNG ⇒ hành vi +
+        # world-hash legacy y nguyên; chỉ BẬT overlay hai bờ mới thêm hành vi không-gian.
+        if _hai_bo_bat(w):
+            hanh_vi_khong_gian(w, a, kh, bc, an_ninh)
     return kh
+
+
+def hanh_vi_khong_gian(w: World, a, kh: KeHoach, bc: _BoiCanhTick, an_ninh: float) -> None:
+    """ADR 0005 §9 (Lớp-4): đò là DỊCH VỤ + qua sông khai thác bờ hoang. CHỈ gọi khi overlay
+    hai bờ BẬT (caller gác ``_hai_bo_bat``). Thứ tự ưu tiên GIẢI THÍCH ĐƯỢC nối tiếp nhánh
+    trên (dự trữ/canh/thuê đất/work-order/chợ đã lo ở ``ke_hoach_mot_nguoi``):
+
+      chủ thuyền → rao đò lấy thu nhập dịch vụ; nếu THIẾU đất thì tự qua khai thác bờ hoang;
+      chưa thuyền + THIẾU đất + bờ kia còn tài nguyên công → đóng thuyền (đủ gỗ, mùa khô) HOẶC
+      trả thóc qua đò của người khác rồi khai thác gỗ bờ hoang.
+
+    KHÔNG ép mọi agent qua sông: chỉ người THIẾU đất, đủ khả năng (gỗ đóng thuyền HOẶC thóc
+    trả phí), persona dám nghĩ mới đi — phần còn lại ở yên (kết quả hợp lệ). Feasible: đóng
+    thuyền/qua đò đều nguyên tử/nuốt-lỗi ở engine (thiếu ⇒ bỏ, không âm sổ). Tất định: RNG
+    riêng ``spatial:aid``; chỉ ĐỌC world + mutate ``kh`` (điều luật #3, #4)."""
+    aid = a.id
+    p5 = a.persona
+    bo_toi = _bo_cua(w, aid)
+    if bo_toi is None:  # chưa phân bờ / ô sông ⇒ không rào ⇒ bỏ qua
+        return
+    an_lon = float(w.cfg.get("nhu_cau.nguoi_lon_kg_tick"))
+    phi_do = round(an_lon * (0.10 + 0.02 * p5.tiet_kiem), 1)  # phí = phần khẩu phần (nổi/persona)
+    so_ruong = len(bc.ruong_cua.get(aid, ()))
+    bo_kia = "hoang" if bo_toi == "dan_cu" else "dan_cu"
+    co_tai_nguyen = bo_kia in bc.tai_nguyen_bo
+
+    # 1) Chủ thuyền: rao đò (thu nhập dịch vụ); THIẾU đất thì tự qua khai thác bờ hoang.
+    if w.ledger.so_du(aid, "thuyen") >= 1.0:
+        kh.rao_do = (phi_do, "thoc")
+        if so_ruong == 0 and co_tai_nguyen and kh.qua_song is None:
+            kh.qua_song = (bo_kia, "thoc", 0.0)  # tự sở hữu phương tiện ⇒ không phí
+        return
+
+    # 2) Chưa thuyền: chỉ cân nhắc khi THIẾU đất + bờ kia CÒN tài nguyên công (động cơ rõ).
+    if so_ruong > 0 or not co_tai_nguyen or bo_toi != "dan_cu":
+        return
+    r_thuyen = w.cfg.get("san_xuat.recipe.thuyen", {})
+    go_can = float(r_thuyen.get("go", 6.0))
+    go_co = w.ledger.so_du(aid, "go")
+
+    # 2a) Hướng tới đóng thuyền (đầu tư dài hạn): mùa khô (đủ 120 công) + no đủ + persona
+    #     tiên phong. Đủ gỗ ⇒ đóng ngay; thiếu ⇒ GOM gỗ (khai thác thêm + GIỮ lại, bỏ lệnh
+    #     bán gỗ của nhánh chợ) để dựng vốn thuyền qua vài vụ — không thì chợ bán sạch gỗ ⇒
+    #     không bao giờ đủ đóng (dựng vốn tư bản THẬT, không teleport phương tiện).
+    if (not w.mua_mua() and an_ninh > 0.8
+            and p5.lieu_linh >= 7 and p5.cham_chi >= 6):
+        if go_co >= go_can:
+            kh.dong_thuyen = max(kh.dong_thuyen, 1)
+        else:
+            kh.cong_khai_go = max(kh.cong_khai_go, 80.0)
+            kh.dat_lenh = [le for le in kh.dat_lenh
+                           if not (le.chieu == "ban" and le.tai_san == "go")]
+        return
+    # 2b) Trả thóc qua đò người khác rồi khai thác gỗ bờ hoang — dân dám nghĩ, kham nổi phí.
+    g = w.rng.get(f"spatial:{aid}", w.tick)
+    thoc = w.ledger.so_du(aid, "thoc")
+    if (thoc > phi_do * 3.0 and an_ninh > 0.5
+            and (p5.lieu_linh >= 6 or p5.cham_chi >= 7) and g.random() < 0.35):
+        kh.qua_song = (bo_kia, "thoc", round(phi_do * 1.25, 1))
+        if not w.mua_mua() and kh.cong_khai_go == 0:
+            kh.cong_khai_go = 60.0  # khai thác gỗ bờ hoang sau khi qua sông
 
 
 def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float,
@@ -903,13 +976,18 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
                                 round(gia_thoc_go * 0.95, 4), thanh_toan="go"))
 
     # đất: túng quẫn bán thửa; nhiều đất canh không xuể bán bớt giá cao; giàu mua
-    gia_dat_ref = w.gia_gan_nhat("dat") or 600.0
+    # Neo giá đất từ hiện giá sản lượng kỳ vọng (có pha giá chợ nếu đã thanh khoản),
+    # không còn dùng một giá fallback cứng cho mọi thửa.
+    from engine.economy import expected_land_value
+
     if an_ninh < 0.3 and so_ruong >= 2:
         thua_ban = bc.ruong_cua[aid][-1]
+        gia_dat_ref = expected_land_value(w, thua_ban.id)
         kh.niem_yet_dat.append((thua_ban.id, round(gia_dat_ref * (0.8 + p5.tiet_kiem * 0.05), 0)))
     elif so_ruong >= 5 and p5.tiet_kiem <= 6 and g.random() < 0.2:
         thua_ban = bc.ruong_cua[aid][-1]
         if thua_ban.id not in bc.thua_dang_thue:
+            gia_dat_ref = expected_land_value(w, thua_ban.id)
             kh.niem_yet_dat.append((thua_ban.id, round(gia_dat_ref * 1.2, 0)))
     if thoc > 3000 and p5.lieu_linh >= 5 and w.niem_yet_dat:
         re_nhat = min(w.niem_yet_dat.values(), key=lambda ny: (ny.gia_ask, ny.thua))

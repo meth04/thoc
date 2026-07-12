@@ -1,0 +1,10 @@
+experiments:
+  - id: weather_adverse
+    treatment: tăng xác suất hạn/lũ thông qua config overlay
+    expected_direction:
+      - sản lượng thóc giảm
+      - áp lực lương thực tăng
+  - id: no_contract_seeds
+    treatment: bỏ mẫu hợp đồng ban đầu
+    expected_direction:
+      - mô-típ hợp đồng phải được đo lại, không giả định trước kết quả

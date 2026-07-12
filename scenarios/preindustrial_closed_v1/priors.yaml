@@ -1,0 +1,17 @@
+# Khoảng nhạy cảm phục vụ hiệu chuẩn sau này; chưa phải dữ liệu thực chứng.
+# Không có công cụ nào được phép coi các số này là target đạt được.
+san_xuat.san_luong_goc_kg:
+  unit: kg/thửa/vụ
+  central: 600
+  plausible_range: [450, 750]
+  status: design_assumption
+thoi_gian.thoi_tiet.han_lu.p:
+  unit: probability/năm
+  central: 0.20
+  plausible_range: [0.10, 0.35]
+  status: design_assumption
+nhan_khau.sinh_san.p_goc:
+  unit: probability/tick
+  central: 0.15
+  plausible_range: [0.08, 0.22]
+  status: design_assumption

@@ -12,7 +12,7 @@ Ledger sanctity (điều luật #1): mọi dịch chuyển qua CONG_QUY, không 
 from __future__ import annotations
 
 from engine import audit, politics
-from engine.config import load_config
+from engine.config import Config, deep_merge, load_config
 from engine.intents import KeHoach
 from engine.world import CONG_QUY, ChinhQuyen, tao_the_gioi
 from tests.helpers import cap_ruong, chay_tick, mind_tinh, the_gioi_test
@@ -218,3 +218,96 @@ def test_dinh_cong_hoan_gop_cong_khong_vi_pham():
     assert hd.trang_thai == "hieu_luc"  # KHÔNG bị dán vi phạm
     # dọn công để boc_hoi/audit không vướng ở test khác (công của thợ vẫn còn)
     w.ledger.huy(tho, "cong", w.ledger.so_du(tho, "cong"), "boc_hoi", "dọn", w.tick)
+
+
+# ------------------------------------------------ (e) cờ scenario chinh_tri.bat (ADR 0001 §C)
+
+
+class _GhiSuKien:
+    """Bắt loại sự kiện engine ghi (EventLog(None) là no-op nên không truy vấn được)."""
+
+    def __init__(self):
+        self.loai: list[str] = []
+
+    def ghi(self, tick, loai, **_kw):
+        self.loai.append(loai)
+
+
+def _the_gioi_tat_chinh_tri(seed: int, giu_lai: int = 10,
+                            thoc_moi_nguoi: float = 10.0):
+    """Như the_gioi_test nhưng overlay `chinh_tri.bat: false` — tầng chính trị TẮT."""
+    cfg = Config(deep_merge(load_config().raw(), {"chinh_tri": {"bat": False}}))
+    w = tao_the_gioi(cfg, seed)
+    ids = sorted(w.agents)
+    for aid in ids[giu_lai:]:
+        w.agents[aid].con_song = False
+        sl = w.ledger.so_du(aid, "thoc")
+        if sl > 0:
+            w.ledger.huy(aid, "thoc", sl, "an", "rời cuộc chơi (fixture)", 0)
+    for aid in ids[:giu_lai]:
+        hien_co = w.ledger.so_du(aid, "thoc")
+        if thoc_moi_nguoi > hien_co:
+            w.ledger.sinh(aid, "thoc", thoc_moi_nguoi - hien_co, "khoi_tao", "fixture", 0)
+        w.agents[aid].health = 100.0
+    return w
+
+
+def test_chinh_tri_tat_khong_tao_nha_nuoc():
+    """bat=false: dù agent ứng cử/bỏ phiếu/bạo động (Gini cực cao) và dù có sẵn một
+    ChinhQuyen đang đặt thuế, tầng chính trị coi như KHÔNG tồn tại — không thu thuế,
+    không sinh nhà nước từ intent, không sung công; audit xanh, không event chính trị."""
+    w = _the_gioi_tat_chinh_tri(seed=21)
+    w.events = _GhiSuKien()
+    w.tick = TICK_BAU  # tick bầu cử — nếu BẬT sẽ chạy bầu cử
+    ids = _ids_song(w)
+    giau = ids[-1]
+    w.ledger.sinh(giau, "thoc", 100000.0, "khoi_tao", "test cực giàu", 0)  # Gini rất cao
+    kh = {aid: KeHoach(id=aid, bao_dong=True) for aid in ids}  # cả làng bạo động
+    kh[ids[0]].ung_cu = True
+    kh[ids[1]].ung_cu = True
+    kh[ids[2]].bo_phieu = ids[0]
+    tong_truoc = w.ledger.tong_tai_san("thoc")
+    giau_truoc = w.ledger.so_du(giau, "thoc")
+
+    # (A) thuế TẮT dù có ChinhQuyen đang đặt thuế + có người vừa gặt (nếu BẬT sẽ thu thuế)
+    w.chinh_quyen = ChinhQuyen(truong_lang=giau, thue_suat=0.3, nhiem_ky_den=999)
+    w.gat_tick = {"Pxx": (giau, 500.0)}
+    politics.thu_thue_va_chia(w)
+    assert w.ledger.so_du(CONG_QUY, "thoc") == 0.0  # không thu được xu thuế nào
+
+    # (B) intent bầu cử KHÔNG sinh nhà nước; (C) bạo động KHÔNG sung công
+    w.chinh_quyen = None
+    politics.buoc_chinh_quyen(w, kh)   # bầu cử/lập pháp/nghiệp đoàn — TẮT
+    politics.buoc_bao_dong(w, kh)      # sung công — TẮT
+
+    assert w.chinh_quyen is None                       # không sinh nhà nước từ intent
+    assert w.ledger.so_du(giau, "thoc") == giau_truoc  # không sung công người giàu
+    assert w.ledger.so_du(CONG_QUY, "thoc") == 0.0     # không có công quỹ
+    assert abs(w.ledger.tong_tai_san("thoc") - tong_truoc) < 1e-9
+    assert not ({"bau_cu", "thue", "bao_dong"} & set(w.events.loai))  # không event chính trị
+    audit.kiem_toan(w.ledger, w.tick)  # raise nếu lệch bảo toàn
+
+
+def test_chinh_tri_bat_mac_dinh_giu_hanh_vi():
+    """bat=true (mặc định): cùng thiết lập bất bình đẳng cực đoan + cả làng bạo động thì
+    cơ chế chính trị VẪN chạy — có sung công (tầng chính trị còn hoạt động như cũ)."""
+    w, ids, giau = _dung_bat_binh_dang(seed=21)  # dùng config mặc định (bat=true)
+    assert w.cfg.get("chinh_tri.bat") is True
+    kh = {aid: KeHoach(id=aid, bao_dong=True) for aid in ids}
+    giau_truoc = w.ledger.so_du(giau, "thoc")
+    tong_truoc = w.ledger.tong_tai_san("thoc")
+    politics.buoc_bao_dong(w, kh)
+    assert w.ledger.so_du(giau, "thoc") < giau_truoc        # có sung công
+    assert abs(w.ledger.tong_tai_san("thoc") - tong_truoc) < 1e-6
+    audit.kiem_toan(w.ledger, w.tick)
+
+
+def test_chinh_tri_bat_khong_pha_tat_dinh():
+    """Thêm cờ bat KHÔNG phá tất định: hai run cùng seed + config mặc định, cùng thao
+    tác chính trị → cùng world-hash (điều luật #4, ADR 0001 §D)."""
+    w1, kh1, ids = _dung_bau_cu(seed=1)
+    w2, kh2, _ = _dung_bau_cu(seed=1)
+    politics.buoc_chinh_quyen(w1, kh1)
+    politics.buoc_chinh_quyen(w2, kh2)
+    assert w1.world_hash() == w2.world_hash()
+    assert w1.chinh_quyen.truong_lang == ids[1]  # bầu cử vẫn chạy bình thường

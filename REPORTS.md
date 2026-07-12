@@ -2,6 +2,13 @@
 
 **Tài liệu này là Thiết kế Hệ thống cấp cao nhất (High-level System Architecture) và Cẩm nang Nghiên cứu (Research Manifesto) dành cho dự án THÓC. Mục tiêu là đưa dự án trở thành một "Phòng Thí Nghiệm Kinh Tế Chính Trị Nhân Tạo" (Artificial Political Economy Lab) đạt chuẩn công bố tại các tạp chí Science, Nature Human Behaviour hoặc NeurIPS.**
 
+> **⚠️ ĐÂY LÀ MANIFESTO/ĐỀ XUẤT, KHÔNG PHẢI BẰNG CHỨNG (SUPERSEDED một phần, 2026-07-12).**
+> `REVIEW.md` + `docs/MODEL_CHARTER.md` + `docs/adr/0001` là đánh giá khoa học hiện hành. Các
+> khung "state formation", "bạo động khi Gini > 0.85 → Engine tước đoạt tài sản" (§3.2) và
+> "đạt chuẩn Science/Nature/NeurIPS" là *khát vọng*, **chưa** có dữ liệu/hiệu chuẩn/holdout để
+> đỡ. Cơ chế bạo động Gini-gate bị anti-teleology (ADR §C) hạ xuống **experimental_treatment**,
+> mặc định TẮT ở `agrarian_transition_v1`. Không trích tài liệu này như evidence thực chứng.
+
 ---
 
 ## PHẦN 1: TỔNG QUAN KIẾN TRÚC HIỆN TẠI VÀ SỰ ĐỘT PHÁ

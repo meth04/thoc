@@ -46,6 +46,12 @@ class KeHoach:
     quyet_dinh_entity: list = field(default_factory=list)  # [(entity_id, KeHoach con)]
     viet_di_chuc: dict | None = None  # {phan_bo: {id: %}, gia_huan}
     di_cu: bool = False
+    # ---- Không gian (ADR 0005 §2.3): đò là DỊCH VỤ, không class định chế ----
+    dong_thuyen: int = 0  # đóng N thuyền (recipe công+gỗ, nguyên tử)
+    rao_do: tuple | None = None  # chủ thuyền niêm yết: (phi, tai_san_tra) mỗi chuyến
+    qua_song: tuple | None = None  # khách xin qua: (den_bo, tai_san_tra, phi_chap_nhan)
+    # khai hoang (ADR 0005 §4.1): vỡ rừng/đồi CÔNG thành ruộng (tốn công, homestead qua canh)
+    khai_hoang: list[str] = field(default_factory=list)  # thửa rừng/đồi công muốn vỡ hoang
     # chăn nuôi
     bat_ga_cong: float = 0.0  # công dành đi bắt gà rừng về nuôi
     giet_ga: int = 0  # giết bao nhiêu con lấy thịt

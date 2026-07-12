@@ -335,8 +335,8 @@ def _mo_ta_clause(ck, aid: str) -> str:
 
 
 # Nhãn giai cấp (observatory) → cụm danh xưng tiếng Việt cho câu CĂN TÍNH ở đầu khối riêng.
-# Chỉ là DỮ KIỆN về thân phận hiện thời (không phải bẩm sinh, không phải lời khuyên); tránh
-# đúng chữ định chế bị check.md P1 cấm (ngân hàng/công ty/bảo hiểm/xưởng).
+# Chỉ là DỮ KIỆN về thân phận hiện thời (không phải bẩm sinh, không phải lời khuyên);
+# danh xưng dùng mô tả hoạt động, không gắn tên định chế có sẵn.
 GIAI_CAP_VN: dict[str, str] = {
     "phu_thuoc": "người sống lệ thuộc",
     "vo_gia_cu": "kẻ không nhà",

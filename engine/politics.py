@@ -16,6 +16,25 @@ from engine.metrics import gini
 from engine.world import CONG_QUY, ChinhQuyen, World
 
 
+def _chinh_tri_bat(w: World) -> bool:
+    """Cờ scenario bật/tắt TOÀN BỘ tầng chính trị (ADR 0001 §C, MODEL_CHARTER §5–6).
+
+    Mặc định TRUE để `preindustrial_closed_v1` + mọi run cũ giữ nguyên hành vi và
+    world-hash. Khi FALSE (vd `agrarian_transition_v1`): tầng chính trị coi như không
+    tồn tại — không tạo w.chinh_quyen, không thu thuế, không sung công; intent chính trị
+    của agent bị bỏ qua ÊM (không lỗi, đúng điều luật #3)."""
+    return bool(w.cfg.get("chinh_tri.bat", True))
+
+
+def _fiscal_bat(w: World) -> bool:
+    """Cờ scenario bật/tắt tầng TÀI KHÓA (treasury tích lũy + thủy lợi) — ADR 0004 §T08-C.
+
+    Mặc định FALSE để preindustrial_closed_v1 + mọi run cũ giữ nguyên hành vi rebate và
+    world-hash (không treasury stock, không thủy lợi). Xây trên tầng chính trị: chỉ có ý
+    nghĩa khi chinh_tri.bat cũng TRUE (không có t* → không thu thuế → không có treasury)."""
+    return bool(w.cfg.get("fiscal.bat", False))
+
+
 def _bao_dam_chinh_quyen(w: World) -> ChinhQuyen:
     """Sinh nhà nước lần đầu có hành vi chính trị (trước đó làng vô chính phủ)."""
     if w.chinh_quyen is None:
@@ -35,6 +54,8 @@ def _la_nguoi_lon_song(w: World, aid: str) -> bool:
 def buoc_chinh_quyen(w: World, ke_hoach: dict) -> None:
     """Bước chính trị ĐẦU tick (trước sản xuất): bầu cử, lập pháp, hối lộ, nghiệp đoàn,
     đình công, kêu gọi. Chỉ tạo w.chinh_quyen khi thực sự có ý định chính trị."""
+    if not _chinh_tri_bat(w):
+        return  # tầng chính trị TẮT theo scenario — intent chính trị bị bỏ qua êm
     co_y_dinh = any(
         getattr(kh, "ung_cu", False) or getattr(kh, "bo_phieu", None)
         or getattr(kh, "ban_hanh_luat", None) or getattr(kh, "hoi_lo", None)
@@ -170,6 +191,8 @@ def _keu_goi(w: World, ke_hoach: dict) -> None:
 def thu_thue_va_chia(w: World) -> None:
     """Thu thuế = thue_suat × sản lượng gặt mỗi người → CONG_QUY; rồi CONG_QUY chia đều
     đầu người lớn còn sống. Mọi bước là chuyen CÂN nên bảo toàn tự xanh (điều luật #1)."""
+    if not _chinh_tri_bat(w):
+        return  # tầng chính trị TẮT theo scenario — không thu thuế
     cq = w.chinh_quyen
     if cq is None or cq.thue_suat <= EPSILON:
         return
@@ -187,6 +210,12 @@ def thu_thue_va_chia(w: World) -> None:
             w.ledger.chuyen(aid, CONG_QUY, "thoc", thue, "thu thuế thu hoạch", w.tick)
             tong_thu += thue
     if tong_thu <= EPSILON:
+        return
+    if _fiscal_bat(w):
+        # tài khóa BẬT: GIỮ thuế trong CONG_QUY (treasury stock) — KHÔNG rebate ngay.
+        # Thóc vẫn nằm trong sổ (chuyen CÂN) nên bảo toàn xanh; treasury do trưởng làng chi.
+        w.events.ghi(w.tick, "thue", tong_thu=round(tong_thu, 1),
+                     suat=round(suat, 4), giu_treasury=True)
         return
     tt = float(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
     nguoi_lon = sorted(a.id for a in w.agents.values()
@@ -209,6 +238,98 @@ def _chia_deu(w: World, tu: str, nguoi_nhan: list[str], tong: float, ly_do: str)
             w.ledger.chuyen(tu, aid, "thoc", phan, ly_do, w.tick)
 
 
+# ------------------------------------------------------ tài khóa (fiscal.bat, ADR 0004 §T08-C)
+
+
+def _xay_mot_don_vi(w: World, truong: str, ct: float, cg: float, cc: float) -> bool:
+    """Xây 1 đơn vị thủy lợi NGUYÊN TỬ: treasury (CONG_QUY) trả thóc, trưởng làng góp gỗ +
+    công; đối ứng là 1 đơn vị thủy lợi của CONG_QUY. Thiếu bất kỳ đầu vào nào → không đổi gì
+    (LoiSoKep, kiểm đủ TRƯỚC — không trừ nửa vời). Mọi đơn vị có nguồn + counterpart."""
+    from engine.ledger import DongSinhHuy, LoiSoKep, Transaction
+
+    dong = []
+    if ct > EPSILON:
+        dong.append(DongSinhHuy(CONG_QUY, "thoc", -ct, "chi_cong"))
+    if cg > EPSILON:
+        dong.append(DongSinhHuy(truong, "go", -cg, "chi_cong"))
+    if cc > EPSILON:
+        dong.append(DongSinhHuy(truong, "cong", -cc, "chi_cong"))
+    dong.append(DongSinhHuy(CONG_QUY, "thuy_loi", 1.0, "chi_cong"))
+    try:
+        w.ledger.ap_dung(Transaction(tick=w.tick, ly_do="chi công thủy lợi",
+                                     sinh_huy=tuple(dong)))
+        return True
+    except LoiSoKep:
+        return False
+
+
+def thi_hanh_chi_cong(w: World, ke_hoach: dict) -> None:
+    """Trưởng làng đương nhiệm chi CÔNG QUỸ xây thủy lợi (intent ban_hanh_luat loại
+    'chi_cong'). Governance (ai được chi) TÁCH khỏi capacity (đủ treasury hay không):
+    chỉ incumbent còn sống mới chi; xây được bao nhiêu tuỳ treasury + gỗ/công của trưởng.
+    Gọi trong pha sản xuất (trưởng đã có công). Gated fiscal.bat + chinh_tri.bat."""
+    if not (_chinh_tri_bat(w) and _fiscal_bat(w)):
+        return
+    cq = w.chinh_quyen
+    if cq is None:
+        return
+    truong = cq.truong_lang
+    if truong is None or not _la_nguoi_lon_song(w, truong):
+        return  # office vacancy / trưởng chết → KHÔNG chi được (treasury không mất)
+    luat = getattr(ke_hoach.get(truong), "ban_hanh_luat", None)
+    if not isinstance(luat, dict) or luat.get("loai") != "chi_cong":
+        return
+    try:
+        so_dv = int(luat.get("so_don_vi", 1))
+    except (TypeError, ValueError):
+        return
+    tran = int(w.cfg.get("fiscal.chi_cong_toi_da_moi_tick"))
+    so_dv = max(0, min(so_dv, tran))
+    ct = float(w.cfg.get("fiscal.chi_phi_thoc_moi_don_vi"))
+    cg = float(w.cfg.get("fiscal.chi_phi_go_moi_don_vi"))
+    cc = float(w.cfg.get("fiscal.chi_phi_cong_moi_don_vi"))
+    xay = 0
+    for _ in range(so_dv):
+        if not _xay_mot_don_vi(w, truong, ct, cg, cc):
+            break  # cạn treasury/gỗ/công → dừng, phần đã xây giữ nguyên
+        xay += 1
+    if xay > 0:
+        w.events.ghi(w.tick, "chi_cong", boi=truong, so_don_vi=xay,
+                     thoc=round(ct * xay, 1), go=round(cg * xay, 1),
+                     cong=round(cc * xay, 1))
+        w.ghi_ky_uc(truong, f"tôi cho xây {xay} đơn vị thủy lợi từ công quỹ", doi=True)
+
+
+def hao_mon_thuy_loi(w: World) -> None:
+    """Thủy lợi hao mòn ty_le mỗi tick (SINK đã đăng ký). Không duy trì thì mất dần —
+    lợi ích công có chi phí giữ. Gated fiscal.bat + chinh_tri.bat."""
+    if not (_chinh_tri_bat(w) and _fiscal_bat(w)):
+        return
+    ton = w.ledger.so_du(CONG_QUY, "thuy_loi")
+    if ton <= EPSILON:
+        return
+    ty_le = float(w.cfg.get("fiscal.hao_mon_ty_le_moi_tick"))
+    mat = min(ton, ton * ty_le)
+    if mat > EPSILON:
+        w.ledger.huy(CONG_QUY, "thuy_loi", mat, "hao_mon", "hao mòn thủy lợi", w.tick)
+        w.events.ghi(w.tick, "hao_mon_thuy_loi", mat=round(mat, 4), con=round(ton - mat, 4))
+
+
+def he_so_thoi_tiet_thuy_loi(w: World, he_so_tt: float) -> float:
+    """Lợi ích ĐO ĐƯỢC của thủy lợi: khi tồn ≥ ngưỡng, giảm thiệt hại hạn/lũ (he_so_tt<1)
+    theo he_so_loi_ich. CHỈ giảm THIỆT HẠI (không thưởng mùa tốt). he_so_loi_ich=0 → placebo
+    (thủy lợi không cải thiện gì → lợi ích đến từ cơ chế đã khai báo, không phải magic).
+    Cộng đồng dùng chung một treasury/nhà nước nên áp cho cả cộng đồng (một làng: là per-làng).
+    Gated fiscal.bat + chinh_tri.bat; TẮT → trả nguyên he_so_tt (hash legacy bất biến)."""
+    if not (_chinh_tri_bat(w) and _fiscal_bat(w)) or he_so_tt >= 1.0:
+        return he_so_tt
+    nguong = float(w.cfg.get("fiscal.nguong_duy_tri_don_vi"))
+    if w.ledger.so_du(CONG_QUY, "thuy_loi") < nguong:
+        return he_so_tt
+    loi = min(max(float(w.cfg.get("fiscal.he_so_loi_ich_han_lu")), 0.0), 1.0)
+    return he_so_tt + loi * (1.0 - he_so_tt)
+
+
 # ------------------------------------------------------------- bạo động (trước audit)
 
 
@@ -217,6 +338,8 @@ def buoc_bao_dong(w: World, ke_hoach: dict) -> None:
     bạo động ≥ tỷ lệ số đông. Khi đó sung công ty_le_sung_cong thóc của nhóm giàu nhất
     (top decile) chia đều nhóm nghèo nhất, QUA LEDGER. Ngưỡng là HẰNG VẬT LÝ trong
     config (như thời tiết) — KHÔNG thiên vị giai cấp nào (điều luật #7)."""
+    if not _chinh_tri_bat(w):
+        return  # tầng chính trị TẮT theo scenario — không sung công
     tt = float(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
     song = sorted((a for a in w.agents.values() if a.con_song and a.truong_thanh(tt)),
                   key=lambda a: a.id)
@@ -234,7 +357,8 @@ def buoc_bao_dong(w: World, ke_hoach: dict) -> None:
         return  # thiếu điều kiện → KHÔNG có bạo động
 
     order = sorted(song, key=lambda a: (w.ledger.so_du(a.id, "thoc"), a.id))
-    k = max(1, n_lon // 10)  # top/bottom decile
+    phan_vi = int(w.cfg.get("chinh_tri.phan_vi_giau_ngheo"))
+    k = max(1, n_lon // phan_vi)  # top/bottom group (mặc định decile trong config)
     ngheo = order[:k]
     giau = order[-k:]
     ids_ngheo = {a.id for a in ngheo}

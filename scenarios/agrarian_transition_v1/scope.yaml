@@ -1,0 +1,67 @@
+name: agrarian_transition_v1
+scope: >-
+  Cộng đồng nông nghiệp GIẢ ĐỊNH, khép kín một phần, dùng làm benchmark cơ chế cho đường
+  phát triển: nông nghiệp sinh tồn → chuyên môn hóa/chợ → tín dụng quan hệ → tiền hàng hóa
+  → năng lực tài khóa/công quyền. KHÔNG đại diện cho bất kỳ địa phương, quốc gia hay giai
+  đoạn lịch sử thật nào; KHÔNG khẳng định nông nghiệp tất yếu dẫn tới tiền tệ, ngân hàng
+  hay nhà nước (xem MODEL_CHARTER §1, ADR 0001).
+unit_of_analysis: >-
+  Hộ gia đình là chủ thể kinh tế (tiêu dùng, tồn kho, canh tác, nợ, rủi ro); cá nhân là
+  đơn vị nhân khẩu (tuổi, giới, kỹ năng, hôn nhân, thừa kế, lao động).
+period: >-
+  Horizon do pre-analysis protocol khóa trước (T10); một tick = 6 tháng, hai mùa mưa/khô
+  luân phiên trong một năm. Chưa neo vào niên đại lịch sử thật.
+boundaries:
+  geography: bản đồ nội sinh; một hoặc nhiều làng có thể hình thành từ di cư nội bộ
+  trade: chỉ thương mại nội bộ cộng đồng; CHƯA có thị trường/giá ngoại vùng
+  money: tiền hàng hóa (candidate instrument) làm kết quả cạnh tranh; CHƯA có tiền pháp định/ngân hàng trung ương
+  institutions: >-
+    quyền đất, hợp đồng, pháp nhân, tín dụng, tiền hàng hóa, tài khóa là các LỚP bật/tắt
+    theo scenario flag; nhãn định chế chỉ do observatory (lớp 5) gán, không điều khiển engine
+# Năm lớp phát triển — LỚP, không phải mốc thời gian; không lớp nào được một năm/ngưỡng
+# Gini/nhãn TRỰC TIẾP tạo ra (anti-teleology, MODEL_CHARTER §5, ADR 0001 §C).
+development_layers:
+  - id: L1_subsistence
+    ten: nông nghiệp sinh tồn
+    default: on
+    ghi_chu: ràng buộc vật lý nền (đất/mùa vụ/tồn kho/lao động); luôn bật, là INVARIANT lớp 1
+  - id: L2_specialization_market
+    ten: chuyên môn hóa và chợ
+    default: available_endogenous
+    ghi_chu: khớp lệnh cung–cầu và hợp đồng có sẵn như cơ chế nội sinh; giá chỉ từ khớp lệnh
+  - id: L3_relational_credit
+    ten: tín dụng quan hệ
+    default: available_endogenous
+    ghi_chu: claim/nợ có đối ứng (T06 pending); barter và tín dụng quan hệ là alternative của nhau
+  - id: L4_commodity_money
+    ten: tiền hàng hóa
+    default: available_endogenous
+    ghi_chu: xu là candidate instrument, acceptance đo theo chợ–thời gian (T07 pending); engine không ép xu là tiền
+  - id: L5_fiscal_public_authority
+    ten: tài khóa và công quyền
+    default: off
+    ghi_chu: >-
+      tầng chính trị/bạo động/thuế Gini-gate MẶC ĐỊNH TẮT (chinh_tri.bat=false trong
+      parameters.yaml, ADR 0001 §C); chỉ bật như experimental_treatment có action + chi phí
+      + tham gia tập thể + đường kế toán/pháp lý (T08 pending). Ngưỡng Gini không được là
+      nguyên nhân duy nhất của tịch thu/tái phân phối.
+# Giả định hành vi (Lớp-4) đang BẬT trong benchmark này — minh bạch để bảng giả định đầy đủ.
+behavioral_assumptions:
+  survival_floor:
+    enabled: true   # kế thừa config: minds.san_an_toi_thieu.bat=true (YAML: tránh khóa 'on' = bool)
+    ghi_chu: >-
+      Survival floor (minds/safety.py) BẬT: khi hộ dưới ngưỡng dự trữ và không ai trong hộ dự
+      định canh trong mùa gieo, engine bổ sung MỘT kế hoạch canh khả thi (người canh phải tự có
+      giống + công) + ghi event `san_an_toi_thieu`. Là giàn-giáo hành vi minh bạch, config-gated,
+      vào world_hash qua ke_hoach→sản xuất; KHÔNG ép outcome có tên. Khi so sánh policy (T09/T10),
+      đây KHÔNG phải hành vi thuần LLM/rulebot — phải nêu khi diễn giải. Tắt: đặt
+      `minds: {san_an_toi_thieu: {bat: false}}` trong overlay để ablation.
+  behavior_policy:
+    default: rulebot   # baseline; feasible_random/subsistence là treatment (ADR 0002)
+exclusions:
+  - Không dùng địa danh, niên đại hay sự kiện lịch sử thật; không retcon thành lịch sử một nước.
+  - Không có dịch bệnh, chiến tranh, ngoại thương hay chuỗi cung ứng toàn cầu.
+  - Không dùng để dự báo GDP, lạm phát, chính sách tiền tệ/tài khóa của nền kinh tế hiện đại.
+  - Không được cross-cite với preindustrial_closed_v1 làm bằng chứng (hai track tách biệt, ADR §F).
+  - Kết quả là mechanism_result trên tập luật đang cài, KHÔNG phải bằng chứng về thế giới thật.
+validation_tier: mechanism_benchmark

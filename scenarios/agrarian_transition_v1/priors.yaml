@@ -1,0 +1,43 @@
+# priors.yaml — sổ đăng ký prior cho các tham số kinh tế quan trọng của scenario.
+#
+# ĐÂY CHƯA PHẢI DỮ LIỆU THỰC CHỨNG. Mọi key dưới đây là `design_assumption`: số/luật do
+# người thiết kế đặt, chưa có nguồn dữ liệu (MODEL_CHARTER §2). `central` trùng giá trị đang
+# công bố ở config/world.yaml để scenario không âm thầm lệch cấu hình; `plausible_range` là
+# dải nhạy cảm để hiệu chuẩn SAU NÀY khi có data — KHÔNG công cụ nào được coi các số này là
+# target đã đạt. Mỗi path phải TỒN TẠI trong config (validate_package gọi cfg.get(path)).
+
+san_xuat.san_luong_goc_kg:
+  unit: kg/thửa/vụ
+  central: 600
+  plausible_range: [450, 750]
+  status: design_assumption
+
+san_xuat.giong_kg_moi_thua:
+  unit: kg/thửa/vụ
+  central: 60
+  plausible_range: [40, 90]
+  status: design_assumption
+
+thoi_gian.thoi_tiet.han_lu.p:
+  unit: probability/tick (xác suất rút vụ hạn/lũ mỗi mùa)
+  central: 0.20
+  plausible_range: [0.10, 0.35]
+  status: design_assumption
+
+nhan_khau.sinh_san.p_goc:
+  unit: probability/tick (xác suất sinh gốc mỗi tick)
+  central: 0.15
+  plausible_range: [0.08, 0.22]
+  status: design_assumption
+
+ban_do.ty_le_ruong:
+  unit: ratio (thửa ruộng / tổng ô bản đồ)
+  central: 0.28
+  plausible_range: [0.18, 0.45]
+  status: design_assumption
+
+hanh_vi.dat_dai.chiet_khau_moi_tick:
+  unit: discount rate/tick (chiết khấu hiện giá kỳ vọng đất)
+  central: 0.20
+  plausible_range: [0.05, 0.35]
+  status: design_assumption

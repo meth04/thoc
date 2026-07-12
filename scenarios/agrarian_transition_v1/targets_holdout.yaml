@@ -1,0 +1,4 @@
+# RỖNG CÓ CHỦ ĐÍCH: không được tuyên bố validation ngoài mẫu khi chưa có dữ liệu thực chứng
+# và chưa có holdout tách khỏi hiệu chuẩn (MODEL_CHARTER §2 tầng 4, ADR 0001 §Compliance).
+# Benchmark cơ chế: KHÔNG bịa target để làm scenario trông "đã validated".
+targets: []

@@ -1,0 +1,89 @@
+# Pre-analysis protocol — agrarian_transition_v1
+# KHÓA TRƯỚC KHI CHẠY ENSEMBLE ĐẦY ĐỦ (REVIEW §5.1, §7; TASKS T10). Machine-readable.
+# Đây là mechanism benchmark: mọi "expected_sign" là GIẢ THUYẾT CƠ CHẾ có thể bác bỏ, KHÔNG
+# phải dự báo thực chứng. Không có target thực chứng cho tới khi có data (data_contract.md).
+schema_version: 1
+locked_at_utc: "2026-07-12"
+claim_tier: mechanism_benchmark          # không được nâng khi chưa có data/holdout
+
+question: >
+  Trong cộng đồng nông nghiệp giả định có đất hữu hạn, mùa vụ, dị biệt hộ và thông tin cục bộ,
+  điều kiện vật chất/thể chế nào làm chuyên môn hóa, chợ, tín dụng, tiền hàng hóa và năng lực
+  công quyền bền vững hơn lựa chọn thay thế — và khi nào quá trình đó thất bại/đảo ngược?
+
+unit_of_analysis: hộ gia đình (kinh tế) + cá nhân (nhân khẩu)
+horizon_ticks: 600                        # 300 năm; smoke dùng horizon ngắn (xem execution)
+seed_policy:
+  # Seed list KHÓA TRƯỚC. Không chọn seed theo kết quả (cấm — TASKS §5).
+  smoke_seeds: [41, 42, 43]               # 3 seed horizon ngắn để kiểm orchestration
+  primary_seeds: [41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+                  51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+                  61, 62, 63, 64, 65, 66, 67, 68, 69, 70]   # 30 seed cho ensemble đầy đủ
+  pairing: paired_across_policy_and_treatment   # cùng seed cho mọi policy/treatment để so cặp
+
+policy_set:                               # ADR 0002 — LLM KHÔNG dùng cho kết luận cơ chế
+  - rulebot            # legacy baseline
+  - feasible_random    # negative baseline (PENDING impl T09)
+  - subsistence        # PENDING impl T09
+  # mock/real: chỉ là treatment sau cùng, không dùng cho kết luận nền
+
+failed_run_handling:
+  # Run coi là "failed" nếu: tuyệt chủng (dân số 0) trước horizon, audit raise, hoặc timeout.
+  rule: report_n_and_failed_count        # báo n thành công + số failed + lý do; KHÔNG loại bỏ thầm
+  extinction_is_valid_outcome: true      # sụp đổ là kết quả hợp lệ, không phải lỗi
+
+primary_metrics:                          # đo mỗi run; định nghĩa trong data_dictionary.md
+  - food_security_rate
+  - gini_dat
+  - gini_thoc
+  - marketed_surplus            # PENDING metric (ADR 0003)
+  - ty_le_phi_nong
+secondary_metrics:
+  - gdp
+  - velocity
+  - monetary_share_by_value     # PENDING metric (ADR 0004)
+  - debt_service_ratio          # PENDING metric (ADR 0004)
+  - land_price_to_expected_output
+
+# Treatment overlay + dấu kỳ vọng CƠ CHẾ (bác bỏ được) + điều kiện bác bỏ.
+treatments:
+  - id: land_scarcity
+    overlay: {ban_do: {ty_le_ruong: 0.18}}      # đất khan hơn (base 0.28)
+    expected_sign: {gini_dat: up, food_security_rate: down}
+    falsifier: "gini đất KHÔNG tăng khi đất khan hơn (ceteris paribus, ≥30 seed)"
+  - id: weather_risk
+    overlay: {thoi_gian: {thoi_tiet: {han_lu: {p: 0.35, he_so: 0.55},
+                                      binh_thuong: {p: 0.45, he_so: 1.0},
+                                      duoc_mua: {p: 0.20, he_so: 1.25}}}}
+    expected_sign: {food_security_rate: down}
+    falsifier: "an ninh lương thực KHÔNG giảm khi rủi ro thời tiết tăng"
+  - id: transport_cost
+    overlay: {thuong_mai: {phi_van_chuyen_moi_khoang_cach: 0.06}}   # base 0.02
+    expected_sign: {price_dispersion: up}
+    falsifier: "price dispersion giữa làng KHÔNG tăng khi phí vận chuyển tăng"
+  - id: placebo_no_shock
+    overlay: {}                                  # không đổi gì
+    expected_sign: {}                            # placebo: KHÔNG được có phản ứng giả
+    falsifier: "xuất hiện hiệu ứng có ý nghĩa khi không có treatment nào"
+  # credit/money/fiscal treatments: PENDING tới khi cơ chế/flag tương ứng có (ADR 0004)
+
+no_claim_conditions:                      # KHÔNG được kết luận nếu:
+  - price_coverage_below_threshold        # quá ít giao dịch để suy luận giá/dispersion
+  - fewer_than_all_seeds_completed        # chưa đủ 30 seed thành công
+  - effect_within_seed_noise              # hiệu ứng nằm trong dải nhiễu seed
+  - direction_flips_across_policy         # đổi dấu khi đổi policy hành vi → cơ chế không vững
+
+uncertainty_reporting:
+  # Mỗi bảng/hình: n, horizon, policy, scenario, median + [p10, p90] hoặc bootstrap CI.
+  method: quantiles_p10_p50_p90_plus_failed_count
+  single_seed_is_not_evidence: true
+
+execution:
+  smoke_command: >
+    python -m tools.experiments (hoặc tools/counterfactual.py) với smoke_seeds, horizon ngắn
+    (vd 60 tick) để kiểm orchestration — KHÔNG phải kết quả.
+  full_command_status: PENDING_COMPUTE     # 30 seed × 600 tick × nhiều policy/treatment
+  note: >
+    KHÓA protocol + seed list này TRƯỚC khi chạy ensemble đầy đủ. Không tune tham số sau khi
+    xem kết quả. Full ensemble để PENDING_COMPUTE nếu tài nguyên cục bộ không đủ; ghi command
+    tái lập, không bịa kết quả.

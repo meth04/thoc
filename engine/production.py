@@ -123,10 +123,54 @@ def _hao_mon_cong_cu(w: World, aid: str) -> None:
         w.ledger.huy(aid, "cong_cu", min(sl, hm), "hao_mon", "hao mòn công cụ", w.tick)
 
 
+def khai_hoang_dat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
+    """ADR 0005 §4.1 — vỡ hoang rừng/đồi CÔNG thành ruộng.
+
+    Tốn công ``khong_gian.khai_hoang.cong_moi_thua`` (NGUYÊN TỬ: thiếu ⇒ skip, không mất
+    công); đổi ``loai`` rừng/đồi → ``ruong`` + hạ độ màu về đất mới vỡ. KHÔNG cấp title
+    miễn phí: quyền đất vẫn tích qua ĐƯỜNG HOMESTEAD sẵn có (agent phải canh liên tiếp).
+    Thửa bờ ``hoang``: agent phải ĐANG Ở bờ kia (đã qua đò — ``co_the_o_bo``) mới vỡ được.
+    Gated ``khong_gian.bat``+``khai_hoang.bat``: TẮT (mặc định) ⇒ no-op ⇒ ``p.loai`` bất
+    biến ⇒ world_hash legacy y nguyên. Chạy TRƯỚC canh nên đất vỡ canh ngay được tick này.
+    """
+    from engine.spatial import _khong_gian_bat, co_the_o_bo
+
+    if not _khong_gian_bat(w) or not bool(w.cfg.get("khong_gian.khai_hoang.bat", False)):
+        return
+    cong_moi = float(w.cfg.get("khong_gian.khai_hoang.cong_moi_thua"))
+    mau_mo = float(w.cfg.get("khong_gian.khai_hoang.mau_mo_khai_hoang"))
+    for aid in sorted(ke_hoach):
+        kh = ke_hoach[aid]
+        if not kh.khai_hoang or not w.chu_the_hoat_dong(aid):
+            continue
+        for pid in sorted(kh.khai_hoang):
+            p = w.parcels.get(pid)
+            if p is None or p.loai not in ("rung", "doi") or p.chu is not None:
+                continue
+            if not co_the_o_bo(w, aid, p.bo):
+                _ghi_su_co(w, aid, f"khai hoang {pid} bất thành: chưa qua sông tới bờ kia")
+                continue
+            tieu = [("cong", cong_moi, "dung")]
+            if not _lam_nguyen_tu(w, aid, f"khai hoang {pid}", tieu, []):
+                _ghi_su_co(w, aid, f"khai hoang {pid} không thành: {_thieu_gi(w, aid, tieu)}")
+                continue
+            ghi_cong_dung(w, "phi_nong", cong_moi)
+            tu_loai = p.loai
+            p.loai = "ruong"
+            p.mau_mo = p.mau_mo_goc = mau_mo
+            w.events.ghi(w.tick, "khai_hoang", id=aid, thua=pid, tu_loai=tu_loai)
+            w.ghi_ky_uc(aid, f"tôi vỡ hoang thửa {pid} ({tu_loai}) thành ruộng", doi=True)
+
+
 def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     """Thi hành kế hoạch sản xuất theo thứ tự id tất định."""
     sx = w.cfg.raw()["san_xuat"]
     _, he_so_tt = w.thoi_tiet(w.tick)
+    # thủy lợi công (fiscal.bat) giảm thiệt hại hạn/lũ qua ĐƯỜNG TƯỜNG MINH này; TẮT →
+    # trả nguyên he_so_tt nên sản lượng + world-hash legacy KHÔNG đổi (ADR 0004 §T08-C)
+    from engine import politics
+
+    he_so_tt = politics.he_so_thoi_tiet_thuy_loi(w, he_so_tt)
     mua_mua = w.mua_mua()
 
     # quyền sử dụng thửa theo hợp đồng — tính MỘT lần cho cả tick
@@ -159,6 +203,10 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 w.events.ghi(w.tick, "bieu", tu=aid, den=den, tai_san=ts,
                              so_luong=round(sl, 1))
                 w.ghi_ky_uc(den, f"{aid} biếu tôi {sl:.0f} {ts} — ơn nghĩa phải nhớ")
+
+    # 0.5) Khai hoang rừng/đồi CÔNG bờ kia → ruộng (ADR 0005 §4.1) TRƯỚC canh: đất mới vỡ
+    # canh ngay tick này để khởi động homestead. TẮT overlay ⇒ no-op ⇒ hash legacy bất biến.
+    khai_hoang_dat(w, ke_hoach)
 
     da_canh_tick_nay: dict[str, str] = {}  # parcel id → người canh
 

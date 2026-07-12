@@ -1,8 +1,14 @@
 # Bí mật — không bao giờ commit
 .env
+.env.*
+!.env.example
 
-# Dữ liệu run
+# Dữ liệu run (artifact tái tạo được từ seed/manifest; KHÔNG commit)
 data/
+
+# Scratch / tạm thời (log, pytest basetemp, script một-lần)
+.tmp/
+.agents/
 
 # Python
 __pycache__/
@@ -18,3 +24,6 @@ __pycache__/
 *.swp
 Thumbs.db
 .DS_Store
+
+# docs/ và reports/ ĐƯỢC theo dõi (deliverable nghiên cứu: charter, ADR, review, báo cáo).
+# Figure sinh từ analyze nằm trong data/runs/<run>/reports/ (đã bị data/ ignore).

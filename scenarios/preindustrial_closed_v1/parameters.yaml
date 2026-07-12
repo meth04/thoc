@@ -1,0 +1,4 @@
+# Scenario benchmark hiện dùng toàn bộ giá trị đã được công bố ở config/.
+# File tồn tại để run manifest luôn có một điểm đặt tham số scenario, và để thay đổi
+# sau này không cần sửa config gốc. Chỉ thêm các nhánh YAML được chứng minh/đánh giá.
+{}

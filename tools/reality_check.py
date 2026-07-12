@@ -289,6 +289,7 @@ RNG_CHO_PHEP = {
     "nhan_khau": "sinh-tử", "chan_nuoi": "chăn nuôi", "xa_hoi": "xác suất trộm",
     "menu_xao": "xáo menu prompt", "batch_xao": "xáo thứ tự agent trong batch (tie-break)",
     "rao_vat": "lấy mẫu tin đồn chợ (nhiễu tin đồn)",
+    "dich_benh": "cú sốc dịch bệnh theo scenario",
 }
 
 
@@ -365,7 +366,9 @@ def _tim_tu(text: str, tu_list: list[str]) -> list[tuple[int, str, str]]:
     """Trả [(số_dòng, từ, dòng)] cho match NGOÀI ví dụ JSON (word-boundary unicode)."""
     ket: list[tuple[int, str, str]] = []
     for i, line in enumerate(text.splitlines(), start=1):
-        if _la_dong_vi_du_json(line):
+        # Source scan dùng để bảo vệ prompt, nên comment Python không phải nội dung agent
+        # nhận được và không được coi là vi phạm. Chuỗi prompt vẫn được render kiểm tra riêng.
+        if line.lstrip().startswith("#") or _la_dong_vi_du_json(line):
             continue
         for tu in tu_list:
             if re.search(rf"(?<!\w){re.escape(tu)}(?!\w)", line, re.IGNORECASE):
@@ -374,15 +377,16 @@ def _tim_tu(text: str, tu_list: list[str]) -> list[tuple[int, str, str]]:
 
 
 def _render_prompt_that() -> tuple[str, Any]:
-    """Render 1 prompt thật: tao_the_gioi seed 42, build_batch_prompt 2 agent."""
+    """Render prompt 1-to-1 thật cho 2 agent, không gọi provider."""
     from engine.config import load_config
     from engine.world import tao_the_gioi
-    from minds.prompts import build_batch_prompt
+    from minds.prompts import build_agent_prompt
 
     cfg = load_config()
     w = tao_the_gioi(cfg, 42)
     ids = sorted(w.agents)[:2]
-    return build_batch_prompt(w, ids, {aid: ["kiem_dinh"] for aid in ids}), w
+    triggers = {aid: ["kiem_dinh"] for aid in ids}
+    return "\n\n--- AGENT ---\n\n".join(build_agent_prompt(w, aid, triggers) for aid in ids), w
 
 
 def kiem_p(run_dir: Path | None) -> list[KetQua]:
@@ -476,22 +480,13 @@ def kiem_p(run_dir: Path | None) -> list[KetQua]:
 
 # ---------------------------------------------------------------- mục C (hướng dẫn)
 
-HUONG_DAN_C = """[C] PHẢN CHỨNG COUNTERFACTUAL — chưa tự động hóa. Chạy tay theo check.md mục 3
-(mỗi bài 3 seed 41/42/43, 300 năm, --fast; sửa config TẠM rồi hoàn nguyên; so bằng tools/analyze):
-  C1 Rút mẫu khởi đầu — sửa config/world.yaml: hop_dong.mau_khoi_dau: [] rồi
-     python run.py --mode mock --years 300 --fast --seed 41 --run-name c1_s41
-     Đạt: ≥3 mô-típ hợp đồng xuất hiện trước năm 80 dù không có mẫu mồi.
-  C2 Đảo persona — patch tạm engine/world.py (xáo persona giữa agent, giữ nguyên bản đồ) rồi
-     python run.py --mode mock --years 300 --fast --seed 42 --run-name c2_s42
-     Đạt: quỹ đạo vĩ mô (Gini, năm milestones) KHÁC đáng kể bản gốc cùng seed.
-  C3 Tắt nhiễu tham số — config minds: nhieu_tham_so = 0 rồi chạy như trên (c3_s4x).
-     Đạt: kết quả không đổi về CHẤT (nhiễu chỉ là gia vị, không phải động cơ bất bình đẳng).
-  C4 Đổi phân phối thời tiết — world.yaml: tăng p của han_lu rồi chạy (c4_s4x).
-     Đạt: kinh tế phản ứng CÓ HƯỚNG (giá thóc cao hơn, dân số thấp hơn).
-  C5 Rulebot vs Mock cùng seed —
-     python run.py --mode rulebot --years 300 --seed 42 --run-name c5_rb
-     python run.py --mode mock --years 300 --fast --seed 42 --run-name c5_mock
-     Đạt: quỹ đạo phân kỳ rõ sau ~năm 30 (python -m tools.compare c5_rb c5_mock)."""
+HUONG_DAN_C = """[C] PHẢN CHỨNG COUNTERFACTUAL — đã có runner không sửa config gốc.
+  C1–C4 (rulebot, không gọi LLM thật):
+     python -m tools.counterfactual --suite baseline c1_no_contract_seeds c2_permute_personas c3_no_parameter_noise c4_adverse_weather --seeds 41 42 43 --ticks 600
+  Kiểm toàn pipeline mock cục bộ (không gọi provider):
+     python -m tools.counterfactual --mode mock --suite baseline c1_no_contract_seeds c2_permute_personas c3_no_parameter_noise c4_adverse_weather --seeds 41 42 43 --ticks 600
+  C5 so policy cùng seed dùng tools.compare sau khi chạy rulebot/mock cùng horizon.
+  Không overwrite run cũ: dùng --prefix mới cho mỗi ensemble."""
 
 
 # ---------------------------------------------------------------- mục D (log run)
@@ -568,19 +563,22 @@ def kiem_d4(run_dir: Path) -> KetQua:
         tong += 1
         loai = str(e.get("intent", "?"))
         dem[loai] = dem.get(loai, 0) + 1
+    # Ưu tiên log append-only: run resume có thể gồm nhiều process, còn run_meta chỉ
+    # mô tả process cuối. ``batch_size`` là số agent được hỏi trên từng call.
     mau_so = None
-    mp = run_dir / "run_meta.json"
-    if mp.exists():
-        mau_so = json.loads(mp.read_text(encoding="utf-8")).get("so_luot_nghi")
+    db = run_dir / "llm_calls.sqlite"
+    if db.exists():
+        con = sqlite3.connect(db)
+        try:
+            mau_so = con.execute(
+                "SELECT COALESCE(SUM(batch_size),0) FROM llm_calls").fetchone()[0]
+        finally:
+            con.close()
     if not mau_so:
-        db = run_dir / "llm_calls.sqlite"
-        if db.exists():
-            con = sqlite3.connect(db)
-            try:
-                mau_so = con.execute(
-                    "SELECT COALESCE(SUM(batch_size),0) FROM llm_calls").fetchone()[0]
-            finally:
-                con.close()
+        mp = run_dir / "run_meta.json"
+        if mp.exists():
+            meta = json.loads(mp.read_text(encoding="utf-8"))
+            mau_so = meta.get("so_luot_nghi_phien") or meta.get("so_luot_nghi")
     if not mau_so:
         return {"muc": "D4", "ket_luan": "khong_du_du_lieu",
                 "bang_chung": f"{tong} dòng intent lạ nhưng không biết tổng số quyết định."}

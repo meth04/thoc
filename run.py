@@ -23,9 +23,10 @@ DATA_DIR = Path(__file__).resolve().parent / "data" / "runs"
 
 def lay_mind_fn(mode: str, w: World, args: argparse.Namespace):
     if mode == "rulebot":
-        from minds.rulebot import quyet_dinh_tat_ca
+        from minds.policies import tao_policy
 
-        return quyet_dinh_tat_ca
+        # policy Lớp-4 thay thế được (ADR 0002); mặc định "rulebot" = baseline cũ.
+        return tao_policy(getattr(args, "policy", "rulebot"))
     if mode == "mock":
         from minds.orchestrator import tao_mind_mock
 
@@ -115,6 +116,15 @@ def main() -> int:
     ap.add_argument("--until-budget", action="store_true")
     ap.add_argument("--p-malformed", type=float, default=None,
                     help="tỷ lệ mock cố tình trả JSON hỏng (mặc định theo models.yaml)")
+    ap.add_argument("--scenario", default=None,
+                    help="tên scenario trong scenarios/ (ghi scope + provenance vào manifest)")
+    ap.add_argument("--config-overlay", action="append", default=[], metavar="YAML",
+                    help="YAML ghi đè config; dùng cho scenario/phản chứng, không sửa config gốc")
+    ap.add_argument("--permute-personas", action="store_true",
+                    help="treatment phản chứng: hoán đổi persona giữa agent, giữ nguyên bản đồ/tài sản")
+    ap.add_argument("--policy", default="rulebot",
+                    help="tên BehaviorPolicy Lớp-4 (mode rulebot): rulebot | feasible_random | "
+                         "subsistence (ADR 0002)")
     args = ap.parse_args()
 
     if args.smoke:
@@ -125,15 +135,57 @@ def main() -> int:
     ck_dir = run_dir / "checkpoints"
     events_path = run_dir / "events.jsonl"
 
-    cfg = load_config()
+    overlays = [Path(p).resolve() for p in args.config_overlay]
+    if args.scenario:
+        from tools.experiments import scenario_overlay
+
+        scenario_params = scenario_overlay(args.scenario)
+        if scenario_params is not None:
+            overlays.insert(0, scenario_params.resolve())
+    cfg = load_config(overlays=overlays)
+    from tools.experiments import build_manifest, update_manifest_outcome, write_manifest
+
+    # policy Lớp-4 chỉ áp cho mode rulebot; mock/real dùng LLM làm hành vi (ghi None).
+    policy_meta = None
+    if args.mode == "rulebot":
+        from minds.policies import tao_policy
+
+        pol = tao_policy(args.policy)
+        policy_meta = {"name": pol.name, "version": pol.version, "params": dict(pol.params)}
+    manifest = build_manifest(
+        run_name=run_name, mode=args.mode, seed=args.seed, ticks_requested=tong_tick,
+        config_digest=cfg.digest(), config_overlays=overlays, scenario=args.scenario,
+        treatments=["permute_personas"] if args.permute_personas else [],
+        policy=policy_meta,
+    )
     ck_moi_nhat = ck_dir / "checkpoint_moi_nhat.json"
     if args.resume and ck_moi_nhat.exists():
+        manifest_path = run_dir / "experiment_manifest.json"
+        if manifest_path.exists():
+            old = json.loads(manifest_path.read_text(encoding="utf-8"))
+            old_digest = old.get("reproducibility", {}).get("config_sha256")
+            new_digest = manifest["reproducibility"]["config_sha256"]
+            if old_digest and old_digest != new_digest:
+                raise SystemExit(
+                    "Không resume với config khác manifest cũ. Hãy tạo run-name mới để "
+                    "giữ tái lập, hoặc dùng đúng scenario/overlay ban đầu."
+                )
+        else:
+            # Run tạo trước khi có manifest vẫn resume được, nhưng từ thời điểm này
+            # phải có provenance cho phần quỹ đạo còn lại.
+            write_manifest(run_dir, manifest)
         meta = json.loads(ck_moi_nhat.read_text(encoding="utf-8"))
         w = World.nap_checkpoint(ck_dir / f"checkpoint_{meta['tick']:04d}.pkl", events_path)
+        w.cfg = cfg
         print(f"[resume] từ tick {w.tick} (hash {meta['world_hash'][:12]})")
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
+        write_manifest(run_dir, manifest)
         w = tao_the_gioi(cfg, args.seed, events_path)
+        if args.permute_personas:
+            from tools.experiments import permute_personas
+
+            permute_personas(w)
     w.unrecognized_path = run_dir / "unrecognized_intents.jsonl"
 
     mind_fn = lay_mind_fn(args.mode, w, args)
@@ -185,29 +237,46 @@ def main() -> int:
         "tick_cuoi": w.tick,
         "world_hash": w.world_hash(),
         "thoi_gian_s": round(time.time() - t0, 1),
+        "config_sha256": cfg.digest(),
+        "scenario": args.scenario,
+        "policy": policy_meta,
     }
     if args.mode in ("mock", "real"):
         meta["p_malformed"] = mind_fn.p_malformed
-        meta["so_call"] = mind_fn.so_call
-        meta["so_luot_nghi"] = mind_fn.so_nghi
-        meta["so_fallback"] = mind_fn.so_fallback
-        meta["fallback_rate"] = round(mind_fn.fallback_rate, 4)
+        # Các bộ đếm trên mind chỉ thuộc *phiên process hiện tại*. Run có thể resume
+        # nhiều lần, nên số liệu công bố phải lấy từ llm_calls.sqlite append-only.
+        meta["so_call_phien"] = mind_fn.so_call
+        meta["so_luot_nghi_phien"] = mind_fn.so_nghi
+        meta["so_fallback_phien"] = mind_fn.so_fallback
         meta["het_ngan_sach"] = bool(getattr(mind_fn, "het_ngan_sach", False))
-        meta["tok_in"] = int(getattr(mind_fn, "tok_in", 0))
-        meta["tok_out"] = int(getattr(mind_fn, "tok_out", 0))
-        meta["luot_cong_cu"] = int(getattr(mind_fn, "so_luot_cong_cu", 0))
+        meta["tok_in_phien"] = int(getattr(mind_fn, "tok_in", 0))
+        meta["tok_out_phien"] = int(getattr(mind_fn, "tok_out", 0))
+        meta["luot_cong_cu_phien"] = int(getattr(mind_fn, "so_luot_cong_cu", 0))
         meta["concurrency"] = int(getattr(mind_fn, "concurrency", 0))
         mind_fn.log.dong()
         # telemetry LLM chi tiết từ llm_calls.sqlite → reports/telemetry.{md,json}
         from tools.telemetry import sinh_bao_cao
         tele = sinh_bao_cao(run_dir, cfg.get("models.gia_token"))
+        meta["so_call"] = int(tele.get("tong_call", 0))
+        meta["so_fallback"] = int(tele.get("fallback", 0))
+        meta["fallback_rate"] = float(tele.get("fallback_rate", 0.0))
+        meta["tok_in"] = int(tele.get("tok_in", 0))
+        meta["tok_out"] = int(tele.get("tok_out", 0))
+        meta["luot_cong_cu"] = int(tele.get("luot_cong_cu", 0))
         meta["chi_phi_usd_uoc_tinh"] = tele.get("chi_phi_usd", 0.0)
-        print(f"[{args.mode}] call={meta['so_call']} nghĩ={meta['so_luot_nghi']} "
+        print(f"[{args.mode}] call tổng={meta['so_call']} (phiên này {meta['so_call_phien']}) "
+              f"nghĩ phiên={meta['so_luot_nghi_phien']} "
               f"fallback={meta['so_fallback']} ({meta['fallback_rate']:.2%}) | "
               f"token {meta['tok_in'] + meta['tok_out']:,} ~${tele.get('chi_phi_usd', 0):.4f}")
     (run_dir / "run_meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    update_manifest_outcome(run_dir, {
+        "tick_final": w.tick,
+        "world_hash": meta["world_hash"],
+        "elapsed_seconds": meta["thoi_gian_s"],
+        "stopped_for_budget": bool(getattr(mind_fn, "het_ngan_sach", False)),
+    })
     viet_session_report(run_dir, w, meta)
     print(f"[xong] tick {w.tick} | hash {meta['world_hash'][:16]} | {meta['thoi_gian_s']}s")
     return 0
@@ -232,8 +301,11 @@ def viet_session_report(run_dir: Path, w, meta: dict) -> None:
         f"công nghiệp hóa: {m.get('cong_nghiep_hoa', False)}",
     ]
     if "fallback_rate" in meta:
-        dong.append(f"- LLM: {meta['so_call']} call, {meta['so_luot_nghi']} lượt nghĩ, "
-                    f"fallback {meta['fallback_rate']:.2%} (p_malformed={meta['p_malformed']})")
+        dong.append(
+            f"- LLM: {meta['so_call']} call tích lũy trong log; "
+            f"phiên này {meta.get('so_luot_nghi_phien', meta.get('so_luot_nghi', 0))} lượt nghĩ; "
+            f"fallback {meta['fallback_rate']:.2%} (p_malformed={meta['p_malformed']})"
+        )
     dong.append(f"- Milestones: {[x['ten'] for x in w.milestones]}")
     (rp_dir / f"session_{n}.md").write_text("\n".join(dong), encoding="utf-8")
 

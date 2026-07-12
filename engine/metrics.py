@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 
+from engine.economy import household_snapshot, land_price_productivity
 from engine.ledger import EPSILON
 from engine.world import World
 
@@ -117,8 +118,8 @@ def ty_le_phi_ly(w: World) -> float:
     số điểm tối thiểu đọc từ config (không magic number). Mặt hàng quá ít lịch sử để
     có σ đáng tin → không xét (không kết tội oan). THUẦN QUAN SÁT — engine không phạt
     ai vì "phi lý"."""
-    nguong = float(w.cfg.get("quan_sat.nguong_sigma_phi_ly", 3.0))
-    min_diem = int(w.cfg.get("quan_sat.min_diem_gia_phi_ly", 5))
+    nguong = float(w.cfg.get("quan_sat.nguong_sigma_phi_ly"))
+    min_diem = int(w.cfg.get("quan_sat.min_diem_gia_phi_ly"))
     phi_ly = 0
     tong_gd = 0
     for _ts, ls in sorted(w.gia_lich_su.items()):
@@ -149,6 +150,12 @@ def tinh_metrics(w: World) -> dict[str, Any]:
             dat_dem[p.chu] = dat_dem.get(p.chu, 0) + 1
     dat = [dat_dem.get(a.id, 0) for a in song]
     nguoi_lon = [a for a in song if a.truong_thanh(tt)]
+    ho = household_snapshot(w)
+    thoc_ho = [float(row["grain"]) for row in ho]
+    ty_le_ho_thieu_an = (
+        sum(1 for row in ho if float(row["food_security"]) < 1.0) / len(ho) if ho else 0.0
+    )
+    dat_metric = land_price_productivity(w, int(w.cfg.get("quan_sat.cua_so_dat_tick")))
     m = {
         "tick": w.tick,
         "nam": w.tick // 2,
@@ -167,6 +174,17 @@ def tinh_metrics(w: World) -> dict[str, Any]:
         ) if nguoi_lon else 0.0,
         "vo_gia_cu": sum(1 for a in song if a.vo_gia_cu),
         "health_tb": round(sum(a.health for a in song) / len(song), 1) if song else 0.0,
+        "dich_benh": bool(getattr(w, "dich_benh_tick", False)),
+        # Hộ là đơn vị tiêu dùng thực tế; giữ đồng thời metric cá nhân để hai khái niệm
+        # không bị lẫn vào nhau trong phân tích phân phối.
+        "so_ho": len(ho),
+        "thoc_ho_trung_vi": round(float(np.median(thoc_ho)), 3) if thoc_ho else 0.0,
+        "gini_thoc_ho": round(gini(thoc_ho), 4),
+        "ty_le_ho_thieu_an": round(ty_le_ho_thieu_an, 4),
+        "so_gd_dat_cua_so": int(dat_metric["land_transactions_window"]),
+        "gia_dat_tren_san_luong_ky_vong": round(
+            dat_metric["land_price_to_expected_output"], 4
+        ),
         "so_nha": round(w.ledger.tong_tai_san("nha"), 1),
         "so_cong_cu": round(w.ledger.tong_tai_san("cong_cu"), 2),
         # --- chỉ số vĩ mô viện hàn lâm (THUẦN QUAN SÁT) ---

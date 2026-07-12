@@ -1,0 +1,78 @@
+# policy_experiments.yaml — thí nghiệm phản chứng/ablation DỰ KIẾN cho từng lớp phát triển.
+#
+# Đây là ĐĂNG KÝ giả thuyết, KHÔNG phải kết quả. `expected_direction` là dấu dự báo TRƯỚC
+# khi chạy; `what_would_falsify` nêu điều gì BÁC BỎ giả thuyết. Không hứa hẹn kết quả; một
+# lớp KHÔNG hình thành (vd. tiền không được chấp nhận, tín dụng không cải thiện phúc lợi) là
+# kết quả hợp lệ. Mọi thí nghiệm chạy paired-seed, isolated run dir, báo phân phối theo seed
+# (T10); mỗi treatment phải toggle qua overlay/flag, không hardcode.
+experiments:
+  # ---- L1: ràng buộc vật lý (đất, thời tiết) ----
+  - id: land_scarcity
+    layer: L1_subsistence
+    treatment: giảm ban_do.ty_le_ruong (đất khan hơn) qua overlay
+    expected_direction:
+      - áp lực lương thực tăng; cạnh tranh đất tăng
+      - có thể xuất hiện quan hệ làm thuê/tô nhiều hơn
+    what_would_falsify: đất khan hơn nhưng food_security và tỷ lệ hộ thiếu ăn không đổi, hoặc participation chợ đất giảm về 0 mà không lý do vật lý
+
+  - id: weather_risk
+    layer: L1_subsistence
+    treatment: tăng thoi_gian.thoi_tiet.han_lu.p (rủi ro hạn/lũ cao hơn)
+    expected_direction:
+      - phương sai sản lượng tăng; nhu cầu dự phòng/tồn kho tăng
+    what_would_falsify: tăng xác suất hạn/lũ nhưng phương sai sản lượng hộ không tăng theo
+
+  # ---- L2: chuyên môn hóa / chợ / vận tải ----
+  - id: transport_cost
+    layer: L2_specialization_market
+    treatment: tăng thuong_mai.phi_van_chuyen_moi_khoang_cach
+    expected_direction:
+      - phân tán giá giữa làng tăng; marketed_surplus có thể giảm
+    what_would_falsify: tăng phí vận chuyển nhưng phân tán giá giảm có hệ thống hoặc market participation tăng
+
+  # ---- L3: tín dụng (T06) ----
+  - id: credit_enabled_vs_disabled
+    layer: L3_relational_credit
+    treatment: bật/tắt lớp tín dụng (Claim registry) — paired counterfactual
+    expected_direction:
+      - KHÔNG tiền định: đo phúc lợi/rủi ro chia sẻ ở cả hai nhánh, không giả định tín dụng luôn tăng phúc lợi
+    what_would_falsify: nhánh có tín dụng không tạo Claim nào có đối ứng, hoặc bảng cân đối chủ nợ/con nợ lệch mỗi tick
+
+  # ---- L4: tiền hàng hóa (T07) ----
+  - id: monetary_properties
+    layer: L4_commodity_money
+    treatment: đổi thuộc tính instrument (chi phí đúc/giữ, độ bền, chia nhỏ) và chi phí giao dịch barter
+    expected_direction:
+      - hạ chi phí giao dịch của một instrument → acceptance/monetary_share của nó tăng tương đối
+    what_would_falsify: thay đổi thuộc tính nhưng monetary_share/acceptance breadth không đổi theo dấu dự báo, hoặc engine ép xu là tiền bất kể acceptance
+
+  # ---- L5: tài khóa / công quyền (T08) ----
+  - id: fiscal_public_good
+    layer: L5_fiscal_public_authority
+    treatment: bật/tắt một hàng hóa công vật chất (vd. thủy lợi/đường chợ) có input/chi phí/hao mòn
+    expected_direction:
+      - có hàng hóa công hoạt động → năng suất/participation tăng ở nhóm tiếp cận được, kèm chi phí tài khóa đo được
+    what_would_falsify: xuất hiện của cải/hàng công không có nguồn + đối ứng, hoặc lợi ích công dương mà treasury balance không đóng
+
+  - id: fiscal_capacity
+    layer: L5_fiscal_public_authority
+    treatment: đổi năng lực thu (assessment/collection capacity, chi phí thu) — thấp vs cao
+    expected_direction:
+      - năng lực thu cao hơn → tax_compliance thu ròng cao hơn, kèm collection_cost cao hơn
+    what_would_falsify: năng lực thu tăng nhưng thu ròng không tăng và chi phí thu không xuất hiện trong ledger
+
+  # ---- policy swap: hành vi là treatment, không phải kinh tế (T09) ----
+  - id: policy_swap
+    layer: cross_layer
+    treatment: đổi BehaviorPolicy (feasible-random / subsistence / adaptive) cùng scenario + paired seed
+    expected_direction:
+      - khác biệt outcome báo như hiệu ứng policy paired across seeds, KHÔNG gộp ngầm vào kinh tế
+    what_would_falsify: đổi policy làm thay đổi luật hạch toán/bảo toàn (policy được phép sửa World trực tiếp)
+
+  # ---- placebo / ablation ----
+  - id: placebo_benefit_removed
+    layer: cross_layer
+    treatment: bật cấu trúc định chế nhưng GỠ lợi ích nền tảng của nó (vd. hàng công không sinh lợi ích)
+    expected_direction:
+      - adoption/persistence phải GIẢM theo hướng dự báo khi lợi ích bị gỡ (điều kiện tự phát #5)
+    what_would_falsify: adoption vẫn cao khi lợi ích đã bị gỡ → định chế được duy trì bởi nhãn/luật kích hoạt, không phải lợi ích thật

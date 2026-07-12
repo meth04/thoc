@@ -101,6 +101,11 @@ suc_khoe:
   nguong_nguy_kich: 20
   p_chet_khi_nguy_kich: 0.35
 
+cu_soc:
+  # Cú sốc ngoài thời tiết: tắt trong benchmark khép kín để giữ tương thích lịch sử run.
+  # Scenario thực chứng có thể bật với chuỗi/xác suất và hiệu ứng có provenance riêng.
+  dich_benh: {bat: false, xac_suat_moi_nam: 0.0, mat_suc_khoe_moi_tick: 0.0}
+
 nhan_khau:
   dan_so_ban_dau: 50
   tuoi_ban_dau: [16, 28]
@@ -157,6 +162,15 @@ thuong_mai:
   niem_yet_het_han_tick: 4       # niêm yết đất không ai mua → tự gỡ sau N tick
   rao_vat_toi_da: 20             # số lệnh chợ thành tin rao vặt mỗi tick (lấy mẫu seeded)
 
+hanh_vi:
+  dat_dai:
+    # Neo kỳ vọng để tác nhân ra ask/bid khi đất chưa có giá khớp. Đây KHÔNG phải
+    # giá do engine áp; call auction/sealed bid vẫn quyết định giá giao dịch cuối cùng.
+    ty_le_san_luong_chu_dat: 0.35
+    chiet_khau_moi_tick: 0.20
+    ky_han_dinh_gia_tick: 6
+    trong_so_gia_thi_truong: 0.60
+
 di_cu:                           # luật vật lý lập làng mới (không phải định chế)
   so_thua_toi_thieu: 8           # cần cụm ruộng công đủ rộng
   cach_lang_toi_thieu: 10        # cách mọi làng hiện có ít nhất N ô
@@ -164,6 +178,7 @@ di_cu:                           # luật vật lý lập làng mới (không ph
 
 quan_sat:                      # ngưỡng để OBSERVATORY dán nhãn (không phải cơ chế engine)
   cua_so_tick: 4               # cửa sổ trượt cho cơ cấu công/thanh toán/thu nhập
+  cua_so_dat_tick: 8           # cửa sổ metric price / expected-net-output của giao dịch đất
   snapshot_moi_n_tick: 10      # chu kỳ ghi giai_cap_snapshot (chỉ logging)
   nguong_sigma_phi_ly: 3.0     # giao dịch lệch >Nσ so mặt bằng lịch sử = "phi lý trí"
   min_diem_gia_phi_ly: 5       # cần ≥N điểm giá của mặt hàng mới tính σ (bounded rationality)
@@ -196,12 +211,31 @@ quan_he:
   nguong_xoa_canh: 0.05          # |trọng số| dưới ngưỡng → cạnh bị quên hẳn
 
 chinh_tri:                       # nhà nước TỰ PHÁT SINH — engine chỉ cấp cơ chế trung lập
+  bat: true                      # cờ scenario: bật/tắt TOÀN BỘ tầng chính trị (bầu cử/lập
+                                 # pháp/hối lộ/nghiệp đoàn/đình công/thuế/bạo động). Mặc định
+                                 # TRUE → preindustrial_closed_v1 + mọi run cũ giữ nguyên hành
+                                 # vi + world-hash. agrarian_transition_v1 đặt false (ADR 0001 §C).
   bau_cu_moi_n_tick: 10          # chu kỳ bầu cử (10 năm); ứng cử/bỏ phiếu do agent tự phát
   nhiem_ky_tick: 10              # nhiệm kỳ trưởng làng (bằng chu kỳ bầu → tái cử mỗi kỳ)
   thue_suat_toi_da: 0.5          # trần thuế suất trưởng làng được đặt (engine cưỡng chế)
   gini_nguong_bao_dong: 0.85     # HẰNG VẬT LÝ: Gini thóc trên ngưỡng này mới có thể bạo động
   ty_le_so_dong_bao_dong: 0.3    # cần ≥30% người lớn cùng bạo động thì mới thành sung công
   ty_le_sung_cong_bao_dong: 0.3  # sung công 30% thóc nhóm giàu nhất → chia đều nhóm nghèo nhất
+  phan_vi_giau_ngheo: 10         # top/bottom 1/N dùng khi một treatment bạo động được kích hoạt
+
+fiscal:                          # tài khóa/khu vực công — ADR 0004 §T08-C, cổng định chế §5
+  bat: false                     # MẶC ĐỊNH TẮT: preindustrial_closed_v1 + mọi run cũ giữ
+                                 # nguyên hành vi + world-hash (treasury/thủy lợi chỉ tồn tại
+                                 # khi TRUE). agrarian_transition_v1 bật như treatment (T08).
+                                 # Khi TRUE: thu_thue_va_chia GIỮ thuế trong CONG_QUY (không
+                                 # rebate); trưởng làng chi_cong xây thủy lợi; thủy lợi hao mòn.
+  chi_phi_thoc_moi_don_vi: 400   # thóc TỪ CONG_QUY (treasury) để xây 1 đơn vị thủy lợi
+  chi_phi_go_moi_don_vi: 4       # gỗ trưởng làng góp (vật liệu công trình)
+  chi_phi_cong_moi_don_vi: 60    # công trưởng làng góp (lao động tổ chức) — chi phí đo được
+  hao_mon_ty_le_moi_tick: 0.05   # thủy lợi hao mòn 5%/tick (không duy trì thì mất dần)
+  nguong_duy_tri_don_vi: 1.0     # cần tồn ≥ ngưỡng này thủy lợi mới giảm thiệt hại mất mùa
+  he_so_loi_ich_han_lu: 0.5      # giảm % thiệt hại hạn/lũ cho cộng đồng có thủy lợi (0 = placebo)
+  chi_cong_toi_da_moi_tick: 5    # trần số đơn vị xây/tick (chống spam intent)
 
 minds:
   ky_uc_toi_da: 10
@@ -226,3 +260,8 @@ minds:
   reflection_moi_n_tick: 10   # tự phản tư: cô đọng ký ức+ân oán → niềm tin cốt lõi (5.3)
   p2p_gui_toi_da: 3           # PART 5.4: mỗi agent gửi tối đa N tin/tick
   p2p_hom_thu_toi_da: 5       # hòm thư mỗi người nhận tối đa N tin/tick (chống spam)
+  san_an_toi_thieu:
+    # Survival floor thuộc tầng hành vi, không phải luật sản xuất: khi hộ dưới N kỳ ăn
+    # và LLM/thẻ không ai dự định canh trong mùa gieo, bổ sung 1 thửa khả thi + event.
+    bat: true
+    du_tru_toi_thieu_tick: 3.0

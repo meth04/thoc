@@ -1,16 +1,15 @@
-"""So sánh 2 run (mock vs rulebot) → reports/compare_baseline.md.
+"""So sánh 2 run (mock vs rulebot) vào report của run A.
 
   python -m tools.compare mock300 rb300
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "runs"
-REPORT_DIR = Path(__file__).resolve().parent.parent / "reports"
 
 
 def doc_metrics(run: str) -> list[dict]:
@@ -25,14 +24,22 @@ def dong(ms: list[dict], key: str, tick: int) -> float:
     return float("nan")
 
 
-def main() -> int:
-    run_a, run_b = sys.argv[1], sys.argv[2]
+def ticks_chung(ma: list[dict], mb: list[dict], toi_da: int = 6) -> list[int]:
+    """Mốc chung trải đều trên horizon thật, không giả định run nào cũng 600 tick."""
+    chung = sorted({int(m["tick"]) for m in ma} & {int(m["tick"]) for m in mb})
+    if len(chung) <= toi_da:
+        return chung
+    indices = sorted({round(i * (len(chung) - 1) / (toi_da - 1)) for i in range(toi_da)})
+    return [chung[i] for i in indices]
+
+
+def compare_runs(run_a: str, run_b: str, output: Path) -> Path:
+    """So sánh hai run và ghi output đã chỉ định, không ghi đè report global."""
     ma, mb = doc_metrics(run_a), doc_metrics(run_b)
     meta_a = json.loads((DATA_DIR / run_a / "run_meta.json").read_text(encoding="utf-8"))
     meta_b = json.loads((DATA_DIR / run_b / "run_meta.json").read_text(encoding="utf-8"))
-    REPORT_DIR.mkdir(exist_ok=True)
 
-    cac_tick = [100, 200, 300, 400, 500, 600]
+    cac_tick = ticks_chung(ma, mb)
     chi_so = ["dan_so", "thoc_moi_nguoi", "gini_dat", "gini_thoc", "ty_le_biet_chu",
               "hd_hieu_luc", "so_mo_tip", "kl_giao_dich", "vo_gia_cu"]
     lines = [
@@ -51,11 +58,22 @@ def main() -> int:
         for t in cac_tick:
             va, vb = dong(ma, cs, t), dong(mb, cs, t)
             lines.append(f"| {cs} | {t} | {va} | {vb} |")
-    ra = REPORT_DIR / "compare_baseline.md"
-    ra.write_text("\n".join(lines), encoding="utf-8")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("\n".join(lines), encoding="utf-8")
+    return output
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="So sánh hai run THÓC mà không đè report khác")
+    parser.add_argument("run_a")
+    parser.add_argument("run_b")
+    parser.add_argument("--output", type=Path, help="đường dẫn report tùy chọn")
+    args = parser.parse_args(argv)
+    output = args.output or DATA_DIR / args.run_a / "reports" / f"compare_{args.run_b}.md"
+    ra = compare_runs(args.run_a, args.run_b, output)
     print(f"[xong] {ra}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

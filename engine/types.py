@@ -90,6 +90,9 @@ class Parcel:
     mau_mo_goc: float = 0.0  # độ màu nguyên thủy — canh liên tục bạc màu, bỏ hoang hồi dần
     chu: str | None = None  # None = đất công; id người hoặc pháp nhân
     lang: int | None = None
+    # bờ sông (ADR 0005 §2.1) — "dan_cu" | "hoang" | None (chưa phân bờ / ô sông).
+    # STATIC, gán lúc map-gen khi overlay không_gian bật; KHÔNG vào world_hash (như r/c/lang).
+    bo: str | None = None
     # trạng thái canh tác trong tick hiện tại
     nguoi_canh: str | None = None
     homestead_dem: int = 0  # số mùa mưa liên tiếp cùng một người canh đất công

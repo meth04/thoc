@@ -1,0 +1,43 @@
+name: THÓC CI (no-network)
+
+# CI cục bộ/portable cho THÓC. KHÔNG gọi provider/LLM thật: chỉ rulebot/mock/FakeTransport.
+# THOC_BLOCK_NETWORK=1 bật guard chặn socket ra ngoài trong test (tests/conftest.py).
+# Không thay đổi requirements.txt tùy tiện — cài đúng pin đã khóa.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      THOC_BLOCK_NETWORK: "1"
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Ruff lint
+        run: python -m ruff check .
+      - name: Pytest (workspace temp, network blocked)
+        run: |
+          mkdir -p .tmp/pytest
+          python -m pytest -q --basetemp .tmp/pytest -p no:cacheprovider
+      - name: Scenario validation (no overclaim)
+        run: |
+          python -m tools.validation preindustrial_closed_v1
+          python -m tools.validation agrarian_transition_v1
+      - name: Rulebot smoke + reproducibility verify
+        run: |
+          python run.py --mode rulebot --ticks 20 --seed 41 \
+            --scenario agrarian_transition_v1 --run-name ci_agr_smoke_s41
+          python -m tools.verify_research_run ci_agr_smoke_s41
