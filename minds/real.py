@@ -11,20 +11,28 @@ Khác mock ở ba điểm:
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 
 from engine.world import World
 from minds.gateway import LLMRequest, LLMResponse
 from minds.orchestrator import MindMock
-from minds.providers_real import GatewayReal, LoiHetQuota, Route, budget_guard, che_key
+from minds.providers_real import (
+    GatewayReal,
+    LoiHetQuota,
+    LoiProviderHong,
+    Route,
+    budget_guard,
+    che_key,
+)
 from minds.quota import QuotaCounter
 from minds.repair import sua_va_parse
 
 
 class GatewayCoPacing:
     """Bọc GatewayReal: LoiHetQuota do nghẽn RPM → chờ rồi thử lại (tối đa cho_toi_s);
-    RPD cạn thật → ném tiếp để tầng trên fallback/dừng."""
+    RPD cạn thật / provider hỏng dai dẳng → ném tiếp để tầng trên fallback/dừng êm."""
 
     def __init__(self, gw: GatewayReal, cho_toi_s: float = 180.0):
         self.gw = gw
@@ -39,6 +47,8 @@ class GatewayCoPacing:
         while True:
             try:
                 return self.gw.goi(req)
+            except LoiProviderHong:
+                raise  # lỗi HTTP dai dẳng dù RPD còn — chờ slot RPM là vô ích
             except LoiHetQuota:
                 if not self._con_rpd(req.tier) or time.time() >= han:
                     raise
@@ -65,21 +75,46 @@ class MindReal(MindMock):
         can: dict[str, int] = {}
         for tier, _ids in cac_batch:
             can[tier] = can.get(tier, 0) + 1
-        # retry + nén hồi ký + chronicle ăn thêm ~40% cùng pool T0/T1
-        if "T0" in can or "T1" in can:
-            can["T1"] = can.get("T1", 0) + max(1, int(sum(can.values()) * 0.4))
+        # mỗi batch có thể phải retry-parse đúng 1 lần → nhu cầu tối đa ×2 (cấu trúc
+        # pipeline: 1 call chính + 1 call retry, không phải tham số chỉnh được)
+        for tier in list(can):
+            can[tier] *= 2
         du, ly_do = budget_guard(self.gateway, can)
         if not du:
             self.ly_do_dung = ly_do
-        return du
+            return False
+        # route NỀN (nen_hoi_ky) kiểm riêng theo đúng (provider, model), không gộp T1:
+        # +1 call dịch intent lạ (chỉ khi có người nghĩ) + ceil(người_lớn/8) call nén
+        # hồi ký đúng chu kỳ 4 tick (khớp orchestrator `w.tick % 4 == 0`)
+        tt = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+        can_nen = 1 if cac_batch else 0
+        if w.tick % 4 == 0:
+            so_nguoi_lon = sum(
+                1 for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt
+            )
+            can_nen += math.ceil(so_nguoi_lon / 8)
+        if can_nen > 0:
+            route = self._route_nen()
+            con = self.gateway.con_lai(route, time.time())
+            safety = float(self.cfg.get("quotas.chung.safety_margin"))
+            if con * safety < can_nen:
+                self.ly_do_dung = (f"route nền {route.provider}/{route.model}: "
+                                   f"cần {can_nen} call, còn {con} (×{safety})")
+                return False
+        return True
+
+    def _route_nen(self) -> Route:
+        """Route việc nền (nén hồi ký + dịch intent) — đọc từ models.nen_hoi_ky."""
+        nen_cfg = self.cfg.get("models.nen_hoi_ky")
+        q = self.cfg.raw()["quotas"][nen_cfg["provider"]]["models"].get(nen_cfg["model"], {})
+        return Route(nen_cfg["provider"], nen_cfg["model"],
+                     int(q.get("rpm", 4)), int(q.get("rpd", 100)))
 
     # ---------- nén hồi ký bằng LLM (route nen_hoi_ky), lô 8 người ----------
     def _nen_hoi_ky(self, w: World) -> None:
-        nen_cfg = self.cfg.get("models.nen_hoi_ky")
-        q = self.cfg.raw()["quotas"][nen_cfg["provider"]]["models"].get(nen_cfg["model"], {})
-        route = Route(nen_cfg["provider"], nen_cfg["model"],
-                      int(q.get("rpm", 4)), int(q.get("rpd", 100)))
-        nguoi_lon = [a for a in w.agents.values() if a.con_song and a.tuoi_nam >= 16]
+        route = self._route_nen()
+        tt = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+        nguoi_lon = [a for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt]
         for i in range(0, len(nguoi_lon), 8):
             lo = nguoi_lon[i:i + 8]
             khoi = []
@@ -140,7 +175,10 @@ class MindReal(MindMock):
             w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
         if not hoi:
             return
-        hoi = hoi[:40]  # trần an toàn cho 1 call
+        # trần an toàn cho 1 call — phần bị cắt vẫn phải có vết (điều luật #6)
+        for aid, d, ly_do in hoi[40:]:
+            w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
+        hoi = hoi[:40]
 
         from minds.prompts import SCHEMA_QUYET_DINH
 
@@ -158,10 +196,7 @@ class MindReal(MindMock):
             + '\n\nTrả về DUY NHẤT mảng JSON: [{"stt": 0, "hanh_dong": [...]}, ...] '
               "đủ mọi stt."
         )
-        nen_cfg = self.cfg.get("models.nen_hoi_ky")
-        q = self.cfg.raw()["quotas"][nen_cfg["provider"]]["models"].get(nen_cfg["model"], {})
-        route = Route(nen_cfg["provider"], nen_cfg["model"],
-                      int(q.get("rpm", 4)), int(q.get("rpd", 100)))
+        route = self._route_nen()
         req = LLMRequest(prompt=prompt, ctx={}, tier="T1",
                          batch_ids=[aid for aid, _d, _l in hoi])
         try:
@@ -192,14 +227,17 @@ class MindReal(MindMock):
                 w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
 
     def _goi_nen_co_cho(self, req: LLMRequest, route: Route) -> LLMResponse:
-        """Gọi route nền, chờ slot RPM tối đa ~30s (nén rơi về heuristic nếu kẹt)."""
+        """Gọi route nền, chờ slot RPM tối đa ~30s (nén rơi về heuristic nếu kẹt).
+        Tham số sampling đọc từ models.nen_hoi_ky (CLAUDE.md §5 — không hardcode)."""
         from minds.providers_real import LoiRateLimit
 
+        nen_cfg = self.cfg.get("models.nen_hoi_ky")
+        cau_hinh = {"temperature": float(nen_cfg["temperature"]),
+                    "max_output_tokens": int(nen_cfg["max_output_tokens"])}
         han = time.time() + 30.0
         while True:
             try:
-                return self.gateway._goi_route(req, route, {"temperature": 0.6,
-                                                            "max_output_tokens": 1200})
+                return self.gateway._goi_route(req, route, cau_hinh)
             except LoiRateLimit:
                 if time.time() >= han:
                     raise

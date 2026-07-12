@@ -23,6 +23,8 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     # (cha mẹ dạy E1 tại nhà; người E cao dạy bất kỳ ai qua phân bổ công dạy —
     # "trường" là thứ ai đó tự tổ chức bằng hợp đồng, không phải cơ chế engine)
     duoc_day: dict[str, int] = {}
+    thay_cua: dict[str, str] = {}  # học sinh → thầy (bậc cao nhất) — ghi vào event
+    cong_qh = float(w.cfg.get("quan_he.cong_moi_tuong_tac"))
     for aid in sorted(ke_hoach):
         day_cho = ke_hoach[aid].day_cho
         thay = w.agents.get(aid)
@@ -33,7 +35,11 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 continue
             la_con = hid in thay.con and w.cfg.get("giao_duc.cha_me_day_E1_tai_nha")
             if la_con or thay.e_bac >= w.agents[hid].e_bac + 1:
-                duoc_day[hid] = max(duoc_day.get(hid, 0), thay.e_bac)
+                if thay.e_bac > duoc_day.get(hid, 0):
+                    duoc_day[hid] = thay.e_bac
+                    thay_cua[hid] = aid
+                # tình thầy trò — dạy dỗ nuôi quan hệ (tối đa 1 lần/cặp/tick)
+                w.cong_quan_he_gioi_han(aid, hid, cong_qh)
 
     for aid in sorted(w.agents):
         a = w.agents[aid]
@@ -44,7 +50,9 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         if not muon_hoc:
             continue
         muc_tieu = a.e_bac + 1
-        if muc_tieu > 4:
+        # bậc tối đa = số bậc E khai trong config giáo dục (E1..E4)
+        e_toi_da = sum(1 for k in w.cfg.raw()["giao_duc"] if k.startswith("E"))
+        if muc_tieu > e_toi_da:
             continue
         # bắt đầu khoá mới nếu chưa học
         if a.hoc_muc_tieu != muc_tieu:
@@ -70,4 +78,5 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         if a.hoc_tick_con <= 0:
             a.e_bac = muc_tieu
             a.hoc_muc_tieu = None
-            w.events.ghi(w.tick, "thang_E", id=aid, e=muc_tieu, tu_hoc=a.hoc_tu_hoc)
+            w.events.ghi(w.tick, "thang_E", id=aid, e=muc_tieu, tu_hoc=a.hoc_tu_hoc,
+                         thay=None if a.hoc_tu_hoc else thay_cua.get(aid))

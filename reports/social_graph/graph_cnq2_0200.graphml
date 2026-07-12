@@ -1,0 +1,5078 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="ten" for="node" attr.name="ten" attr.type="string"/>
+  <key id="tuoi" for="node" attr.name="tuoi" attr.type="double"/>
+  <key id="gioi_tinh" for="node" attr.name="gioi_tinh" attr.type="string"/>
+  <key id="lang" for="node" attr.name="lang" attr.type="int"/>
+  <key id="e_bac" for="node" attr.name="e_bac" attr.type="int"/>
+  <key id="thoc" for="node" attr.name="thoc" attr.type="double"/>
+  <key id="so_thua" for="node" attr.name="so_thua" attr.type="int"/>
+  <key id="w" for="edge" attr.name="w" attr.type="double"/>
+  <key id="loai" for="edge" attr.name="loai" attr.type="string"/>
+  <graph edgedefault="undirected">
+    <node id="A0147">
+      <data key="ten">Con 0147</data>
+      <data key="tuoi">77.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3469.97</data>
+      <data key="so_thua">6</data>
+    </node>
+    <node id="A0155">
+      <data key="ten">Con 0155</data>
+      <data key="tuoi">75.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">17301.74</data>
+      <data key="so_thua">5</data>
+    </node>
+    <node id="A0176">
+      <data key="ten">Con 0176</data>
+      <data key="tuoi">66.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">4288.15</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0185">
+      <data key="ten">Con 0185</data>
+      <data key="tuoi">64.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">6217.65</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0198">
+      <data key="ten">Con 0198</data>
+      <data key="tuoi">59.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1337.81</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0216">
+      <data key="ten">Con 0216</data>
+      <data key="tuoi">56.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1643.66</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0217">
+      <data key="ten">Con 0217</data>
+      <data key="tuoi">56.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">11789.86</data>
+      <data key="so_thua">4</data>
+    </node>
+    <node id="A0218">
+      <data key="ten">Con 0218</data>
+      <data key="tuoi">56.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">9761.94</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0220">
+      <data key="ten">Con 0220</data>
+      <data key="tuoi">55.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">6431.41</data>
+      <data key="so_thua">4</data>
+    </node>
+    <node id="A0226">
+      <data key="ten">Con 0226</data>
+      <data key="tuoi">54.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">7899.75</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0228">
+      <data key="ten">Con 0228</data>
+      <data key="tuoi">53.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2586.89</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0229">
+      <data key="ten">Con 0229</data>
+      <data key="tuoi">53.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">4430.66</data>
+      <data key="so_thua">4</data>
+    </node>
+    <node id="A0232">
+      <data key="ten">Con 0232</data>
+      <data key="tuoi">53.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2563.12</data>
+      <data key="so_thua">4</data>
+    </node>
+    <node id="A0240">
+      <data key="ten">Con 0240</data>
+      <data key="tuoi">52.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">6117.86</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0244">
+      <data key="ten">Con 0244</data>
+      <data key="tuoi">51.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1488.23</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0248">
+      <data key="ten">Con 0248</data>
+      <data key="tuoi">50.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3477.55</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0249">
+      <data key="ten">Con 0249</data>
+      <data key="tuoi">50.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1490.85</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0251">
+      <data key="ten">Con 0251</data>
+      <data key="tuoi">50.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">4</data>
+      <data key="thoc">6506.31</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0252">
+      <data key="ten">Con 0252</data>
+      <data key="tuoi">50.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">4997.5</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0254">
+      <data key="ten">Con 0254</data>
+      <data key="tuoi">49.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">950.88</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0255">
+      <data key="ten">Con 0255</data>
+      <data key="tuoi">49.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">6657.97</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0257">
+      <data key="ten">Con 0257</data>
+      <data key="tuoi">48.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0258">
+      <data key="ten">Con 0258</data>
+      <data key="tuoi">48.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1088.74</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0259">
+      <data key="ten">Con 0259</data>
+      <data key="tuoi">48.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1376.05</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0260">
+      <data key="ten">Con 0260</data>
+      <data key="tuoi">48.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1861.73</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0265">
+      <data key="ten">Con 0265</data>
+      <data key="tuoi">48.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">8373.09</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0266">
+      <data key="ten">Con 0266</data>
+      <data key="tuoi">48.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">12751.34</data>
+      <data key="so_thua">4</data>
+    </node>
+    <node id="A0267">
+      <data key="ten">Con 0267</data>
+      <data key="tuoi">47.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1840.47</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0269">
+      <data key="ten">Con 0269</data>
+      <data key="tuoi">47.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1610.68</data>
+      <data key="so_thua">5</data>
+    </node>
+    <node id="A0273">
+      <data key="ten">Con 0273</data>
+      <data key="tuoi">46.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2328.59</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0274">
+      <data key="ten">Con 0274</data>
+      <data key="tuoi">46.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3127.07</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0276">
+      <data key="ten">Con 0276</data>
+      <data key="tuoi">45.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3355.29</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0279">
+      <data key="ten">Con 0279</data>
+      <data key="tuoi">45.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">4286.63</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0283">
+      <data key="ten">Con 0283</data>
+      <data key="tuoi">44.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1634.14</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0298">
+      <data key="ten">Con 0298</data>
+      <data key="tuoi">41.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3402.47</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0300">
+      <data key="ten">Con 0300</data>
+      <data key="tuoi">40.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3480.56</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0301">
+      <data key="ten">Con 0301</data>
+      <data key="tuoi">40.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2101.8</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0302">
+      <data key="ten">Con 0302</data>
+      <data key="tuoi">40.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">4</data>
+      <data key="thoc">3016.46</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0303">
+      <data key="ten">Con 0303</data>
+      <data key="tuoi">40.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">4</data>
+      <data key="thoc">3253.12</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0308">
+      <data key="ten">Con 0308</data>
+      <data key="tuoi">39.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1626.84</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0311">
+      <data key="ten">Con 0311</data>
+      <data key="tuoi">39.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2140.81</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0314">
+      <data key="ten">Con 0314</data>
+      <data key="tuoi">38.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2398.07</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0315">
+      <data key="ten">Con 0315</data>
+      <data key="tuoi">38.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">5660.7</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0316">
+      <data key="ten">Con 0316</data>
+      <data key="tuoi">38.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">6220.58</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0321">
+      <data key="ten">Con 0321</data>
+      <data key="tuoi">37.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3807.18</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0333">
+      <data key="ten">Con 0333</data>
+      <data key="tuoi">35.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3551.94</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0335">
+      <data key="ten">Con 0335</data>
+      <data key="tuoi">34.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">952.47</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0339">
+      <data key="ten">Con 0339</data>
+      <data key="tuoi">33.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">772.36</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0340">
+      <data key="ten">Con 0340</data>
+      <data key="tuoi">33.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">7038.99</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0345">
+      <data key="ten">Con 0345</data>
+      <data key="tuoi">33.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">3</data>
+      <data key="thoc">8386.01</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0346">
+      <data key="ten">Con 0346</data>
+      <data key="tuoi">32.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1532.1</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0347">
+      <data key="ten">Con 0347</data>
+      <data key="tuoi">32.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">3</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0351">
+      <data key="ten">Con 0351</data>
+      <data key="tuoi">32.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3643.63</data>
+      <data key="so_thua">5</data>
+    </node>
+    <node id="A0359">
+      <data key="ten">Con 0359</data>
+      <data key="tuoi">30.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">8968.46</data>
+      <data key="so_thua">4</data>
+    </node>
+    <node id="A0363">
+      <data key="ten">Con 0363</data>
+      <data key="tuoi">29.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">9948.51</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0364">
+      <data key="ten">Con 0364</data>
+      <data key="tuoi">29.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">9.7</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0370">
+      <data key="ten">Con 0370</data>
+      <data key="tuoi">28.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1097.07</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0371">
+      <data key="ten">Con 0371</data>
+      <data key="tuoi">28.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0372">
+      <data key="ten">Con 0372</data>
+      <data key="tuoi">28.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0373">
+      <data key="ten">Con 0373</data>
+      <data key="tuoi">28.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0374">
+      <data key="ten">Con 0374</data>
+      <data key="tuoi">28.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1201.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0380">
+      <data key="ten">Con 0380</data>
+      <data key="tuoi">27.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0381">
+      <data key="ten">Con 0381</data>
+      <data key="tuoi">27.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0382">
+      <data key="ten">Con 0382</data>
+      <data key="tuoi">27.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1302.21</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0394">
+      <data key="ten">Con 0394</data>
+      <data key="tuoi">25.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0396">
+      <data key="ten">Con 0396</data>
+      <data key="tuoi">25.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">3</data>
+      <data key="thoc">2568.55</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0397">
+      <data key="ten">Con 0397</data>
+      <data key="tuoi">25.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2946.95</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0399">
+      <data key="ten">Con 0399</data>
+      <data key="tuoi">25.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">3</data>
+      <data key="thoc">6071.67</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0403">
+      <data key="ten">Con 0403</data>
+      <data key="tuoi">24.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0404">
+      <data key="ten">Con 0404</data>
+      <data key="tuoi">24.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">951.07</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0405">
+      <data key="ten">Con 0405</data>
+      <data key="tuoi">24.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1978.4</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0410">
+      <data key="ten">Con 0410</data>
+      <data key="tuoi">23.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0411">
+      <data key="ten">Con 0411</data>
+      <data key="tuoi">23.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0412">
+      <data key="ten">Con 0412</data>
+      <data key="tuoi">23.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1108.93</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0413">
+      <data key="ten">Con 0413</data>
+      <data key="tuoi">23.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3056.43</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0417">
+      <data key="ten">Con 0417</data>
+      <data key="tuoi">22.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">859.1</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0419">
+      <data key="ten">Con 0419</data>
+      <data key="tuoi">22.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">4037.61</data>
+      <data key="so_thua">3</data>
+    </node>
+    <node id="A0423">
+      <data key="ten">Con 0423</data>
+      <data key="tuoi">22.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">3063.05</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0429">
+      <data key="ten">Con 0429</data>
+      <data key="tuoi">21.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0433">
+      <data key="ten">Con 0433</data>
+      <data key="tuoi">20.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0434">
+      <data key="ten">Con 0434</data>
+      <data key="tuoi">20.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0435">
+      <data key="ten">Con 0435</data>
+      <data key="tuoi">20.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1958.83</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0437">
+      <data key="ten">Con 0437</data>
+      <data key="tuoi">20.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0441">
+      <data key="ten">Con 0441</data>
+      <data key="tuoi">20.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0444">
+      <data key="ten">Con 0444</data>
+      <data key="tuoi">20.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">692.52</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0446">
+      <data key="ten">Con 0446</data>
+      <data key="tuoi">19.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0448">
+      <data key="ten">Con 0448</data>
+      <data key="tuoi">19.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">823.64</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0449">
+      <data key="ten">Con 0449</data>
+      <data key="tuoi">19.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0451">
+      <data key="ten">Con 0451</data>
+      <data key="tuoi">19.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0452">
+      <data key="ten">Con 0452</data>
+      <data key="tuoi">19.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">2043.44</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0453">
+      <data key="ten">Con 0453</data>
+      <data key="tuoi">19.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">350.03</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0454">
+      <data key="ten">Con 0454</data>
+      <data key="tuoi">18.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">269.76</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0455">
+      <data key="ten">Con 0455</data>
+      <data key="tuoi">18.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0458">
+      <data key="ten">Con 0458</data>
+      <data key="tuoi">18.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0459">
+      <data key="ten">Con 0459</data>
+      <data key="tuoi">18.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">279.85</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0460">
+      <data key="ten">Con 0460</data>
+      <data key="tuoi">18.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0462">
+      <data key="ten">Con 0462</data>
+      <data key="tuoi">18.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0463">
+      <data key="ten">Con 0463</data>
+      <data key="tuoi">18.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0464">
+      <data key="ten">Con 0464</data>
+      <data key="tuoi">17.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1194.91</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0465">
+      <data key="ten">Con 0465</data>
+      <data key="tuoi">17.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1108.41</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0466">
+      <data key="ten">Con 0466</data>
+      <data key="tuoi">17.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">764.07</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0467">
+      <data key="ten">Con 0467</data>
+      <data key="tuoi">17.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0468">
+      <data key="ten">Con 0468</data>
+      <data key="tuoi">17.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0469">
+      <data key="ten">Con 0469</data>
+      <data key="tuoi">17.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">928.08</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0470">
+      <data key="ten">Con 0470</data>
+      <data key="tuoi">17.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0471">
+      <data key="ten">Con 0471</data>
+      <data key="tuoi">17.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">162.78</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0473">
+      <data key="ten">Con 0473</data>
+      <data key="tuoi">17.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0474">
+      <data key="ten">Con 0474</data>
+      <data key="tuoi">16.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0475">
+      <data key="ten">Con 0475</data>
+      <data key="tuoi">16.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0476">
+      <data key="ten">Con 0476</data>
+      <data key="tuoi">16.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0477">
+      <data key="ten">Con 0477</data>
+      <data key="tuoi">16.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0478">
+      <data key="ten">Con 0478</data>
+      <data key="tuoi">16.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0479">
+      <data key="ten">Con 0479</data>
+      <data key="tuoi">16.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0480">
+      <data key="ten">Con 0480</data>
+      <data key="tuoi">16.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0482">
+      <data key="ten">Con 0482</data>
+      <data key="tuoi">15.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0483">
+      <data key="ten">Con 0483</data>
+      <data key="tuoi">15.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0485">
+      <data key="ten">Con 0485</data>
+      <data key="tuoi">15.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">381.31</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0486">
+      <data key="ten">Con 0486</data>
+      <data key="tuoi">15.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">72.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0487">
+      <data key="ten">Con 0487</data>
+      <data key="tuoi">15.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0488">
+      <data key="ten">Con 0488</data>
+      <data key="tuoi">15.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0489">
+      <data key="ten">Con 0489</data>
+      <data key="tuoi">15.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0490">
+      <data key="ten">Con 0490</data>
+      <data key="tuoi">15.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0491">
+      <data key="ten">Con 0491</data>
+      <data key="tuoi">14.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0492">
+      <data key="ten">Con 0492</data>
+      <data key="tuoi">14.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0493">
+      <data key="ten">Con 0493</data>
+      <data key="tuoi">14.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0494">
+      <data key="ten">Con 0494</data>
+      <data key="tuoi">14.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0495">
+      <data key="ten">Con 0495</data>
+      <data key="tuoi">14.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0496">
+      <data key="ten">Con 0496</data>
+      <data key="tuoi">14.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0497">
+      <data key="ten">Con 0497</data>
+      <data key="tuoi">14.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0498">
+      <data key="ten">Con 0498</data>
+      <data key="tuoi">14.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0499">
+      <data key="ten">Con 0499</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0500">
+      <data key="ten">Con 0500</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0501">
+      <data key="ten">Con 0501</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0502">
+      <data key="ten">Con 0502</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">960.32</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0503">
+      <data key="ten">Con 0503</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0504">
+      <data key="ten">Con 0504</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0505">
+      <data key="ten">Con 0505</data>
+      <data key="tuoi">13.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1835.3</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0506">
+      <data key="ten">Con 0506</data>
+      <data key="tuoi">13.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0507">
+      <data key="ten">Con 0507</data>
+      <data key="tuoi">13.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0508">
+      <data key="ten">Con 0508</data>
+      <data key="tuoi">13.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0509">
+      <data key="ten">Con 0509</data>
+      <data key="tuoi">13.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">680.87</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0510">
+      <data key="ten">Con 0510</data>
+      <data key="tuoi">12.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0511">
+      <data key="ten">Con 0511</data>
+      <data key="tuoi">12.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0512">
+      <data key="ten">Con 0512</data>
+      <data key="tuoi">12.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0513">
+      <data key="ten">Con 0513</data>
+      <data key="tuoi">12.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">1.07</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0514">
+      <data key="ten">Con 0514</data>
+      <data key="tuoi">12.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0515">
+      <data key="ten">Con 0515</data>
+      <data key="tuoi">12.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0516">
+      <data key="ten">Con 0516</data>
+      <data key="tuoi">12.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0517">
+      <data key="ten">Con 0517</data>
+      <data key="tuoi">11.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0518">
+      <data key="ten">Con 0518</data>
+      <data key="tuoi">11.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0519">
+      <data key="ten">Con 0519</data>
+      <data key="tuoi">11.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0521">
+      <data key="ten">Con 0521</data>
+      <data key="tuoi">11.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0523">
+      <data key="ten">Con 0523</data>
+      <data key="tuoi">11.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0524">
+      <data key="ten">Con 0524</data>
+      <data key="tuoi">11.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0525">
+      <data key="ten">Con 0525</data>
+      <data key="tuoi">10.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0526">
+      <data key="ten">Con 0526</data>
+      <data key="tuoi">10.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0527">
+      <data key="ten">Con 0527</data>
+      <data key="tuoi">10.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">2</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0530">
+      <data key="ten">Con 0530</data>
+      <data key="tuoi">10.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0531">
+      <data key="ten">Con 0531</data>
+      <data key="tuoi">10.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0533">
+      <data key="ten">Con 0533</data>
+      <data key="tuoi">9.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0534">
+      <data key="ten">Con 0534</data>
+      <data key="tuoi">9.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0535">
+      <data key="ten">Con 0535</data>
+      <data key="tuoi">9.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0537">
+      <data key="ten">Con 0537</data>
+      <data key="tuoi">9.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">680.82</data>
+      <data key="so_thua">1</data>
+    </node>
+    <node id="A0538">
+      <data key="ten">Con 0538</data>
+      <data key="tuoi">9.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0539">
+      <data key="ten">Con 0539</data>
+      <data key="tuoi">9.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0540">
+      <data key="ten">Con 0540</data>
+      <data key="tuoi">9.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0541">
+      <data key="ten">Con 0541</data>
+      <data key="tuoi">9.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0542">
+      <data key="ten">Con 0542</data>
+      <data key="tuoi">9.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0544">
+      <data key="ten">Con 0544</data>
+      <data key="tuoi">8.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0545">
+      <data key="ten">Con 0545</data>
+      <data key="tuoi">8.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0546">
+      <data key="ten">Con 0546</data>
+      <data key="tuoi">8.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0548">
+      <data key="ten">Con 0548</data>
+      <data key="tuoi">8.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0549">
+      <data key="ten">Con 0549</data>
+      <data key="tuoi">8.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0550">
+      <data key="ten">Con 0550</data>
+      <data key="tuoi">8.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0551">
+      <data key="ten">Con 0551</data>
+      <data key="tuoi">8.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0552">
+      <data key="ten">Con 0552</data>
+      <data key="tuoi">8.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">1910.28</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0553">
+      <data key="ten">Con 0553</data>
+      <data key="tuoi">8.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0554">
+      <data key="ten">Con 0554</data>
+      <data key="tuoi">7.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0555">
+      <data key="ten">Con 0555</data>
+      <data key="tuoi">7.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0556">
+      <data key="ten">Con 0556</data>
+      <data key="tuoi">7.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0557">
+      <data key="ten">Con 0557</data>
+      <data key="tuoi">7.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">1413.69</data>
+      <data key="so_thua">2</data>
+    </node>
+    <node id="A0558">
+      <data key="ten">Con 0558</data>
+      <data key="tuoi">7.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0559">
+      <data key="ten">Con 0559</data>
+      <data key="tuoi">7.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0560">
+      <data key="ten">Con 0560</data>
+      <data key="tuoi">7.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0561">
+      <data key="ten">Con 0561</data>
+      <data key="tuoi">7.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0562">
+      <data key="ten">Con 0562</data>
+      <data key="tuoi">7.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0563">
+      <data key="ten">Con 0563</data>
+      <data key="tuoi">6.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0564">
+      <data key="ten">Con 0564</data>
+      <data key="tuoi">6.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0565">
+      <data key="ten">Con 0565</data>
+      <data key="tuoi">6.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">1</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0566">
+      <data key="ten">Con 0566</data>
+      <data key="tuoi">6.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0567">
+      <data key="ten">Con 0567</data>
+      <data key="tuoi">6.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0568">
+      <data key="ten">Con 0568</data>
+      <data key="tuoi">6.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0569">
+      <data key="ten">Con 0569</data>
+      <data key="tuoi">6.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0570">
+      <data key="ten">Con 0570</data>
+      <data key="tuoi">5.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0571">
+      <data key="ten">Con 0571</data>
+      <data key="tuoi">5.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0572">
+      <data key="ten">Con 0572</data>
+      <data key="tuoi">5.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0573">
+      <data key="ten">Con 0573</data>
+      <data key="tuoi">5.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0574">
+      <data key="ten">Con 0574</data>
+      <data key="tuoi">5.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0575">
+      <data key="ten">Con 0575</data>
+      <data key="tuoi">5.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0576">
+      <data key="ten">Con 0576</data>
+      <data key="tuoi">5.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0577">
+      <data key="ten">Con 0577</data>
+      <data key="tuoi">5.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0578">
+      <data key="ten">Con 0578</data>
+      <data key="tuoi">5.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0579">
+      <data key="ten">Con 0579</data>
+      <data key="tuoi">4.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0580">
+      <data key="ten">Con 0580</data>
+      <data key="tuoi">4.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0581">
+      <data key="ten">Con 0581</data>
+      <data key="tuoi">4.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0582">
+      <data key="ten">Con 0582</data>
+      <data key="tuoi">4.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0583">
+      <data key="ten">Con 0583</data>
+      <data key="tuoi">4.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0584">
+      <data key="ten">Con 0584</data>
+      <data key="tuoi">4.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0585">
+      <data key="ten">Con 0585</data>
+      <data key="tuoi">4.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0586">
+      <data key="ten">Con 0586</data>
+      <data key="tuoi">3.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0587">
+      <data key="ten">Con 0587</data>
+      <data key="tuoi">3.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0588">
+      <data key="ten">Con 0588</data>
+      <data key="tuoi">3.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0589">
+      <data key="ten">Con 0589</data>
+      <data key="tuoi">3.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0590">
+      <data key="ten">Con 0590</data>
+      <data key="tuoi">3.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0591">
+      <data key="ten">Con 0591</data>
+      <data key="tuoi">2.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0592">
+      <data key="ten">Con 0592</data>
+      <data key="tuoi">2.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0593">
+      <data key="ten">Con 0593</data>
+      <data key="tuoi">2.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0594">
+      <data key="ten">Con 0594</data>
+      <data key="tuoi">2.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0595">
+      <data key="ten">Con 0595</data>
+      <data key="tuoi">2.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0596">
+      <data key="ten">Con 0596</data>
+      <data key="tuoi">2.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0597">
+      <data key="ten">Con 0597</data>
+      <data key="tuoi">2.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0598">
+      <data key="ten">Con 0598</data>
+      <data key="tuoi">1.5</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0599">
+      <data key="ten">Con 0599</data>
+      <data key="tuoi">1.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0600">
+      <data key="ten">Con 0600</data>
+      <data key="tuoi">1.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0601">
+      <data key="ten">Con 0601</data>
+      <data key="tuoi">1.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0602">
+      <data key="ten">Con 0602</data>
+      <data key="tuoi">1.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0603">
+      <data key="ten">Con 0603</data>
+      <data key="tuoi">1.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0604">
+      <data key="ten">Con 0604</data>
+      <data key="tuoi">1.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0605">
+      <data key="ten">Con 0605</data>
+      <data key="tuoi">0.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0606">
+      <data key="ten">Con 0606</data>
+      <data key="tuoi">0.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0607">
+      <data key="ten">Con 0607</data>
+      <data key="tuoi">0.5</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0608">
+      <data key="ten">Con 0608</data>
+      <data key="tuoi">0.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0609">
+      <data key="ten">Con 0609</data>
+      <data key="tuoi">0.0</data>
+      <data key="gioi_tinh">nam</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0610">
+      <data key="ten">Con 0610</data>
+      <data key="tuoi">0.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0611">
+      <data key="ten">Con 0611</data>
+      <data key="tuoi">0.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <node id="A0612">
+      <data key="ten">Con 0612</data>
+      <data key="tuoi">0.0</data>
+      <data key="gioi_tinh">nu</data>
+      <data key="lang">0</data>
+      <data key="e_bac">0</data>
+      <data key="thoc">0.0</data>
+      <data key="so_thua">0</data>
+    </node>
+    <edge source="A0147" target="A0176">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0185">
+      <data key="w">1.3</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0217">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0248">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0252">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0258">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0273">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0298">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0311">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0363">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0147" target="A0371">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0404">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0437">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0444">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0147" target="A0449">
+      <data key="w">0.6</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0147" target="A0485">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0185">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0228">
+      <data key="w">0.4</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0244">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0267">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0269">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0273">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0279">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0303">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0308">
+      <data key="w">-0.2</data>
+      <data key="loai">cha_con|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0316">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0321">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0333">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0335">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0346">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0347">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0380">
+      <data key="w">-0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0435">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0155" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0198">
+      <data key="w">1.8</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0220">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0226">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0228">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0232">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0249">
+      <data key="w">0.9</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0266">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0176" target="A0274">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0298">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0176" target="A0301">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0311">
+      <data key="w">0.7</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0316">
+      <data key="w">-0.1</data>
+      <data key="loai">cha_con|quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0321">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0364">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0370">
+      <data key="w">1.7</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0371">
+      <data key="w">-0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0373">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0381">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0176" target="A0404">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0412">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0419">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0176" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0216">
+      <data key="w">3.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0217">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0226">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0228">
+      <data key="w">0.4</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0229">
+      <data key="w">4.9</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0240">
+      <data key="w">0.9</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0244">
+      <data key="w">3.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0249">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0255">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0260">
+      <data key="w">3.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0266">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0267">
+      <data key="w">2.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0269">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0276">
+      <data key="w">2.3</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0279">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0298">
+      <data key="w">3.3</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0303">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0314">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0315">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0347">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0351">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0371">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0399">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0185" target="A0404">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0405">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0419">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0185" target="A0502">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0509">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0537">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0565">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0584">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0590">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0597">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0602">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0185" target="A0607">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0198" target="A0232">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0198" target="A0260">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0198" target="A0283">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0198" target="A0339">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0198" target="A0351">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0198" target="A0404">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0198" target="A0454">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0198" target="A0464">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0198" target="A0465">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0216" target="A0217">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0229">
+      <data key="w">2.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0232">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0240">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0255">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0265">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0266">
+      <data key="w">0.9</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0273">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0276">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0298">
+      <data key="w">2.5</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0316">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0339">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0413">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0216" target="A0417">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0216" target="A0486">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0216" target="A0510">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0217" target="A0218">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0217" target="A0228">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0251">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0266">
+      <data key="w">0.7</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0269">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0274">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0339">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0429">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0217" target="A0449">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0217" target="A0451">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0467">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0217" target="A0480">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0217" target="A0521">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0218" target="A0232">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0218" target="A0266">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0218" target="A0279">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0218" target="A0429">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0218" target="A0449">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0218" target="A0480">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0218" target="A0521">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0220" target="A0228">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0232">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0252">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0265">
+      <data key="w">0.3</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0273">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0274">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0276">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0316">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0321">
+      <data key="w">1.1</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0220" target="A0364">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0371">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0373">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0412">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0220" target="A0474">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0220" target="A0487">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0220" target="A0512">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0226" target="A0249">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0259">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0266">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0273">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0274">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0276">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0226" target="A0300">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0316">
+      <data key="w">1.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0371">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0226" target="A0410">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0226" target="A0446">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0226" target="A0470">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0228" target="A0232">
+      <data key="w">1.8</data>
+      <data key="loai">hop_dong|quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0228" target="A0257">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0265">
+      <data key="w">0.4</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0274">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0276">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0279">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0302">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0303">
+      <data key="w">0.3</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0340">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0363">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0228" target="A0380">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0228" target="A0460">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0228" target="A0533">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0228" target="A0539">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0229" target="A0240">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0248">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0251">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0260">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0266">
+      <data key="w">3.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0269">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0274">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0276">
+      <data key="w">1.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0298">
+      <data key="w">4.0</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0303">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0346">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0229" target="A0372">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0229" target="A0410">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0232" target="A0240">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0249">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0266">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0269">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0274">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0279">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0300">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0303">
+      <data key="w">0.4</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0316">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0321">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0339">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0345">
+      <data key="w">-0.3</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0371">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0372">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">cha_con|quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0451">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0232" target="A0460">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0232" target="A0533">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0232" target="A0539">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0240" target="A0244">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0240" target="A0266">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0240" target="A0269">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0240" target="A0434">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0240" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0240" target="A0495">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0240" target="A0506">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0240" target="A0540">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0244" target="A0259">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0244" target="A0269">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0244" target="A0274">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0244" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0244" target="A0314">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0244" target="A0321">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0244" target="A0381">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0244" target="A0397">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0244" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0252">
+      <data key="w">1.2</data>
+      <data key="loai">hop_dong|quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0248" target="A0257">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0259">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0273">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0274">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0315">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0316">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0321">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0340">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0405">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0435">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0248" target="A0491">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0248" target="A0496">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0248" target="A0507">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0248" target="A0514">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0248" target="A0554">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0249" target="A0252">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0276">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0301">
+      <data key="w">0.3</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0347">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0249" target="A0435">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0249" target="A0446">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0249" target="A0492">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0249" target="A0517">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0249" target="A0566">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0251" target="A0255">
+      <data key="w">1.2</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0251" target="A0260">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0251" target="A0266">
+      <data key="w">0.9</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0251" target="A0274">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0251" target="A0300">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0251" target="A0373">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0251" target="A0399">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0251" target="A0476">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0251" target="A0482">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0251" target="A0515">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0251" target="A0558">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0251" target="A0563">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0252" target="A0258">
+      <data key="w">3.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0259">
+      <data key="w">1.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0265">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0266">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0267">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0283">
+      <data key="w">3.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0300">
+      <data key="w">3.3</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0301">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0303">
+      <data key="w">0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0311">
+      <data key="w">3.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0315">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0316">
+      <data key="w">2.6</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0335">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0340">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0371">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0399">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0404">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0435">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0252" target="A0491">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0252" target="A0496">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0252" target="A0507">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0252" target="A0514">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0252" target="A0554">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0254" target="A0259">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0276">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0301">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0303">
+      <data key="w">0.3</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0333">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0254" target="A0363">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0254" target="A0518">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0255" target="A0364">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0255" target="A0373">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0255" target="A0476">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0255" target="A0482">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0255" target="A0515">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0255" target="A0558">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0255" target="A0563">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0257" target="A0279">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0257" target="A0298">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0257" target="A0340">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0257" target="A0396">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0257" target="A0483">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0257" target="A0541">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0259">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0258" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0258" target="A0301">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0258" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0258" target="A0316">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0258" target="A0340">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0258" target="A0394">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0455">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0497">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0500">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0508">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0559">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0567">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0258" target="A0579">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0260">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0316">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0340">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0347">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0394">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0399">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0259" target="A0455">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0497">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0500">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0508">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0559">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0567">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0259" target="A0579">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0260" target="A0267">
+      <data key="w">1.1</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0260" target="A0279">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0260" target="A0298">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0260" target="A0403">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0260" target="A0411">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0260" target="A0489">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0260" target="A0586">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0265" target="A0266">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0265" target="A0276">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0283">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0347">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0359">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0364">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0370">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0371">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0373">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0412">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0265" target="A0437">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0265" target="A0534">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0265" target="A0574">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0266" target="A0273">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0279">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0298">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0303">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0314">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0340">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0371">
+      <data key="w">0.4</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0372">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0405">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0266" target="A0437">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0266" target="A0534">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0266" target="A0574">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0267" target="A0279">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0267" target="A0403">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0267" target="A0411">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0267" target="A0489">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0267" target="A0586">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0269" target="A0302">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0269" target="A0314">
+      <data key="w">-0.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0269" target="A0316">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0269" target="A0381">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0269" target="A0429">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0269" target="A0453">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0269" target="A0458">
+      <data key="w">1.1</data>
+      <data key="loai">giam_ho|hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0269" target="A0468">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0345">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0364">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0371">
+      <data key="w">-0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0373">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0404">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0412">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0423">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0273" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0273" target="A0451">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0273" target="A0523">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0273" target="A0535">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0274" target="A0298">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0274" target="A0302">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0274" target="A0316">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0274" target="A0412">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0274" target="A0490">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0274" target="A0493">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0274" target="A0555">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0274" target="A0580">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0276" target="A0279">
+      <data key="w">0.7</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0276" target="A0298">
+      <data key="w">4.0</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0276" target="A0301">
+      <data key="w">4.0</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0276" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0276" target="A0321">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0276" target="A0374">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0276" target="A0396">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0276" target="A0470">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0276" target="A0557">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0298">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0303">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0308">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0339">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0396">
+      <data key="w">-0.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0279" target="A0483">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0279" target="A0541">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0298">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0283" target="A0300">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0283" target="A0314">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0283" target="A0316">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0283" target="A0346">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0283" target="A0396">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0462">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0471">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0501">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0516">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0542">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0560">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0582">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0283" target="A0595">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0298" target="A0301">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0298" target="A0303">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0298" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0298" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0298" target="A0346">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0298" target="A0412">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0298" target="A0466">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0298" target="A0490">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0298" target="A0493">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0298" target="A0555">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0298" target="A0580">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0300" target="A0303">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0311">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0314">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0316">
+      <data key="w">2.3</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0333">
+      <data key="w">0.9</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0300" target="A0339">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0340">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0351">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0399">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0300" target="A0467">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0300" target="A0498">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0300" target="A0526">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0300" target="A0544">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0300" target="A0608">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0311">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0301" target="A0314">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0301" target="A0333">
+      <data key="w">-0.2</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0301" target="A0339">
+      <data key="w">1.6</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0301" target="A0345">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0301" target="A0444">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0446">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0301" target="A0463">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0477">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0527">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0570">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0587">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0301" target="A0591">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0302" target="A0303">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0302" target="A0308">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0302" target="A0345">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0302" target="A0351">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0302" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0302" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0302" target="A0455">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0302" target="A0478">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0302" target="A0494">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0302" target="A0548">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0302" target="A0561">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0302" target="A0571">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0303" target="A0308">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0314">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0346">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0351">
+      <data key="w">0.2</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0399">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0423">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0303" target="A0478">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0303" target="A0494">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0303" target="A0548">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0303" target="A0561">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0303" target="A0571">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0314">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0308" target="A0346">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0308" target="A0351">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0308" target="A0396">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0308" target="A0423">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0308" target="A0441">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0308" target="A0453">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0479">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0503">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0519">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0524">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0538">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0308" target="A0549">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0311" target="A0314">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0316">
+      <data key="w">2.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0339">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0340">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0371">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0373">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0311" target="A0397">
+      <data key="w">-0.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0403">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0452">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0311" target="A0530">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0333">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0314" target="A0444">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0463">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0477">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0527">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0570">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0587">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0314" target="A0591">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0315" target="A0316">
+      <data key="w">3.4</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0315" target="A0345">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0315" target="A0453">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0315" target="A0473">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0315" target="A0531">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0315" target="A0550">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0315" target="A0583">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0315" target="A0588">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0316" target="A0351">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0364">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0371">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0373">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0399">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0405">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0412">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0316" target="A0473">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0316" target="A0531">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0316" target="A0550">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0316" target="A0583">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0316" target="A0588">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0321" target="A0364">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0321" target="A0371">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0321" target="A0373">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0321" target="A0412">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0321" target="A0474">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0321" target="A0487">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0321" target="A0512">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0333" target="A0423">
+      <data key="w">-0.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0333" target="A0435">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0333" target="A0467">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0333" target="A0498">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0333" target="A0526">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0333" target="A0544">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0333" target="A0608">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0335" target="A0340">
+      <data key="w">0.8</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0335" target="A0370">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0335" target="A0411">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0335" target="A0581">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0339" target="A0345">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0339" target="A0359">
+      <data key="w">0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0339" target="A0433">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0340" target="A0359">
+      <data key="w">1.2</data>
+      <data key="loai">hop_dong|quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0340" target="A0511">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0340" target="A0545">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0340" target="A0575">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0340" target="A0598">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0351">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0345" target="A0359">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0345" target="A0399">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0345" target="A0504">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0551">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0556">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0564">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0568">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0592">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0345" target="A0599">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0346" target="A0359">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0346" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0346" target="A0501">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0346" target="A0516">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0346" target="A0542">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0346" target="A0560">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0346" target="A0582">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0346" target="A0595">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0423">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0347" target="A0505">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0552">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0562">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0576">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0589">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0601">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0347" target="A0605">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0359">
+      <data key="w">-0.4</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0351" target="A0370">
+      <data key="w">1.3</data>
+      <data key="loai">giam_ho|hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0351" target="A0399">
+      <data key="w">0.6</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0351" target="A0470">
+      <data key="w">0.1</data>
+      <data key="loai">hop_dong|quan_he</data>
+    </edge>
+    <edge source="A0351" target="A0504">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0551">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0556">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0564">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0568">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0592">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0351" target="A0599">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0359" target="A0370">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0359" target="A0399">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0359" target="A0466">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0359" target="A0469">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0359" target="A0511">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0359" target="A0545">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0359" target="A0575">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0359" target="A0598">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0363" target="A0518">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0364" target="A0373">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0364" target="A0380">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0364" target="A0454">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0370" target="A0394">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0370" target="A0399">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0370" target="A0455">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0370" target="A0572">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0370" target="A0577">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0370" target="A0596">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0370" target="A0609">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0371" target="A0372">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0371" target="A0435">
+      <data key="w">-0.5</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0371" target="A0444">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0371" target="A0455">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0373" target="A0530">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0374" target="A0382">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0374" target="A0546">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0374" target="A0553">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0374" target="A0573">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0374" target="A0606">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0380" target="A0475">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0380" target="A0525">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0382" target="A0546">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0382" target="A0553">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0382" target="A0573">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0382" target="A0606">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0394" target="A0572">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0394" target="A0577">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0394" target="A0596">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0394" target="A0609">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0396" target="A0404">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0396" target="A0585">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0396" target="A0593">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0396" target="A0600">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0396" target="A0603">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0397" target="A0403">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0397" target="A0452">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0397" target="A0569">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0397" target="A0578">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0397" target="A0610">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0399" target="A0455">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0399" target="A0565">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0399" target="A0584">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0399" target="A0590">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0399" target="A0597">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0399" target="A0602">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0399" target="A0607">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0403" target="A0569">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0403" target="A0578">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0403" target="A0610">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0404" target="A0585">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0404" target="A0593">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0404" target="A0600">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0404" target="A0603">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0405" target="A0435">
+      <data key="w">1.1</data>
+      <data key="loai">hop_dong|quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0411" target="A0581">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0413" target="A0429">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0413" target="A0475">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0413" target="A0488">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0413" target="A0499">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0413" target="A0513">
+      <data key="w">1.0</data>
+      <data key="loai">giam_ho|quan_he</data>
+    </edge>
+    <edge source="A0413" target="A0612">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0417" target="A0434">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0417" target="A0594">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0417" target="A0611">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0419" target="A0437">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0423" target="A0589">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0423" target="A0601">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0423" target="A0605">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0429" target="A0453">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0429" target="A0612">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0434" target="A0594">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0434" target="A0611">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0435" target="A0455">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0437" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0444" target="A0449">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0444" target="A0460">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0446" target="A0464">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0448" target="A0452">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0448" target="A0604">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0449" target="A0485">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0452" target="A0604">
+      <data key="w">0.0</data>
+      <data key="loai">cha_con</data>
+    </edge>
+    <edge source="A0453" target="A0458">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0453" target="A0459">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0453" target="A0468">
+      <data key="w">-0.1</data>
+      <data key="loai">quan_he</data>
+    </edge>
+    <edge source="A0462" target="A0467">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0468" target="A0470">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+    <edge source="A0471" target="A0477">
+      <data key="w">1.0</data>
+      <data key="loai">quan_he|vo_chong</data>
+    </edge>
+  </graph>
+</graphml>

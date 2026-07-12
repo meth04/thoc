@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from engine.ledger import EPSILON, Ledger
 
-DUNG_SAI = 1e-6
+# 1e-6 → 1e-5 (mock300r2 tick 494): tài sản chia lẻ vô hạn (4.5 công/kg cá, hao 15%/tick)
+# trôi float ~1e-6 sau ~500 tick × hàng trăm nghìn bút toán; luồng lậu thật luôn ≥ gram.
+DUNG_SAI = 1e-5
 
 
 class LoiBaoToan(Exception):
@@ -23,8 +25,10 @@ def kiem_toan_the_gioi(w, tong_thua_ban_dau: int) -> None:
     if len(w.parcels) != tong_thua_ban_dau:
         loi.append(f"Tổng thửa đổi: {len(w.parcels)} ≠ {tong_thua_ban_dau}")
     for p in w.parcels.values():
-        if p.chu is not None and p.chu not in w.agents and not p.chu.startswith("E"):
-            loi.append(f"Thửa {p.id} có chủ không tồn tại: {p.chu}")
+        # chủ thửa phải là agent CÒN SỐNG hoặc entity CÒN HOẠT ĐỘNG — người chết
+        # chưa thừa kế xong, VO_THUA_NHAN, entity giải thể đứng tên đất = chủ thể ma
+        if p.chu is not None and not w.chu_the_hoat_dong(p.chu):
+            loi.append(f"Thửa {p.id} có chủ không hoạt động: {p.chu}")
     tong_cong = w.ledger.tong_tai_san("cong")
     if abs(tong_cong) > DUNG_SAI:
         loi.append(f"Công không bốc hơi hết cuối tick: còn {tong_cong}")

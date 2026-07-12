@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 
 from engine.contracts import HopDong, validate_hop_dong
 
-HET_HAN_DE_NGHI = 4  # tick
-
 
 @dataclass
 class DeNghi:
@@ -96,6 +94,7 @@ def khop_bang_rao(w) -> None:
     """Bước 4 pipeline: xử lý trả lời trên bảng rao; khớp đầu tiên thắng."""
     g = w.rng.get("bang_rao", w.tick)
     toi_da_vong = int(w.cfg.get("hop_dong.mac_ca_toi_da_vong"))
+    het_han = int(w.cfg.get("hop_dong.de_nghi_het_han_tick"))
     for dn_id in sorted(w.bang_rao):
         dn = w.bang_rao.get(dn_id)
         if dn is None:
@@ -107,7 +106,7 @@ def khop_bang_rao(w) -> None:
             continue
         if not dn.tra_loi:
             # chỉ hết hạn khi KHÔNG có trả lời đang chờ xử lý
-            if w.tick - dn.tick > HET_HAN_DE_NGHI:
+            if w.tick - dn.tick > het_han:
                 del w.bang_rao[dn_id]
                 w.ghi_ky_uc(dn.tu, f"đề nghị {dn.id} ({dn.motif}) của tôi hết hạn, "
                                    f"chẳng ai nhận — có lẽ điều kiện chưa hấp dẫn")
@@ -138,6 +137,10 @@ def khop_bang_rao(w) -> None:
                         for vai in ("tu", "den"):
                             if getattr(ck.thi, vai, None) == "?":
                                 setattr(ck.thi, vai, ai)
+                    if ck.loai == "khi_pha_vo" and ck.phat_chuyen_giao is not None:
+                        for vai in ("tu", "den"):
+                            if getattr(ck.phat_chuyen_giao, vai, None) == "?":
+                                setattr(ck.phat_chuyen_giao, vai, ai)
                 if _ky_hop_dong(w, hd):
                     khop_xong = True
                     break
@@ -150,5 +153,5 @@ def khop_bang_rao(w) -> None:
         else:
             dn.tra_loi.clear()
             # có người trả lời mà vẫn không ký được → không giữ zombie quá hạn
-            if w.tick - dn.tick > HET_HAN_DE_NGHI:
+            if w.tick - dn.tick > het_han:
                 del w.bang_rao[dn_id]

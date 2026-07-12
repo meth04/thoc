@@ -19,9 +19,12 @@ diem_nghien_cuu:
 xac_suat_thanh_cong:         # p = 1 - exp(-diem_tich_luy / (k0 * (1 + muc_linh_vuc)^d))
   k0: 160                     # 40→120→160 (hiệu chỉnh Phase 4): trung vị 140 → [160,280]
   d: 1.6                      # lợi suất giảm dần — càng tiến sâu càng khó
+  he_so_roll_moi_tick: 0.25   # roll mỗi tick trên p tích lũy — nhân hệ số để mượt
 
 blueprint:
   do_lon_lognormal: {mu: 0.12, sigma: 0.5}          # engine RÚT, LLM không tự đặt số
+  do_lon_dich: 0.05           # dịch phân phối: lognormal(...) - 1 + dịch
+  do_lon_san: 0.02            # sàn độ lớn blueprint
   do_lon_tran: 0.8
   # hiệu chỉnh Phase 4 (DECISIONS.md): máy móc phải đủ mạnh thì xưởng mới có lãi
   he_so_theo_linh_vuc: {cong_cu_may_moc: 3.0}
@@ -29,8 +32,15 @@ blueprint:
 
 hang_moi:                    # chỉ cho lĩnh vực che_bien
   input_menu: [thoc, go, quang_dong]
+  so_input: [1, 3]           # rút integers[min, max) — số loại nguyên liệu
+  luong_moi_input: [1, 4]    # rút integers[min, max) — lượng mỗi nguyên liệu
+  cong_khoang: [20, 60]      # rút integers[min, max) — công mỗi đơn vị hàng
+  cong_mac_dinh: 30          # recipe thiếu công (dữ liệu cũ) → dùng mặc định này
   hieu_ung_menu: [tien_nghi, cong_cu, luu_kho, vat_lieu]
   do_lon_hieu_ung: {mu: 0.08, sigma: 0.4}
+  hieu_ung_dich: 0.05        # dịch phân phối hiệu ứng
+  hieu_ung_san: 0.02
+  hieu_ung_tran: 0.5
 
 khuech_tan:
   giam_chi_phi_moi_blueprint_luu_hanh: 0.9          # sao chép rẻ dần
@@ -42,7 +52,8 @@ may:                         # "máy" — hạt giống vật lý của xưởng
   pham_vi: nhan_nang_suat_cong_cua_nguoi_lam_cho_chu_may
 
 tri_thuc:                    # sàn trí tuệ NỘI SINH (thay era kịch bản)
-  cong_thuc: "sum(log(1+do_lon_blueprint)) + 3.0 * ty_le_biet_chu"
+  cong_thuc: "sum(log(1+do_lon_blueprint)) + he_so_biet_chu * ty_le_biet_chu"
+  he_so_biet_chu: 3.0
   nguong_san_tier: [{tri_thuc: 6.0, san: T1}, {tri_thuc: 16.0, san: T2}]
 
 hieu_chinh:                  # Phase 4 — chỉnh CÁC SỐ TRONG FILE NÀY, không sửa hành vi bot

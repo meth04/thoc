@@ -25,7 +25,8 @@ def mo_tiec(w: World, aid: str, thoc: float, thit: float) -> None:
     if thoc + thit * quy_doi < float(tc["chi_phi_toi_thieu_thoc"]):
         _ghi_su_co(w, aid, "tiệc quá đạm bạc (cỗ mỏng), không ai buồn đến")
         return
-    khach = w.hang_xom_cua(aid, ban_kinh=6, toi_da=int(tc["khach_toi_da"]))
+    khach = w.hang_xom_cua(aid, ban_kinh=int(tc["ban_kinh_moi"]),
+                           toi_da=int(tc["khach_toi_da"]))
     if not khach:
         _ghi_su_co(w, aid, "quanh nhà không có hàng xóm nào để mời tiệc")
         return
@@ -40,7 +41,7 @@ def mo_tiec(w: World, aid: str, thoc: float, thit: float) -> None:
         w.ghi_ky_uc(k, f"{aid} mở tiệc khao xóm, tôi được mời — có đi có lại mới toại lòng nhau")
     w.ghi_ky_uc(aid, f"tôi mở tiệc khao cả xóm ({len(khach)} khách) — nở mày nở mặt")
     w.events.ghi(w.tick, "mo_tiec", id=aid, thoc=round(thoc, 1), thit=round(thit, 1),
-                 so_khach=len(khach))
+                 so_khach=len(khach), khach=list(khach))
 
 
 def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> None:
@@ -56,11 +57,13 @@ def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> Non
     if lay <= 1e-9:
         _ghi_su_co(w, ke, f"lẻn vào nhà {muc_tieu} nhưng kho {tai_san} trống trơn")
         return
-    g = w.rng.get("xa_hoi", w.tick)
+    # spawn theo (kẻ trộm, tick): mỗi vụ trộm trong tick một roll ĐỘC LẬP —
+    # dùng chung một stream thì cả làng cùng thoát/cùng bị bắt (tương quan = 1)
+    g = w.rng.get(f"xa_hoi:{ke}", w.tick)
     if g.random() < float(tr["p_thanh_cong"]):
         w.ledger.chuyen(muc_tieu, ke, tai_san, lay, "mất trộm", w.tick)
         if muc_tieu in w.agents:
-            nhieu = 1.0 + (g.random() - 0.5) * 0.4
+            nhieu = 1.0 + (g.random() - 0.5) * float(tr["nhieu_uoc_luong"])
             _ghi_su_co(w, muc_tieu,
                        f"kho {tai_san} vơi đi khoảng {lay * nhieu:.0f} — nghi có kẻ trộm")
         w.ghi_ky_uc(ke, f"tôi lẻn lấy {lay:.0f} {tai_san} của {muc_tieu} — trót lọt, "
@@ -69,7 +72,8 @@ def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> Non
                      so_luong=round(lay, 1), bi_bat=False)
     else:
         w.cong_quan_he(ke, muc_tieu, float(tr["quan_he_nan_nhan"]))
-        for hx in w.hang_xom_cua(muc_tieu, ban_kinh=6, toi_da=8):
+        for hx in w.hang_xom_cua(muc_tieu, ban_kinh=int(tr["ban_kinh_xom"]),
+                                 toi_da=int(tr["xom_toi_da"])):
             if hx != ke:
                 w.cong_quan_he(ke, hx, float(tr["quan_he_hang_xom"]))
         if muc_tieu in w.agents:
@@ -78,6 +82,23 @@ def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> Non
         _ghi_su_co(w, ke, f"trộm nhà {muc_tieu} THẤT BẠI: bị bắt quả tang, cả xóm đã biết")
         w.events.ghi(w.tick, "trom", ke=ke, nan_nhan=muc_tieu, tai_san=tai_san,
                      so_luong=0.0, bi_bat=True)
+
+
+def decay_quan_he(w: World) -> None:
+    """Quan hệ không nuôi thì nhạt dần — áp cuối mỗi năm (tick chẵn), tất định.
+
+    Nhân mọi trọng số với (1 - decay); xóa cạnh quá mờ và cạnh dính chủ thể
+    không còn hoạt động (đồ thị không phình vô hạn với người chết)."""
+    if w.mua_mua():
+        return
+    decay = float(w.cfg.get("quan_he.decay_moi_nam"))
+    nguong = float(w.cfg.get("quan_he.nguong_xoa_canh"))
+    moi: dict[tuple[str, str], float] = {}
+    for (a, b), v in w.quan_he.items():
+        v *= 1.0 - decay
+        if abs(v) >= nguong and w.chu_the_hoat_dong(a) and w.chu_the_hoat_dong(b):
+            moi[(a, b)] = v
+    w.quan_he = moi
 
 
 def cuu_mang_mo_coi(w: World) -> None:
@@ -114,13 +135,13 @@ def cuu_mang_mo_coi(w: World) -> None:
                         c = w.agents.get(co_chu)
                         if (c and c.con_song and co_chu not in (a.cha, a.me)
                                 and c.truong_thanh(tt)):
-                            ung_vien.append((3, -c.tuoi_nam, co_chu))
+                            ung_vien.append((3, -c.tuoi_nam, co_chu))  # s5: bậc ưu tiên
         if not ung_vien:
             # 4) người dưng: quan hệ tốt nhất với cha/mẹ quá cố
             for b in w.agents.values():
                 if b.con_song and b.truong_thanh(tt):
                     diem = sum(w.uy_tin(b.id, pid) for pid in (a.cha, a.me) if pid)
-                    ung_vien.append((4, -diem, b.id))
+                    ung_vien.append((4, -diem, b.id))  # s5: bậc ưu tiên
         if not ung_vien:
             continue
         ung_vien.sort()

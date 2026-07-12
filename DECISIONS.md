@@ -65,3 +65,50 @@
   cong_moi_kg_ca 6→4.5 + pool 25→35 (đánh cá toàn thời gian trước đây = 75kg quy thóc/tick
   < 90kg nhu cầu — prompt hứa "sống được nhờ sông" mà vật lý không cho sống);
   ga_an_thoc_moi_tick 4→2 (đàn gà nuốt khẩu phần ~70 người/tick — gà thật nửa thả rông).
+- 2026-07-11: DUNG_SAI audit 1e-6 → 1e-5 (mock300r2 sập tick 494: 'ca' lệch 1.009e-6 —
+  trôi float thuần túy do chia 4.5 công/kg + hao 15%/tick qua ~10^5 bút toán; 1e-5 kg =
+  0.01 gram vẫn bắt mọi rò rỉ thật vốn ≥ đơn vị nguyên).
+- 2026-07-12: dat_dai hiệu chỉnh lần 2: thoai_hoa 0.01→0.02, phuc_hoi 0.015→0.008. Lý do: bộ
+  (0.01, 0.015) làm phục hồi mùa khô ĐÈ BẸP thoái hóa (net +0.6%/năm) → đất không bao giờ bạc
+  màu (test bắt được). Bộ mới: canh liên tục net -1%/năm → kiệt sau ~70 năm (văn liệu 60-100);
+  bỏ hoang +1.6%/năm → hồi từ sàn về gốc trong ~25-30 năm (chế độ hưu canh dài).
+- 2026-07-12 (tổng kiểm định check.md bằng đa agent — 2 wave audit + fix, ~45 finding):
+  KIẾN TRÚC KIỂM ĐỊNH: tools/reality_check.py đóng gói check.md thành 1 lệnh (S/P tự động,
+  D/E trên run, exit≠0 khi S/P fail — gắn được vào gate PHASES); tools/social_graph.py xuất
+  mạng lưới quan hệ (JSON/GraphML) từ checkpoint để quản lý agent như đồ thị.
+  ĐIỂM TỰ PHÁT S+P: 100% sau các sửa đổi chính:
+  1. P1/P4: XÓA danh mục nghề "[NHỮNG CÁCH MƯU SINH]" (công thức định chế mớm sẵn) + mọi câu
+     chuẩn tắc trong prompt ("khôn ngoan", "nên luân canh", "chữ nghĩa là quyền lực"...) —
+     prompt giờ thuần số liệu vật lý; cảnh báo đói chỉ nêu số. Mẫu hợp đồng lan như văn hóa
+     qua cơ chế P2 (mẫu ĐANG LƯU HÀNH thật) — nghề nghiệp phải tự phát sinh.
+  2. P5: danh mục hành động xáo theo w.rng.get("menu_xao", tick) — chống thiên vị vị trí,
+     vẫn tất định. GAP-1: mẫu khởi đầu đọc từ config hop_dong.mau_khoi_dau (C1 chạy được thật).
+  3. S4: engine KHÔNG đặt giá nữa — bỏ phí đỡ đẻ 20kg tự động (rủi ro sinh nở chỉ giảm khi có
+     HỢP ĐỒNG y tế thật giữa hộ sản phụ và chủ blueprint y_te, giá hai bên tự định); bỏ giá
+     đất bịa 300 trong định giá phá sản (không giá lịch sử → loại đất, bảo thủ).
+  4. S5: mọi hằng kinh tế về config (phap_nhan, khoi_tao, tieu_dung, tu_vong_noi_suy,
+     dot_bien_persona, cua_so_tick, khai_thac cong_moi_go/quang, ban_do sông/làng...);
+     hằng cấu trúc (0.5 làm tròn, 100.0 chuẩn hóa, sentinel, bậc ưu tiên) whitelist có
+     giải trình tại chỗ bằng marker "s5:".
+  5. S6: danh mục RNG hợp lệ mở rộng chính thức: thời tiết, tie-break, đột biến persona,
+     blueprint, nhiễu tin đồn/ước lượng, nhiễu intents, sinh-tử, chăn nuôi, xác suất trộm,
+     khởi tạo t0, xáo menu/batch, lấy mẫu rao vặt — tất cả qua một cây RNG seeded.
+  6. Chủ thể ma quét sạch: bên chết/vô thừa nhận trong hợp đồng → SKIP leg (không phạt oan,
+     không chuyển vào túi người chết, GIỮ chi trả bảo hiểm khi 2 bên sống); thừa kế lọc người
+     nhận còn hoạt động; audit siết chủ thửa phải sống/hoạt động; đàn gà/niêm yết/cổ tức/
+     thanh lý đều lọc chủ thể hoạt động. NaN/inf bị chặn tại Ledger (một chỗ cho mọi luồng).
+  7. Đồ thị quan hệ thành xương sống: decay+prune mỗi năm CHẠY THẬT (trước đây key config
+     tồn tại mà không ai chạy); giao dịch kinh tế nuôi cạnh (chuyển giao định kỳ, hợp đồng
+     hoàn thành, dạy học, khớp chợ cùng làng); tri thức khuếch tán theo cạnh/cùng làng;
+     prompt hiện "THÂN QUEN & ÂN OÁN" từ cạnh thật; bảng rao public + rao vặt lọc theo làng
+     (thông tin lan trong làng, entity rao toàn vùng); quan_he vào world_hash.
+  8. bao_huy: văn phạm hủy-báo-trước được nối trọn (intent → tick → translate 2 chiều) —
+     trước đây có field mà không agent nào kích hoạt được.
+  9. Minds real: lỗi HTTP dai dẳng = hết ngân sách (LoiProviderHong → fallback thẻ cũ + dừng
+     êm có checkpoint); ngân sách đếm cả call dịch intent + nén hồi ký, trần retry ×2;
+     mỗi attempt hỏng ghi llm_calls; su_co xóa ở orchestrator (builder chỉ đọc); rulebot
+     entity chỉ cầm việc thường nhật — chiến lược pháp nhân do người điều hành (LLM) quyết.
+  10. D2 (tính mới mô-típ) GIẢI TRÌNH thay vì sửa: mock heuristic không có năng lực sáng tạo
+     mô-típ — chỉ đo được trên run real ≥100 năm; không thêm mô-típ mồi (= ngụy tạo).
+  11. E1-E8 chỉ BÁO CÁO (quy tắc sắt §4): E1 Pareto khớp, E4 Malthus một phần, E7 lệch trên
+     mock (rulebot định giá đất thô) — không nắn tham số theo E.

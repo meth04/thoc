@@ -64,8 +64,20 @@ def thi_hanh_nghien_cuu(w: World, aid: str, linh_vuc: str, cong: float, thoc: fl
                  diem=round(diem, 2), tich_luy=round(w.diem_nc[key], 2))
 
 
-def _muc_linh_vuc(w: World, linh_vuc: str) -> int:
-    return sum(1 for bp in w.blueprints.values() if bp.linh_vuc == linh_vuc)
+def _lang_cua_chu(w: World, cid: str) -> int:
+    a = w.agents.get(cid)
+    return a.lang if a is not None else 0  # entity: làng 0 (làng lập entity)
+
+
+def _muc_linh_vuc(w: World, linh_vuc: str, aid: str) -> int:
+    """Blueprint cùng lĩnh vực mà NGƯỜI NGHIÊN CỨU tiếp cận được: chủ của nó CÙNG LÀNG
+    hoặc có quan hệ dương với mình — tri thức lan theo tiếp xúc, không broadcast."""
+    lang = _lang_cua_chu(w, aid)
+    return sum(
+        1 for bp in w.blueprints.values()
+        if bp.linh_vuc == linh_vuc
+        and (bp.chu == aid or _lang_cua_chu(w, bp.chu) == lang or w.uy_tin(aid, bp.chu) > 0)
+    )
 
 
 def buoc_nghien_cuu(w: World) -> None:
@@ -73,18 +85,20 @@ def buoc_nghien_cuu(w: World) -> None:
     r = w.cfg.raw()["research"]
     xs = r["xac_suat_thanh_cong"]
     kt = r["khuech_tan"]
+    he_so_roll = float(xs["he_so_roll_moi_tick"])
     g = w.rng.get("blueprint", w.tick)
     for key in sorted(w.diem_nc):
         aid, linh_vuc = key
         diem = w.diem_nc[key]
         if diem <= 0:
             continue
-        muc = _muc_linh_vuc(w, linh_vuc)
-        # khuếch tán: sao chép rẻ dần theo blueprint lưu hành cùng lĩnh vực
+        muc = _muc_linh_vuc(w, linh_vuc, aid)
+        # khuếch tán: sao chép rẻ dần theo blueprint lưu hành MÀ MÌNH TIẾP CẬN ĐƯỢC
         giam = max(kt["san"], kt["giam_chi_phi_moi_blueprint_luu_hanh"] ** muc)
         k0 = xs["k0"] * giam
         p = 1.0 - math.exp(-diem / (k0 * (1.0 + muc) ** xs["d"]))
-        if g.random() >= p * 0.25:  # roll mỗi tick trên p đã tích lũy — nhân 0.25 để mượt
+        # roll mỗi tick trên p đã tích lũy — nhân hệ số để mượt
+        if g.random() >= p * he_so_roll:
             continue
         w.diem_nc[key] = 0.0
         sinh_blueprint(w, aid, linh_vuc, g)
@@ -95,12 +109,13 @@ def sinh_blueprint(w: World, chu: str, linh_vuc: str, g) -> Blueprint:
     bp_cfg = r["blueprint"]
     he_so_lv = bp_cfg.get("he_so_theo_linh_vuc", {}).get(linh_vuc, 1.0)
     tran_lv = bp_cfg.get("tran_theo_linh_vuc", {}).get(linh_vuc, bp_cfg["do_lon_tran"])
+    dich = float(bp_cfg["do_lon_dich"])
     do_lon = min(
         (float(g.lognormal(bp_cfg["do_lon_lognormal"]["mu"],
-                           bp_cfg["do_lon_lognormal"]["sigma"]) - 1.0 + 0.05)) * he_so_lv,
+                           bp_cfg["do_lon_lognormal"]["sigma"]) - 1.0 + dich)) * he_so_lv,
         tran_lv,
     )
-    do_lon = max(0.02, do_lon)
+    do_lon = max(float(bp_cfg["do_lon_san"]), do_lon)
     w._next_bp += 1
     bid = f"BP{w._next_bp:04d}"
     ten = f"Bí quyết {linh_vuc.replace('_', ' ')} #{w._next_bp}"
@@ -108,13 +123,18 @@ def sinh_blueprint(w: World, chu: str, linh_vuc: str, g) -> Blueprint:
                    tick_sinh=w.tick)
     if linh_vuc == "che_bien":
         hm = r["hang_moi"]
-        inputs = list(g.choice(hm["input_menu"], size=int(g.integers(1, 3)), replace=False))
-        bp.recipe = {str(ts): float(g.integers(1, 4)) for ts in inputs}
-        bp.recipe["cong"] = float(g.integers(20, 60))
+        so_in_min, so_in_max = (int(x) for x in hm["so_input"])
+        luong_min, luong_max = (int(x) for x in hm["luong_moi_input"])
+        cong_min, cong_max = (int(x) for x in hm["cong_khoang"])
+        inputs = list(g.choice(hm["input_menu"],
+                               size=int(g.integers(so_in_min, so_in_max)), replace=False))
+        bp.recipe = {str(ts): float(g.integers(luong_min, luong_max)) for ts in inputs}
+        bp.recipe["cong"] = float(g.integers(cong_min, cong_max))
         bp.hieu_ung = str(g.choice(hm["hieu_ung_menu"]))
-        bp.hieu_ung_do_lon = max(0.02, min(0.5, float(
-            g.lognormal(hm["do_lon_hieu_ung"]["mu"], hm["do_lon_hieu_ung"]["sigma"]) - 1.0
-            + 0.05)))
+        bp.hieu_ung_do_lon = max(float(hm["hieu_ung_san"]), min(
+            float(hm["hieu_ung_tran"]), float(
+                g.lognormal(hm["do_lon_hieu_ung"]["mu"], hm["do_lon_hieu_ung"]["sigma"])
+                - 1.0 + float(hm["hieu_ung_dich"]))))
         goc = TEN_HANG_GOI_Y[int(g.integers(0, len(TEN_HANG_GOI_Y)))]
         bp.hang_moi = f"{goc.lower()}_{w._next_bp}"
         w.ten_hang[bp.hang_moi] = f"{goc} {bp.ten}"
@@ -148,10 +168,12 @@ def duoc_ap_dung(w: World, aid: str, linh_vuc: str) -> float:
 
 
 def tinh_tri_thuc(w: World) -> float:
+    tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    he_so = float(w.cfg.raw()["research"]["tri_thuc"]["he_so_biet_chu"])
     tong_bp = sum(math.log(1.0 + bp.do_lon) for bp in w.blueprints.values())
-    nguoi_lon = [a for a in w.agents.values() if a.con_song and a.tuoi_nam >= 16]
+    nguoi_lon = [a for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt]
     biet_chu = (sum(1 for a in nguoi_lon if a.e_bac >= 1) / len(nguoi_lon)) if nguoi_lon else 0
-    return tong_bp + 3.0 * biet_chu
+    return tong_bp + he_so * biet_chu
 
 
 def cap_nhat_san_tier(w: World) -> None:

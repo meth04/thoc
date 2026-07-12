@@ -21,25 +21,27 @@ def hao_hut_kho(w: World) -> None:
             for ma, do_lon in hieu_ung_hang.items():
                 if w.ledger.so_du(chu_the, ma) >= 1.0:
                     giam += do_lon
-            ty_le = ty_le_goc * max(0.1, 1.0 - giam)
+            san = float(w.cfg.get("tieu_dung.san_hao_kho"))
+            ty_le = ty_le_goc * max(san, 1.0 - giam)
             w.ledger.huy(chu_the, "thoc", v * ty_le, "hao_kho", "hao hụt kho", w.tick)
 
 
 def an_va_suc_khoe(w: World) -> None:
     nc = w.cfg.raw()["nhu_cau"]
     sk = w.cfg.raw()["suc_khoe"]
+    td = w.cfg.raw()["tieu_dung"]
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
 
-    # Ăn theo hộ: gom nhu cầu, ăn từ kho các thành viên (chủ hộ trước)
+    # Ăn theo hộ: gom nhu cầu, ăn từ kho các thành viên (chủ hộ trước).
+    # Dedup bằng da_xu_ly tại thành viên ĐẦU TIÊN gặp theo thứ tự sorted —
+    # điều kiện min(ho) từng làm con riêng nhà tái hôn rơi khỏi mọi hộ (không ăn,
+    # không chết đói)
     da_xu_ly: set[str] = set()
     for aid in sorted(w.agents):
         a = w.agents[aid]
         if not a.con_song or aid in da_xu_ly:
             continue
         ho = [m for m in w.ho_cua(aid) if w.agents[m].con_song]
-        # chỉ xử lý hộ một lần, tại thành viên có id nhỏ nhất trong hộ
-        if min(ho) != aid:
-            continue
         da_xu_ly.update(ho)
         nhu_cau_tung_nguoi = {
             m: (nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(tt) else nc["tre_em_kg_tick"])
@@ -80,12 +82,12 @@ def an_va_suc_khoe(w: World) -> None:
             for m in ho:
                 if w.ledger.so_du(m, bp.hang_moi) >= 1.0:
                     w.ledger.huy(m, bp.hang_moi, 1.0, "tieu_dung", "tiện nghi", w.tick)
-                    bonus_tien_nghi += bp.hieu_ung_do_lon * 10.0
+                    bonus_tien_nghi += (bp.hieu_ung_do_lon
+                                        * float(td["he_so_tien_nghi_health"]))
                     break
-        hao_gia = float(w.cfg.raw().get("lao_dong_theo_tuoi", {})
-                        .get("hao_suc_gia_moi_tick", 0))
-        tuoi_giam = float(w.cfg.raw().get("lao_dong_theo_tuoi", {})
-                          .get("tuoi_giam_suc", 60))
+        ld = w.cfg.raw()["lao_dong_theo_tuoi"]
+        hao_gia = float(ld["hao_suc_gia_moi_tick"])
+        tuoi_giam = float(ld["tuoi_giam_suc"])
         for m in ho:
             ag = w.agents[m]
             if bonus_tien_nghi > 0:
@@ -98,7 +100,7 @@ def an_va_suc_khoe(w: World) -> None:
                 mat = sk["mat_toi_da_khi_doi"] * (1.0 - ty_le_no)
                 ag.health = max(0.0, ag.health - mat)
                 ag.doi_tick = w.tick  # đánh dấu vừa thiếu ăn — phân loại cái chết đúng
-                if ty_le_no < 0.75:
+                if ty_le_no < float(td["nguong_an_doi_event"]):
                     w.events.ghi(w.tick, "an_doi", id=m, ty_le_no=round(ty_le_no, 2))
 
     # Vô gia cư: hộ không sở hữu nhà nào → mùa mưa mất health
@@ -108,8 +110,6 @@ def an_va_suc_khoe(w: World) -> None:
         if not a.con_song or aid in da_xu_ly:
             continue
         ho = [m for m in w.ho_cua(aid) if w.agents[m].con_song]
-        if min(ho) != aid:
-            continue
         da_xu_ly.update(ho)
         co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in ho)
         for m in ho:

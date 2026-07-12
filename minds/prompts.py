@@ -8,15 +8,21 @@ from __future__ import annotations
 
 from engine.world import World
 
-MAU_KHOI_DAU = [
-    '{"cac_ben":["A","B"],"hinh_thuc":"mieng","thoi_han":1,"dieu_khoan":[{"loai":"gop_cong",'
-    '"tu":"A","den":"B","so_cong_moi_tick":60},{"loai":"chuyen_giao_mot_lan","tu":"B",'
-    '"den":"A","tai_san":"thoc","so_luong":240,"tai":"ky_ket"}]}',
-    '{"cac_ben":["A","B"],"hinh_thuc":"mieng","thoi_han":4,"dieu_khoan":[{"loai":'
-    '"chuyen_giao_mot_lan","tu":"A","den":"B","tai_san":"thoc","so_luong":200,"tai":"ky_ket"},'
-    '{"loai":"chuyen_giao_mot_lan","tu":"B","den":"A","tai_san":"thoc","so_luong":220,'
-    '"tai":"dao_han"}]}',
-]
+# Mẫu hợp đồng khởi đầu: tên mô-típ (config hop_dong.mau_khoi_dau) → JSON minh họa.
+# Config rỗng → prompt không có mẫu mồi nào (điều kiện phản chứng C1).
+MAU_KHOI_DAU_THEO_TEN: dict[str, str] = {
+    # đổi công lấy thóc, trả trọn một lần khi ký — trao đổi nguyên thủy
+    "doi_cong_lay_thoc_mot_lan":
+        '{"cac_ben":["A","B"],"hinh_thuc":"mieng","thoi_han":1,"dieu_khoan":[{"loai":"gop_cong",'
+        '"tu":"A","den":"B","so_cong_moi_tick":60},{"loai":"chuyen_giao_mot_lan","tu":"B",'
+        '"den":"A","tai_san":"thoc","so_luong":240,"tai":"ky_ket"}]}',
+    # cho mượn có hoàn trả — mượn bao nhiêu trả bấy nhiêu (điều kiện khác là chuyện mặc cả)
+    "cho_muon_co_hoan_tra":
+        '{"cac_ben":["A","B"],"hinh_thuc":"mieng","thoi_han":4,"dieu_khoan":[{"loai":'
+        '"chuyen_giao_mot_lan","tu":"A","den":"B","tai_san":"thoc","so_luong":200,"tai":"ky_ket"},'
+        '{"loai":"chuyen_giao_mot_lan","tu":"B","den":"A","tai_san":"thoc","so_luong":200,'
+        '"tai":"dao_han"}]}',
+}
 
 
 def mau_hop_dong_luu_hanh(w: World, top_k: int) -> list[str]:
@@ -41,13 +47,18 @@ def mau_hop_dong_luu_hanh(w: World, top_k: int) -> list[str]:
     xep = sorted(dem.items(), key=lambda kv: -kv[1][0])[:top_k]
     mau = [vd for _, (_, vd) in xep]
     if not mau:
-        mau = MAU_KHOI_DAU
+        ten_mau = w.cfg.get("hop_dong.mau_khoi_dau", []) or []
+        mau = [MAU_KHOI_DAU_THEO_TEN[t] for t in ten_mau if t in MAU_KHOI_DAU_THEO_TEN]
     return mau
 
 
 def mo_ta_the_gioi(w: World) -> str:
     """Khối mô tả thế giới sinh động từ trạng thái thật (không kỷ nguyên kịch bản)."""
-    tai_san_ton_tai = sorted(w.ledger.cac_tai_san() - {"cong"})
+    # lọc tài sản kỹ thuật nội bộ (vi_the:* là vị thế hợp đồng — không phải của cải,
+    # phơi ra là lộ mọi cặp bên hợp đồng toàn thế giới)
+    tai_san_ton_tai = sorted(
+        ts for ts in w.ledger.cac_tai_san() - {"cong"} if not ts.startswith("vi_the:")
+    )
     so_hd = sum(1 for h in w.hop_dong.values() if h.trang_thai == "hieu_luc")
     dan = sum(1 for a in w.agents.values() if a.con_song)
     return (
@@ -82,7 +93,7 @@ def build_user_chung(w: World) -> str:
         f"[TÌNH HÌNH CHUNG] Mùa {'mưa' if w.mua_mua() else 'khô'}, thời tiết {loai_tt} "
         f"(hệ số {he_so}). Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. "
         f"Bảng rao có {so_rao} đề nghị. "
-        f"[CÁC DẠNG THỎA THUẬN ĐANG LƯU HÀNH] {mau} "
+        f"[CÁC DẠNG THỎA THUẬN ĐANG LƯU HÀNH] {mau if mau else '(chưa từng có thỏa thuận nào)'} "
         f"[BẠN CÓ THỂ] đề nghị/trả lời hợp đồng (văn phạm 9 điều khoản: chuyen_giao_dinh_ky, "
         f"chuyen_giao_mot_lan, quyen_su_dung, gop_cong, chia_san_luong, chia_loi_nhuan, "
         f"dieu_kien_su_kien, hoan_tra_theo_yeu_cau, khi_pha_vo), lap_phap_nhan, dat_lenh "
@@ -91,7 +102,7 @@ def build_user_chung(w: World) -> str:
     )
 
 
-SCHEMA_QUYET_DINH = """[ĐỊNH DẠNG TRẢ LỜI — BẮT BUỘC]
+SCHEMA_DAU = """[ĐỊNH DẠNG TRẢ LỜI — BẮT BUỘC]
 Trả về DUY NHẤT một MẢNG JSON (không lời dẫn, không markdown), mỗi phần tử là quyết định
 của MỘT người: {"id":"A0001","the_chinh_sach":{...tùy chọn},"hanh_dong":[...],"ly_do":"1 câu"}.
 Không hành động gì thì để "hanh_dong":[]. Mỗi người quyết định ĐỘC LẬP theo tính cách riêng.
@@ -102,36 +113,41 @@ the_chinh_sach (thói quen tự chạy khi bạn không được hỏi — chỉ
  "nhan_gui_thoc":false,"ban_go_nguong":4,"mua_cong_cu_khi_hong":true,"nguong_rao_dat":0.3,
  "phung_duong_cha_me":true,"du_dinh":"mục tiêu dài hạn của bạn, ≤200 chữ"}
 
-hanh_dong hợp lệ (loai + tham số):
-- {"loai":"phan_bo_cong","canh_thua":["P15_04"],"khai_go_cong":60,"khai_quang_cong":0,
-   "hoc":true,"day_cho":["A0012"]}   (canh thửa mình/thửa công/thửa có quyền dùng)
-- {"loai":"xay","mon":"nha"|"che_tac"|"may"|"xu"|"<mã hàng mới>","so_luong":1}
-- {"loai":"de_nghi_hop_dong","den":"A0031"|null,"hop_dong":{"cac_ben":["<id bạn>","?"],
-   "hinh_thuc":"mieng"|"van_ban","thoi_han":8,"the_chap":["thua:P15_04"],"dieu_khoan":[...]}}
-  ("?" = bên chưa biết, người nhận lời sẽ thế chỗ; bạn PHẢI là một bên; văn bản cần E1)
-- {"loai":"tra_loi_hop_dong","ref":"DN00012","tra_loi":"chap_nhan"|"tu_choi"}
-- {"loai":"dat_lenh","chieu":"mua"|"ban","tai_san":"go|cong_cu|quang_dong|xu|nha|thoc|
-   co_phan:E0001|<mã hàng>","sl":4,"gia":12.5,"thanh_toan":"thoc"}
-- {"loai":"niem_yet","tai_san":"thua:P15_04","gia":600}   (rao bán đất của mình)
-- {"loai":"tra_gia_dat","thua":"P15_04","gia":650}        (trả giá đất đang niêm yết)
-- {"loai":"yeu_cau_hoan_tra","ref":"HD00007","so_luong":200}  (rút từ hợp đồng gửi)
-- {"loai":"nghien_cuu","linh_vuc":"nong_nghiep|cong_cu_may_moc|luu_kho|van_chuyen|y_te|
-   vat_lieu|che_bien","cong":60,"thoc":50}
-- {"loai":"lap_phap_nhan","ten":"...","co_phan":{"<id bạn>":100},
-   "von_gop":{"<id bạn>":{"thoc":1500}}}   (vốn góp chỉ từ túi bạn)
-- {"loai":"quyet_dinh_entity","entity":"E0001","hanh_dong_con":[<các hành động trên>]}
-- {"loai":"cau_hon","den":"A0042"} · {"loai":"tra_loi_cau_hon","cua":"A0042","dong_y":true}
-- {"loai":"viet_di_chuc","phan_bo":{"A0051":60,"A0052":40},"gia_huan":"≤100 từ"}
-- {"loai":"di_cu"} · {"loai":"don_phuong_pha_vo","ref":"HD00003"}
-- {"loai":"chan_nuoi","bat_ga_cong":60,"giet_ga":2}  (bắt gà rừng / giết gà lấy thịt)
-- {"loai":"bieu","den":"A0002","tai_san":"thoc","so_luong":90}  (biếu tặng — phụng
-  dưỡng cha mẹ già, quà cưới, cứu đói người thân... không cần hợp đồng)
-- {"loai":"danh_ca","cong":120}  (ra sông đánh cá — sinh kế không cần ruộng)
-- {"loai":"mo_tiec","thoc":150,"thit":10}  (mở tiệc khao xóm — tốn của, được lòng người)
-- {"loai":"trom","muc_tieu":"A0002","tai_san":"thoc","so_luong":100}  (làm liều lúc
-  cùng đường — bị bắt quả tang là cả xóm coi khinh, thân bại danh liệt)
+hanh_dong hợp lệ (loai + tham số, thứ tự liệt kê không mang ý nghĩa gì):"""
 
-Văn phạm dieu_khoan (9 loại — ghép tự do thành mọi kiểu thỏa thuận):
+# Danh mục hành động — mỗi phần tử một mục; thứ tự được XÁO theo seed×tick khi ghép
+# prompt (schema_quyet_dinh) để không mớm ưu tiên qua vị trí liệt kê.
+MUC_HANH_DONG: list[str] = [
+    '- {"loai":"phan_bo_cong","canh_thua":["P15_04"],"khai_go_cong":60,"khai_quang_cong":0,\n'
+    '   "hoc":true,"day_cho":["A0012"]}   (canh thửa mình/thửa công/thửa có quyền dùng)',
+    '- {"loai":"xay","mon":"nha"|"che_tac"|"may"|"xu"|"<mã hàng mới>","so_luong":1}',
+    '- {"loai":"de_nghi_hop_dong","den":"A0031"|null,"hop_dong":{"cac_ben":["<id bạn>","?"],\n'
+    '   "hinh_thuc":"mieng"|"van_ban","thoi_han":8,"the_chap":["thua:P15_04"],"dieu_khoan":[...]}}\n'
+    '  ("?" = bên chưa biết, người nhận lời sẽ thế chỗ; bạn PHẢI là một bên; văn bản cần E1)',
+    '- {"loai":"tra_loi_hop_dong","ref":"DN00012","tra_loi":"chap_nhan"|"tu_choi"}',
+    '- {"loai":"dat_lenh","chieu":"mua"|"ban","tai_san":"go|cong_cu|quang_dong|xu|nha|thoc|\n'
+    '   co_phan:E0001|<mã hàng>","sl":4,"gia":12.5,"thanh_toan":"thoc"}',
+    '- {"loai":"niem_yet","tai_san":"thua:P15_04","gia":600}   (rao bán đất của mình)',
+    '- {"loai":"tra_gia_dat","thua":"P15_04","gia":650}        (trả giá đất đang niêm yết)',
+    '- {"loai":"yeu_cau_hoan_tra","ref":"HD00007","so_luong":200}  (rút từ hợp đồng gửi)',
+    '- {"loai":"nghien_cuu","linh_vuc":"nong_nghiep|cong_cu_may_moc|luu_kho|van_chuyen|y_te|\n'
+    '   vat_lieu|che_bien","cong":60,"thoc":50}',
+    '- {"loai":"lap_phap_nhan","ten":"...","co_phan":{"<id bạn>":100},\n'
+    '   "von_gop":{"<id bạn>":{"thoc":1500}}}   (vốn góp chỉ từ túi bạn)',
+    '- {"loai":"quyet_dinh_entity","entity":"E0001","hanh_dong_con":[<các hành động trên>]}',
+    '- {"loai":"cau_hon","den":"A0042"} · {"loai":"tra_loi_cau_hon","cua":"A0042","dong_y":true}',
+    '- {"loai":"viet_di_chuc","phan_bo":{"A0051":60,"A0052":40},"gia_huan":"≤100 từ"}',
+    '- {"loai":"di_cu"} · {"loai":"don_phuong_pha_vo","ref":"HD00003"}',
+    '- {"loai":"chan_nuoi","bat_ga_cong":60,"giet_ga":2}  (bắt gà rừng / giết gà lấy thịt)',
+    '- {"loai":"bieu","den":"A0002","tai_san":"thoc","so_luong":90}  (biếu tặng — không cần\n'
+    '  hợp đồng)',
+    '- {"loai":"danh_ca","cong":120}  (đánh cá trên sông)',
+    '- {"loai":"mo_tiec","thoc":150,"thit":10}  (mở tiệc mời hàng xóm)',
+    '- {"loai":"trom","muc_tieu":"A0002","tai_san":"thoc","so_luong":100}  (lấy trộm —\n'
+    '  hơn nửa số lần bị bắt quả tang)',
+]
+
+VAN_PHAM_CLAUSE = """Văn phạm dieu_khoan (9 loại — ghép tự do thành mọi kiểu thỏa thuận):
 chuyen_giao_dinh_ky{tu,den,tai_san,so_luong,moi_n_tick} ·
 chuyen_giao_mot_lan{tu,den,tai_san,so_luong,tai:"ky_ket"|"dao_han"} ·
 quyen_su_dung{tai_san:"thua:P.."|"blueprint:BP..",tu,den} · gop_cong{tu,den,so_cong_moi_tick} ·
@@ -139,6 +155,16 @@ chia_san_luong{nguon:"thua:P..",ty_le:0.4,den} ·
 dieu_kien_su_kien{neu:{"loai":"han_lu"},thi:<chuyen_giao_*>} ·
 hoan_tra_theo_yeu_cau{tu,den,tai_san,tran_rut_moi_tick} ·
 khi_pha_vo{phat:"xiet_the_chap"|"khong"} · chia_loi_nhuan{entity,theo_co_phan:true}"""
+
+
+def schema_quyet_dinh(muc_hanh_dong: list[str] | None = None) -> str:
+    """Ghép schema quyết định; truyền danh mục hành động đã xáo để chống thiên vị vị trí."""
+    muc = MUC_HANH_DONG if muc_hanh_dong is None else muc_hanh_dong
+    return SCHEMA_DAU + "\n" + "\n".join(muc) + "\n\n" + VAN_PHAM_CLAUSE
+
+
+# Bản thứ tự chuẩn (không xáo) — dùng cho call dịch intent lạ (minds/real.py).
+SCHEMA_QUYET_DINH = schema_quyet_dinh()
 
 
 LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
@@ -155,52 +181,37 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   dòng họ tuyệt tự. Cầu hôn ở mùa nào cũng được; người kia trả lời tick sau.
 - CHĂN NUÔI: bắt gà rừng về nuôi (30 công/con, làng có rừng). Gà ăn 4kg thóc/tick
   (đói thì chết), no đủ thì đàn đẻ +15%/tick. Giết 1 gà → 8kg thịt (1kg thịt no bằng
-  3kg thóc) nhưng thịt ôi nhanh (hao 20%/tick) — giết vừa ăn, còn lại bán gà sống.
-  Nhà nhiều thóc nuôi đàn gà là một nguồn thu nhập khôn ngoan.
-- TUỔI TÁC: trẻ dưới 15 KHÔNG làm đồng — cho đi học (day_cho + hoc) là đầu tư đời
-  người. Từ 15 tuổi phụ giúp được 30% sức. Quá 60 tuổi sức yếu dần (nửa công, hao sức
-  mỗi tick), quá 70 gần như nghỉ hẳn — con cháu phải PHỤNG DƯỠNG cha mẹ già (chu cấp
-  thóc, thẻ chính sách có sẵn phung_duong_cha_me).
+  3kg thóc); thịt ôi nhanh (hao 20%/tick), gà sống thì không hao.
+- TUỔI TÁC: trẻ dưới 15 KHÔNG làm đồng (đi học thì được — hoc/day_cho). Từ 15 tuổi
+  phụ giúp được 30% sức. Quá 60 tuổi sức yếu dần (nửa công, hao sức mỗi tick), quá 70
+  gần như nghỉ hẳn — người già không còn tự kiếm ăn được, không có thóc là đói.
+- CHỮ NGHĨA: học nâng bậc chữ E từng bậc một (tự học mất gấp đôi thời gian so với có
+  người biết chữ day_cho). Hợp đồng MIỆNG ai cũng lập được; hợp đồng VĂN BẢN — loại
+  duy nhất kèm được thế chấp và cưỡng chế khi phá vỡ — chỉ người biết chữ (E1 trở
+  lên) soạn được.
+- SINH NỞ có rủi ro cho sản phụ; nếu trong làng có người nắm bí quyết y_te thì sản
+  phụ tự trả người đó 20kg thóc và rủi ro giảm hẳn.
 - ĐẤT BẠC MÀU: canh cùng một thửa liên tục thì độ màu giảm 4%/vụ (chạm đáy ở nửa độ
-  màu gốc); BỎ HOANG thì hồi dần. Nhà nhiều ruộng nên LUÂN CANH cho đất nghỉ.
+  màu gốc); BỎ HOANG thì độ màu hồi dần.
 - TAY NGHỀ: mỗi vụ trực tiếp canh tác, kinh nghiệm đồng áng tăng dần (tối đa +20%
   năng suất) — lão nông tri điền gặt nhiều hơn tay mơ trên cùng một thửa.
-- ĐÁNH CÁ: sông là CỦA CHUNG — 6 công/kg cá, 1kg cá no bằng 2.5kg thóc, nhưng cá ươn
-  nhanh (hao 15%/tick) và trữ lượng mỗi mùa CÓ HẠN: cả làng cùng đổ ra sông là cạn.
-  Người không ruộng vẫn sống được nhờ sông (đánh cá quanh năm, mùa nào cũng được).
-- TIỆC KHAO XÓM: bỏ ra ≥60kg (thóc/thịt quy đổi) mời hàng xóm — tốn của nhưng cả xóm
-  quý mến; quan hệ tốt là vốn liếng khi cần vay mượn, cưới hỏi, làm ăn.
-- TRỘM CẮP: về mặt vật lý KHÔNG gì ngăn bạn lấy trộm (được thì ~1/4 kho người ta), nhưng
-  hơn nửa số lần sẽ BỊ BẮT QUẢ TANG — nạn nhân thù, cả xóm coi khinh, không ai dám làm
-  ăn với bạn nữa. Làng KHÔNG có tuần đinh sẵn — muốn kho lẫm an toàn, dân làng phải tự
-  tổ chức lấy (thuê người canh, lập giao kèo trừng phạt, đền bù...).
-- TRẺ MỒ CÔI cả cha lẫn mẹ sẽ được thân nhân gần nhất (hoặc hàng xóm tử tế) cưu mang,
-  ăn chung nồi cơm nhà người nuôi — nhận nuôi là thêm miệng ăn nhưng cũng là phúc đức.
-- SẮP ĐÓI thì đừng ngồi chờ chết: đi VAY (đề nghị hợp đồng: nhận thóc ngay ký kết,
-  hứa trả nhiều hơn khi đáo hạn, có thể thế chấp đất), xin LÀM THUÊ đổi công lấy thóc,
-  ra sông ĐÁNH CÁ, BÁN gỗ/công cụ/gà/đất, hoặc nhận lời đề nghị sẵn trên bảng rao.
+- ĐÁNH CÁ: sông là CỦA CHUNG, không cần ruộng, mùa nào cũng được — 6 công/kg cá,
+  1kg cá no bằng 2.5kg thóc, cá ươn nhanh (hao 15%/tick); trữ lượng mỗi mùa CÓ HẠN:
+  cả làng cùng đổ ra sông là cạn.
+- TIỆC KHAO XÓM: bỏ ra ≥60kg (thóc/thịt quy đổi) mời hàng xóm — của cải mất đi,
+  những người đến dự thêm quý mến người mở tiệc.
+- TRỘM CẮP: về mặt vật lý KHÔNG gì ngăn bạn lấy trộm (được thì ~1/4 kho người ta),
+  nhưng hơn nửa số lần sẽ BỊ BẮT QUẢ TANG — nạn nhân thù, cả xóm coi khinh. Làng
+  KHÔNG có tuần đinh hay hình phạt dựng sẵn nào.
+- TRẺ MỒ CÔI cả cha lẫn mẹ được thân nhân gần nhất (hoặc một hàng xóm) cưu mang,
+  ăn chung nồi cơm nhà người nuôi — nhà cưu mang có thêm một miệng ăn.
 
 [BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
-mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, phụng dưỡng cha mẹ già,
-để lại gia sản); và vị thế (đất đai, của cải, chữ nghĩa, tiếng thơm). Nặng nhẹ ra sao
-là tùy TÍNH CÁCH bạn. Muốn có con: đặt y_dinh_sinh_con (0/0.5/1) trong the_chinh_sach.
+mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, cha mẹ già, để lại gia
+sản); và vị thế (đất đai, của cải, chữ nghĩa, tiếng thơm). Nặng nhẹ ra sao
+là tùy TÍNH CÁCH bạn. Muốn có con: đặt y_dinh_sinh_con (0/0.5/1) trong the_chinh_sach."""
 
-[NHỮNG CÁCH MƯU SINH NGƯỜI TA VẪN LÀM — bạn tự chọn, tự sáng tạo cách khác cũng được]
-- Nông dân: khai hoang/canh ruộng nhà. Tá điền: thuê đất người khác (quyen_su_dung +
-  chia_san_luong hoặc + tô cố định). Người làm thuê: gop_cong đổi thóc định kỳ.
-- Thợ thủ công: khai gỗ → chế công cụ/nhà đem bán. Thợ mỏ: đào quặng bán / đúc xu.
-- Người chăn nuôi: gây đàn gà, bán gà sống/thịt cho làng — nhà dư thóc càng nên nuôi.
-- Người đánh cá: không tấc đất cắm dùi vẫn sống nhờ sông; bán cá tươi cho làng.
-- Lái buôn: mua rẻ bán đắt trên chợ (dat_lenh 2 chiều).
-- THẦY ĐỒ (giáo viên): biết chữ (E cao) thì dạy người khác — day_cho trong phan_bo_cong,
-  kèm hợp đồng học phí (học trò trả thóc định kỳ). Học trò thăng E, bạn có thu nhập.
-- Thầy lang: nắm blueprint y_te thì được trả thóc khi đỡ đẻ, cứu người.
-- Người cho vay / giữ thóc: cho vay lấy lãi (2 chuyen_giao_mot_lan), nhận gửi–rút.
-- Chủ trại/chủ xưởng: lập pháp nhân, thuê người, sắm máy, bán cổ phần gọi vốn.
-- Nhà sáng chế: dồn công + thóc vào nghien_cuu — blueprint cho thuê li-xăng kiếm lời.
-Biết chữ (E1+) mới soạn được VĂN BẢN có thế chấp/cưỡng chế — chữ nghĩa là quyền lực."""
-
-VI_DU_QUYET_DINH = """[VÍ DỤ một quyết định (đừng sao chép — hãy quyết theo hoàn cảnh CỦA BẠN)]
+VI_DU_QUYET_DINH = """[VÍ DỤ ĐỊNH DẠNG một quyết định — hoàn cảnh mỗi người mỗi khác, quyết theo hoàn cảnh CỦA BẠN]
 {"id":"A0017","hanh_dong":[{"loai":"phan_bo_cong","canh_thua":["P14_25","P14_26"]},
 {"loai":"de_nghi_hop_dong","den":"A0031","hop_dong":{"cac_ben":["A0017","A0031"],
 "hinh_thuc":"mieng","thoi_han":8,"dieu_khoan":[{"loai":"quyen_su_dung","tai_san":"thua:P15_02",
@@ -212,14 +223,18 @@ VI_DU_QUYET_DINH = """[VÍ DỤ một quyết định (đừng sao chép — hã
 def build_batch_prompt(w: World, ids: list[str], triggers: dict[str, list[str]]) -> str:
     """Prompt trọn gói cho một batch: luật chơi + tình hình chung + N khối riêng + schema."""
     dau = (
-        "Bạn sẽ đóng vai TỪNG NGƯỜI dưới đây trong một làng khép kín thời sơ khai (1 tick "
+        "Bạn sẽ đóng vai TỪNG NGƯỜI dưới đây trong một làng khép kín (1 tick "
         "= 6 tháng). Mỗi người chỉ biết những gì làng mình biết, quyết định như CHÍNH HỌ — "
         "nhất quán với tính cách, ký ức, gia huấn riêng, kể cả khi khác số đông. "
         "Đơn vị giá trị: kg thóc.\n\n"
     )
     chung = build_user_chung(w)
     rieng = "\n\n".join(build_user_rieng(w, aid, triggers.get(aid, [])) for aid in ids)
-    return f"{dau}{LUAT_VAT_LY}\n\n{chung}\n\n{rieng}\n\n{SCHEMA_QUYET_DINH}\n\n" \
+    # xáo thứ tự danh mục hành động theo seed×tick (P5 check.md): chống thiên vị
+    # vị trí liệt kê mà vẫn tất định — cùng seed cùng tick → cùng thứ tự
+    g_menu = w.rng.get("menu_xao", w.tick)
+    muc_xao = [MUC_HANH_DONG[i] for i in g_menu.permutation(len(MUC_HANH_DONG))]
+    return f"{dau}{LUAT_VAT_LY}\n\n{chung}\n\n{rieng}\n\n{schema_quyet_dinh(muc_xao)}\n\n" \
            f"{VI_DU_QUYET_DINH}\n" \
            f"Trả mảng JSON đúng {len(ids)} phần tử, id theo thứ tự: {ids}."
 
@@ -255,6 +270,13 @@ def _mo_ta_clause(ck, aid: str) -> str:
     return loai
 
 
+# Cap hiển thị trong prompt riêng — chống phình prompt khi tài sản/giao kèo tích lũy.
+HD_HIEN_TOI_DA = 10       # giao kèo liệt kê chi tiết (ưu tiên sắp đáo hạn), dư thì đếm gộp
+DAT_HIEN_TOI_DA = 8       # thửa đất liệt kê chi tiết, dư thì tóm tắt
+QUAN_HE_DUONG_TOI_DA = 4  # số mối thân thiết hiện trong THÂN QUEN & ÂN OÁN
+QUAN_HE_AM_TOI_DA = 3     # số mối hiềm khích hiện trong THÂN QUEN & ÂN OÁN
+
+
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     a = w.agents[aid]
     tai_san = w.ledger.tai_san_cua(aid)
@@ -262,22 +284,44 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"{ts}: {sl:.0f}" for ts, sl in sorted(tai_san.items())
         if not ts.startswith("vi_the:")
     )
-    dat = sorted(p.id for p in w.parcels.values() if p.chu == aid)
-    # độ màu từng thửa — nhìn là biết thửa nào bạc màu cần cho nghỉ (luân canh)
+    # độ màu từng thửa — nhìn là biết thửa nào đang bạc màu; nhiều thửa thì tóm tắt
     dat_hien = [
         f"{p.id}(màu {p.mau_mo:.2f}"
         + (", ĐANG BẠC MÀU" if p.mau_mo_goc > 0 and p.mau_mo < p.mau_mo_goc * 0.8 else "")
         + ")"
         for p in sorted((q for q in w.parcels.values() if q.chu == aid), key=lambda q: q.id)
     ]
+    if len(dat_hien) > DAT_HIEN_TOI_DA:
+        con_lai = dat_hien[DAT_HIEN_TOI_DA:]
+        so_bac_mau = sum(1 for m in con_lai if "ĐANG BẠC MÀU" in m)
+        dat_hien = dat_hien[:DAT_HIEN_TOI_DA] + [
+            f"… và {len(con_lai)} thửa nữa ({so_bac_mau} thửa trong đó đang bạc màu)"
+        ]
+    # giao kèo hiệu lực — ưu tiên sắp đáo hạn, vô thời hạn xếp sau, dư thì đếm gộp
+    hd_hieu_luc = sorted(
+        (h for h in w.hop_dong.values()
+         if h.trang_thai == "hieu_luc" and aid in h.cac_ben),
+        key=lambda h: (h.thoi_han is None,
+                       (h.tick_ky + h.thoi_han - w.tick) if h.thoi_han is not None else 0,
+                       h.id),
+    )
     hd_cua = []
-    for h in w.hop_dong.values():
-        if h.trang_thai == "hieu_luc" and aid in h.cac_ben:
-            dk = "; ".join(_mo_ta_clause(c, aid) for c in h.dieu_khoan)
-            hd_cua.append(f"{h.id}: {dk} (hạn {h.thoi_han} tick)")
+    for h in hd_hieu_luc[:HD_HIEN_TOI_DA]:
+        dk = "; ".join(_mo_ta_clause(c, aid) for c in h.dieu_khoan)
+        han = f"hạn {h.thoi_han} tick" if h.thoi_han is not None else "không thời hạn"
+        hd_cua.append(f"{h.id}: {dk} ({han})")
+    if len(hd_hieu_luc) > HD_HIEN_TOI_DA:
+        hd_cua.append(f"… và {len(hd_hieu_luc) - HD_HIEN_TOI_DA} giao kèo nữa")
     rao_cho_toi = []
     for dn in sorted(w.bang_rao.values(), key=lambda d: d.id):
-        if (dn.den == aid or dn.den is None) and dn.tu != aid:
+        if dn.tu == aid:
+            continue
+        # đề nghị công khai chỉ nghe được trong CÙNG LÀNG (pháp nhân không thuộc làng
+        # nào — rao của nó vang khắp vùng); đề nghị đích danh thì luôn tới tay
+        nguoi_rao = w.agents.get(dn.tu)
+        cong_khai_nghe_duoc = dn.den is None and (
+            nguoi_rao is None or nguoi_rao.lang == a.lang)
+        if dn.den == aid or cong_khai_nghe_duoc:
             dk = "; ".join(_mo_ta_clause(c, aid) for c in dn.hd.dieu_khoan)
             rao_cho_toi.append(f"{dn.id} (từ {dn.tu}): {dk}")
     rao_cho_toi = rao_cho_toi[:8]
@@ -365,11 +409,36 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         dong.append("CHUYỆN ĐỜI BẠN (chớ quên): " + " | ".join(a.ky_uc[-7:]))
     if gia_dinh:
         dong.append("Gia đình: " + "; ".join(gia_dinh) + ".")
+    # thân quen & ân oán — trải nghiệm tích lũy của CHÍNH BẠN với từng người còn sống
+    # (chỉ mô tả trạng thái, sort tất định theo trọng số rồi id)
+    quen: list[tuple[float, str]] = []
+    for (x, y), trong_so in w.quan_he.items():
+        khac = y if x == aid else x if y == aid else None
+        if khac is None or trong_so == 0.0:
+            continue
+        b = w.agents.get(khac)
+        if b is None or not b.con_song:
+            continue
+        quen.append((trong_so, khac))
+    than = sorted((q for q in quen if q[0] > 0),
+                  key=lambda q: (-q[0], q[1]))[:QUAN_HE_DUONG_TOI_DA]
+    oan = sorted((q for q in quen if q[0] < 0),
+                 key=lambda q: (q[0], q[1]))[:QUAN_HE_AM_TOI_DA]
+    if than or oan:
+        phan = []
+        if than:
+            phan.append("thân thiết với: " + ", ".join(
+                f"{w.agents[i].ten} ({i}, {ts:+.1f})" for ts, i in than))
+        if oan:
+            phan.append("có hiềm khích với: " + ", ".join(
+                f"{w.agents[i].ten} ({i}, {ts:+.1f})" for ts, i in oan))
+        dong.append("THÂN QUEN & ÂN OÁN (theo trải nghiệm của riêng bạn, số âm là oán): "
+                    + "; ".join(phan) + ".")
     if cau_hon_cho_toi:
         dong.append("💍 " + " ".join(cau_hon_cho_toi))
     if dang_treo_cua_toi:
         dong.append(f"Đề nghị bạn đã rao còn treo (chưa ai nhận): {dang_treo_cua_toi} "
-                    f"— đừng rao lại y hệt.")
+                    f"— rao thêm bản y hệt cũng chỉ nằm cạnh bản cũ.")
     if hd_cua:
         dong.append(f"Giao kèo đang hiệu lực của bạn: {hd_cua}.")
     if co_phan:
@@ -392,16 +461,9 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     )
     if nhu_cau > 0 and thoc_ho < nhu_cau * 2:
         so_tick = thoc_ho / nhu_cau
-        cach = ["vay (đề nghị hợp đồng)", "xin làm thuê (gop_cong đổi thóc)",
-                "ra sông đánh cá (danh_ca)", "nhận đề nghị sẵn trên bảng rao"]
-        if w.ledger.so_du(aid, "go") >= 1 or w.ledger.so_du(aid, "cong_cu") >= 1:
-            cach.append("bán gỗ/công cụ (dat_lenh)")
-        if dat:
-            cach.append(f"bán bớt ruộng (niem_yet thua:{dat[-1]})")
         dong.append(
-            f"⚠ NGUY CƠ ĐÓI: nhà bạn ({len(ho)} miệng ăn, cần {nhu_cau:.0f}kg/tick) chỉ còn "
-            f"{thoc_ho:.0f}kg thóc — cầm cự được ~{so_tick:.1f} tick. Lo cái ăn TRƯỚC "
-            f"mọi việc khác: {'; '.join(cach)}."
+            f"⚠ NGUY CƠ ĐÓI: nhà bạn {len(ho)} miệng ăn cần {nhu_cau:.0f}kg thóc/tick, "
+            f"kho cả nhà chỉ còn {thoc_ho:.0f}kg — đủ ăn ~{so_tick:.1f} tick nữa."
         )
     # hàng xóm quanh nhà — biết ƯỚC LƯỢNG tài sản của nhau (nhiễu ±30%, không biết
     # chính xác; thóc trong kho chỉ đoán mờ qua nếp sống)
@@ -432,11 +494,13 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     if rao_vat:
         g_rv = w.rng.get(f"tin_don:{aid}", w.tick)
         nhieu = float(w.cfg.get("thuong_mai.nhieu_tin_don_gia"))
+        # tin đồn chợ chỉ lan trong CÙNG LÀNG (pháp nhân không thuộc làng — nghe khắp vùng)
         tin = [
             f"{ai} {'đang rao bán' if chieu == 'ban' else 'đang hỏi mua'} "
             f"{sl:.0f} {ts} (giá nghe đâu ~{gia * (1 + float(g_rv.uniform(-nhieu, nhieu))):.0f})"
-            for ai, chieu, ts, sl, gia in rao_vat[:6] if ai != aid
-        ]
+            for ai, chieu, ts, sl, gia in rao_vat
+            if ai != aid and (ai not in w.agents or w.agents[ai].lang == a.lang)
+        ][:6]
         if tin:
             dong.append("NGHE PHONG THANH Ở CHỢ: " + "; ".join(tin) + ".")
     # dự định dài hạn tự ghi lần trước — sống có mục tiêu, đừng quên mình định làm gì
@@ -444,9 +508,9 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     if the_cu.get("du_dinh"):
         dong.append(f"DỰ ĐỊNH BẠN TỰ GHI LẦN TRƯỚC: “{the_cu['du_dinh']}” — cập nhật "
                     f"bằng the_chinh_sach.du_dinh nếu đổi ý.")
-    # phản hồi việc không thành tick trước (đọc xong thì xóa)
+    # phản hồi việc không thành tick trước — builder CHỈ ĐỌC, không xóa;
+    # orchestrator xóa su_co sau khi prompt của tick đã build xong
     if a.su_co:
         dong.append(f"Chuyện vừa rồi KHÔNG THÀNH (rút kinh nghiệm): {a.su_co}")
-        a.su_co = []
     dong.append(f"Vì sao bạn được hỏi lúc này: {ly_do_trigger}.")
     return "\n".join(dong)

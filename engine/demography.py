@@ -119,28 +119,42 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         p = ss["p_goc"] * an_ninh * me.y_dinh_sinh_con
         if g.random() >= p:
             continue
-        # sinh nở — rủi ro giảm nếu mua được dịch vụ y tế (blueprint y_te trong làng)
+        # sinh nở — rủi ro CHỈ giảm khi hộ sản phụ CÓ HỢP ĐỒNG hiệu lực với người nắm
+        # blueprint y_te (giá cả do hai bên tự thỏa thuận trong hợp đồng — engine
+        # không tự móc túi ai, không tự đặt giá dịch vụ)
         rui_ro = ss["rui_ro_me"]
-        thay_thuoc = next(
-            (bp.chu for bp in w.blueprints.values()
-             if bp.linh_vuc == "y_te" and bp.chu in w.agents
-             and w.agents[bp.chu].con_song),
-            None,
-        )
-        if thay_thuoc and thay_thuoc != aid and w.ledger.so_du(aid, "thoc") >= 20:
+        ho_me = set(w.ho_cua(aid))
+        thay_thuoc = None
+        for bid in sorted(w.blueprints):
+            bp = w.blueprints[bid]
+            if (bp.linh_vuc != "y_te" or not w.chu_the_hoat_dong(bp.chu)
+                    or bp.chu in ho_me):
+                continue
+            co_hd = any(
+                hd.trang_thai == "hieu_luc" and bp.chu in hd.cac_ben
+                and ho_me & set(hd.cac_ben)
+                for hd in w.hop_dong.values()
+            )
+            if co_hd:
+                thay_thuoc = bp.chu
+                break
+        if thay_thuoc is not None:
             from engine.research import duoc_ap_dung
 
-            w.ledger.chuyen(aid, thay_thuoc, "thoc", 20.0, "dịch vụ đỡ đẻ", w.tick)
-            w.ghi_thu_nhap(thay_thuoc, "dich_vu", 20.0)
-            rui_ro *= max(0.2, 1.0 - duoc_ap_dung(w, thay_thuoc, "y_te"))
+            san = float(ss["y_te_giam_rui_ro_san"])
+            rui_ro *= max(san, 1.0 - duoc_ap_dung(w, thay_thuoc, "y_te"))
         if g.random() < rui_ro:
             me.health = 0.0  # tử vong sinh nở — xử lý ở bước chết
             w.events.ghi(w.tick, "tu_vong_sinh_no", id=aid)
         cid = w.id_moi()
         pa, pb = cha.persona.as_dict(), me.persona.as_dict()
-        # persona = trung bình cha mẹ ± đột biến 2 (seeded)
+        # persona = trung bình cha mẹ ± đột biến (seeded, tham số nhan_khau.dot_bien_persona)
+        db = w.cfg.get("nhan_khau.dot_bien_persona")
+        bien_do = int(db["bien_do"])
         gia_tri = {
-            k: int(np.clip(round((pa[k] + pb[k]) / 2 + g.integers(-2, 3)), 1, 9)) for k in pa
+            k: int(np.clip(round((pa[k] + pb[k]) / 2 + g.integers(-bien_do, bien_do + 1)),
+                           int(db["min"]), int(db["max"])))
+            for k in pa
         }
         con = Agent(
             id=cid,
@@ -160,24 +174,26 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         w.ghi_ky_uc(me.id, f"vợ chồng tôi sinh con {con.ten} ({cid})")
 
 
-def _q_nam(tuoi: float, gp: dict[str, float]) -> float:
-    """Gompertz nội suy log-linear giữa các mốc q20/q60/q75; ngoài 75 ngoại suy."""
-    q20, q60, q75 = gp["q20"], gp["q60"], gp["q75"]
-    if tuoi <= 20:
-        return q20
-    if tuoi <= 60:
-        t = (tuoi - 20) / 40
-        return math.exp(math.log(q20) * (1 - t) + math.log(q60) * t)
-    if tuoi <= 75:
-        t = (tuoi - 60) / 15
-        return math.exp(math.log(q60) * (1 - t) + math.log(q75) * t)
-    do_doc = (math.log(q75) - math.log(q60)) / 15
-    return min(0.8, math.exp(math.log(q75) + do_doc * (tuoi - 75)))
+def _q_nam(tuoi: float, gp: dict[str, float], ns: dict) -> float:
+    """Gompertz nội suy log-linear giữa các mốc tuổi (nhan_khau.tu_vong_noi_suy);
+    ngoài mốc cuối thì ngoại suy theo độ dốc đoạn cuối, chặn trần q/năm."""
+    moc = [float(m) for m in ns["moc_tuoi"]]
+    tran = float(ns["tran_q_nam"])
+    log_q = [math.log(gp[f"q{int(m)}"]) for m in moc]
+    if tuoi <= moc[0]:
+        return math.exp(log_q[0])
+    for i in range(1, len(moc)):
+        if tuoi <= moc[i]:
+            t = (tuoi - moc[i - 1]) / (moc[i] - moc[i - 1])
+            return math.exp(log_q[i - 1] * (1 - t) + log_q[i] * t)
+    do_doc = (log_q[-1] - log_q[-2]) / (moc[-1] - moc[-2])
+    return min(tran, math.exp(log_q[-1] + do_doc * (tuoi - moc[-1])))
 
 
 def cai_chet(w: World) -> list[str]:
     sk = w.cfg.raw()["suc_khoe"]
     gp = w.cfg.get("nhan_khau.tu_vong_gompertz")
+    ns = w.cfg.get("nhan_khau.tu_vong_noi_suy")
     g = w.rng.get("tu_vong", w.tick)
     chet: list[str] = []
     for aid in sorted(w.agents):
@@ -191,10 +207,11 @@ def cai_chet(w: World) -> list[str]:
         elif a.health < sk["nguong_nguy_kich"] and g.random() < sk["p_chet_khi_nguy_kich"]:
             ly_do = "chet_doi" if vua_doi else "benh_tat"
         else:
-            q_tick = 1 - (1 - _q_nam(a.tuoi_nam, gp)) ** 0.5
+            q_tick = 1 - (1 - _q_nam(a.tuoi_nam, gp, ns)) ** 0.5
             if g.random() < q_tick:
                 # đói mà chết thì là chết đói, dù trời có gọi đúng số
-                ly_do = "chet_doi" if (vua_doi and a.health < 50) else "tuoi_gia"
+                yeu = a.health < float(sk["nguong_phan_loai_chet_doi"])
+                ly_do = "chet_doi" if (vua_doi and yeu) else "tuoi_gia"
         if ly_do:
             a.con_song = False
             chet.append(aid)
@@ -239,6 +256,13 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
         nguoi_nhan = [a.vo_chong]
     else:
         nguoi_nhan = []
+    # phòng thủ cuối: KHÔNG bao giờ để tài sản/đất về tay chủ thể không hoạt động —
+    # rỗng thì rơi về nhánh vô thừa nhận / đất về công bên dưới
+    nguoi_nhan = [n for n in nguoi_nhan if w.chu_the_hoat_dong(n)]
+    if ty_trong is not None:
+        ty_trong = {n: ty_trong[n] for n in nguoi_nhan}
+        tong_tt = sum(ty_trong.values())
+        ty_trong = {n: v / tong_tt for n, v in ty_trong.items()} if tong_tt > 0 else None
 
     # tài sản trong sổ
     tai_san = w.ledger.tai_san_cua(aid)

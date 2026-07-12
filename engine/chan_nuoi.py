@@ -23,7 +23,9 @@ def buoc_chan_nuoi(w: World) -> None:
         (ct, v) for (ct, ts), v in w.ledger._so_du.items() if ts == "ga" and v >= 1
     )
     for chu, so_ga in chu_ga:
-        if chu in w.agents and not w.agents[chu].con_song:
+        # chủ không hoạt động (chết, VO_THUA_NHAN, entity giải thể) → đàn đứng im,
+        # không ăn thóc ma, không sinh sôi, không tiêu RNG
+        if not w.chu_the_hoat_dong(chu):
             continue
         so_ga = float(so_ga)
         # 1) gà ăn thóc — chủ nghèo thì đàn đói
@@ -44,7 +46,7 @@ def buoc_chan_nuoi(w: World) -> None:
                 _ghi_su_co(w, chu, f"đàn gà đói (thiếu {can_thoc - cho_an:.0f}kg thóc), "
                                    f"chết mất {chet:.1f} con")
         # tử suất tự nhiên của đàn (gà già, chồn cáo)
-        chet_gia = so_ga * float(cn.get("ga_chet_gia_moi_tick", 0.05))
+        chet_gia = so_ga * float(cn["ga_chet_gia_moi_tick"])
         if chet_gia > 0:
             nguyen_cg = int(chet_gia)
             if g.random() < chet_gia - nguyen_cg:

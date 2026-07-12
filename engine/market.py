@@ -7,9 +7,8 @@ nhưng agent có thể rao thanh toán bằng xu — xã hội có "tiền tệ 
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-
-import numpy as np
 
 from engine.ledger import LoiSoKep
 
@@ -32,16 +31,16 @@ def _phi_buon_chuyen(w, le: Lenh, lang_cho: int, gia_tri_quy_thoc: float) -> Non
         return
     v1, v2 = w.villages[lang_nha], w.villages[lang_cho]
     kc = abs(v1.r - v2.r) + abs(v1.c - v2.c)
+    chuan_hoa = float(w.cfg.get("thuong_mai.chuan_hoa_khoang_cach"))
     phi = gia_tri_quy_thoc * float(
-        w.cfg.get("thuong_mai.phi_van_chuyen_moi_khoang_cach")) * (kc / 10.0)
+        w.cfg.get("thuong_mai.phi_van_chuyen_moi_khoang_cach")) * (kc / chuan_hoa)
     phi = min(phi, w.ledger.so_du(le.ai, "thoc"))
     if phi > 0:
         w.ledger.huy(le.ai, "thoc", phi, "phi_van_chuyen", "phí buôn chuyến", w.tick)
 
 
 def _khop_mot_so_lenh(
-    w, tai_san: str, thanh_toan: str, mua: list[Lenh], ban: list[Lenh],
-    g: np.random.Generator, lang: int = 0,
+    w, tai_san: str, thanh_toan: str, mua: list[Lenh], ban: list[Lenh], lang: int = 0,
 ) -> float:
     """Call auction một cặp: tìm p* tối đa khối lượng, khớp pro-rata tại biên."""
     if not mua or not ban:
@@ -109,6 +108,11 @@ def _khop_mot_so_lenh(
                 )
                 _phi_buon_chuyen(w, mua_khop[i], lang, quy_thoc)
                 _phi_buon_chuyen(w, ban_khop[j], lang, quy_thoc)
+                # chợ làng là mặt-đối-mặt: cặp mua–bán CÙNG LÀNG thành bạn hàng dần
+                if _lang_cua(w, nguoi_mua) == _lang_cua(w, nguoi_ban):
+                    w.cong_quan_he_gioi_han(
+                        nguoi_mua, nguoi_ban,
+                        float(w.cfg.get("quan_he.cong_moi_tuong_tac")))
             except LoiSoKep:
                 pass  # bên nào thiếu (đặt lệnh quá tay) → phần khớp đó bỏ
         con_mua[i] -= khop
@@ -139,9 +143,11 @@ def phien_cho(w, lenh_tick: list[Lenh]) -> float:
 
     Lệnh gửi sang làng khác = buôn chuyến: chịu phí 2%/khoảng cách trên giá trị khớp.
     """
-    g = w.rng.get("cho", w.tick)
     cap: dict[tuple[int, str, str], tuple[list[Lenh], list[Lenh]]] = {}
     for le in lenh_tick:
+        # NaN/inf từ intent hỏng phải bị chặn NGAY — một lệnh NaN treo cả phiên chợ
+        if not (math.isfinite(le.so_luong) and math.isfinite(le.gia)):
+            continue
         if le.so_luong <= 0 or le.gia <= 0 or le.tai_san == le.thanh_toan:
             continue
         lang = le.lang if le.lang is not None else _lang_cua(w, le.ai)
@@ -152,7 +158,7 @@ def phien_cho(w, lenh_tick: list[Lenh]) -> float:
     tong = 0.0
     for (lang, ts, tt) in sorted(cap):
         mua, ban = cap[(lang, ts, tt)]
-        tong += _khop_mot_so_lenh(w, ts, tt, mua, ban, g, lang=lang)
+        tong += _khop_mot_so_lenh(w, ts, tt, mua, ban, lang=lang)
     return tong
 
 
@@ -169,6 +175,14 @@ class NiemYetDat:
 
 def phien_dat(w, niem_yet: dict[str, NiemYetDat], tra_gia: list[tuple[str, str, float]]) -> None:
     """Sealed bid từng thửa: bid cao nhất ≥ ask thắng, trả giá bid (first-price)."""
+    # niêm yết hết hạn hoặc chủ đã đổi (thừa kế, xiết nợ...) → gỡ khỏi bảng,
+    # không bán cưỡng bức theo giá ask cũ từ hàng chục tick trước
+    het_han = int(w.cfg.get("thuong_mai.niem_yet_het_han_tick"))
+    for thua in sorted(niem_yet):
+        ny = niem_yet[thua]
+        p = w.parcels.get(thua)
+        if p is None or p.chu != ny.chu or w.tick - ny.tick > het_han:
+            del niem_yet[thua]
     bid_theo_thua: dict[str, list[tuple[float, str]]] = {}
     for ai, thua, gia in tra_gia:
         if thua in niem_yet and gia > 0 and ai != niem_yet[thua].chu:

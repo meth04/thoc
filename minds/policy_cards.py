@@ -94,17 +94,20 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
                 cu = w.agents[pid]
                 if cu.con_song and cu.tuoi_nam > 60 and w.ledger.so_du(pid, "thoc") < 120:
                     kh.bieu.append((pid, "thoc", 120.0))
-    # đàn gà của thẻ: đói giết ăn, đông bán bớt (việc thường nhật)
-    so_ga = w.ledger.so_du(aid, "ga")
-    if an_ninh < 0.6 and so_ga >= 2:
-        kh.giet_ga = max(kh.giet_ga, 2)
-    # túng mà không ruộng → ra sông đánh cá (sinh kế không cần vốn)
-    if an_ninh < 0.9 and not bc.ruong_cua.get(aid) and not kh.canh_thua:
-        kh.danh_ca_cong = max(kh.danh_ca_cong, 120.0)
-    if so_ga > 12:
-        gia_ga = w.gia_gan_nhat("ga") or 40.0
-        kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),
-                                round(gia_ga * 0.95, 1)))
+    # heuristic sinh tồn tự động — chỉ chạy khi thẻ BẬT an_toan_sinh_ton
+    # (LLM tắt được bằng patch: giữ nguyên tắc "thẻ do agent tự đặt", check.md D5)
+    if the.an_toan_sinh_ton:
+        # đàn gà của thẻ: đói giết ăn, đông bán bớt (việc thường nhật)
+        so_ga = w.ledger.so_du(aid, "ga")
+        if an_ninh < 0.6 and so_ga >= 2:
+            kh.giet_ga = max(kh.giet_ga, 2)
+        # túng mà không ruộng → ra sông đánh cá (sinh kế không cần vốn)
+        if an_ninh < 0.9 and not bc.ruong_cua.get(aid) and not kh.canh_thua:
+            kh.danh_ca_cong = max(kh.danh_ca_cong, 120.0)
+        if so_ga > 12:
+            gia_ga = w.gia_gan_nhat("ga") or 40.0
+            kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),
+                                    round(gia_ga * 0.95, 1)))
 
     # tự động trả lời hợp đồng quen thuộc theo thẻ
     if the.nhan_lam_cong_gia_toi_thieu is not None or the.nhan_gui_thoc:

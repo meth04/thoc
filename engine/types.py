@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 class Persona:
     """5 trục tính cách 1–9, bất biến trọn đời (SPEC 4.5)."""
 
-    lieu_linh: int = 5  # chấp nhận rủi ro
-    cham_chi: int = 5  # cường độ lao động
-    trong_hoc: int = 5  # coi trọng học hành / R&D
-    hop_tac: int = 5  # thiên hướng hợp tác, giữ chữ tín
-    tiet_kiem: int = 5  # tích trữ vs tiêu dùng
+    lieu_linh: int = 5  # chấp nhận rủi ro (s5: trung điểm thang 1..9)
+    cham_chi: int = 5  # cường độ lao động (s5: trung điểm thang 1..9)
+    trong_hoc: int = 5  # coi trọng học hành / R&D (s5: trung điểm thang 1..9)
+    hop_tac: int = 5  # thiên hướng hợp tác, giữ chữ tín (s5: trung điểm thang 1..9)
+    tiet_kiem: int = 5  # tích trữ vs tiêu dùng (s5: trung điểm thang 1..9)
 
     def as_dict(self) -> dict[str, int]:
         return {
@@ -52,7 +52,7 @@ class Agent:
     gia_huan: str = ""
     di_chuc: dict | None = None  # {"phan_bo": {id: %}, "gia_huan": str}
     # theo dõi sinh tồn + phản hồi hành động (LLM đọc trong prompt)
-    doi_tick: int = -99  # tick gần nhất bị thiếu ăn
+    doi_tick: int = -99  # tick gần nhất bị thiếu ăn (s5: sentinel "chưa từng đói")
     su_co: list = field(default_factory=list)  # việc không thành gần đây (≤3 mục)
     # ký ức đời người — engine tự ghi các biến cố (cưới, sinh con, tang, giao kèo,
     # đất đai...); LLM đọc trong prompt để sống TIẾP một cuộc đời, không phải mỗi

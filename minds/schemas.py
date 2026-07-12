@@ -12,7 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # 15 nguyên tố hành động (SPEC 5)
 LOAI_HANH_DONG = {
-    "de_nghi_hop_dong", "tra_loi_hop_dong", "don_phuong_pha_vo", "lap_phap_nhan",
+    "de_nghi_hop_dong", "tra_loi_hop_dong", "don_phuong_pha_vo", "bao_huy",
+    "lap_phap_nhan",
     "quyet_dinh_entity", "niem_yet", "dat_lenh", "tra_gia_dat", "phan_bo_cong",
     "khai_hoang", "xay", "nghien_cuu", "buon_chuyen", "cau_hon", "tra_loi_cau_hon",
     "viet_di_chuc", "di_cu", "yeu_cau_hoan_tra", "chan_nuoi", "bieu",
@@ -41,6 +42,9 @@ class TheChinhSach(BaseModel):
     mua_cong_cu_khi_hong: bool = True
     nguong_rao_dat: float | None = None  # an ninh dưới ngưỡng → rao bớt đất
     phung_duong_cha_me: bool = True  # tự chuyển thóc cho cha mẹ già thiếu ăn
+    # heuristic sinh tồn tự động (giết gà khi đói, đánh cá khi túng, bán gà đàn đông)
+    # — LLM TẮT được bằng patch (tính "thẻ do agent tự đặt", check.md D5)
+    an_toan_sinh_ton: bool = True
     du_dinh: str = ""  # dự định dài hạn TỰ GHI — hiện lại trong prompt lần nghĩ sau
 
 
@@ -59,7 +63,11 @@ class PolicyPatch(BaseModel):
     mua_cong_cu_khi_hong: bool | None = None
     nguong_rao_dat: float | None = None
     phung_duong_cha_me: bool | None = None
+    an_toan_sinh_ton: bool | None = None
     du_dinh: str | None = None
+    # UNSET ngưỡng None-able (patch None nghĩa là "không đổi" nên cần kênh riêng):
+    # vd {"bo_nguong": ["ban_go_nguong"]} → ngừng bán gỗ theo ngưỡng
+    bo_nguong: list[str] | None = None
 
 
 class HanhDong(BaseModel):
@@ -84,6 +92,14 @@ def ap_patch(the_cu: TheChinhSach, patch: PolicyPatch) -> TheChinhSach:
 
     du_lieu: dict[str, Any] = the_cu.model_dump()
     moi = patch.model_dump(exclude_none=True)
+    # bo_nguong: unset tường minh các trường None-able (exclude_none nuốt None thường)
+    bo = moi.pop("bo_nguong", None) or []
+    truong_none_able = {
+        ten for ten, f in TheChinhSach.model_fields.items() if f.default is None
+    }
+    for ten in bo:
+        if str(ten) in truong_none_able:
+            moi[str(ten)] = None
     for _ in range(len(moi) + 1):
         try:
             return TheChinhSach(**{**du_lieu, **moi})

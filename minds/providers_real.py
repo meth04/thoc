@@ -32,7 +32,18 @@ class Route:
 
 
 class LoiHetQuota(Exception):
-    """Model/route cạn ngân sách trong chu kỳ hiện hành."""
+    """Model/route cạn ngân sách trong chu kỳ hiện hành.
+
+    Thuộc tính `so_attempt_hong`: số attempt đã thất bại trước khi bó tay
+    (điều luật #6 — orchestrator ghi vết vào llm_calls kể cả call thất bại).
+    """
+
+    so_attempt_hong: int = 0
+
+
+class LoiProviderHong(LoiHetQuota):
+    """Lỗi HTTP/parse dai dẳng dù ngân sách RPD còn — KHÔNG nên chờ slot RPM
+    (phân biệt với LoiHetQuota-vì-cạn-RPD để tầng pacing không đợi vô ích)."""
 
 
 class AIStudioProvider:
@@ -63,7 +74,7 @@ class AIStudioProvider:
         )
         if r.status_code == 429:
             self.pool.bao_429(key, time.time())
-            raise LoiRateLimit(key)
+            raise LoiRateLimit(key_hash(key))  # exception CHỈ mang hash, không mang key
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -118,7 +129,10 @@ class NineRouterProvider:
         )
         if r.status_code == 429:
             raise LoiRateLimit("ninerouter")
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPError(che_key(str(e))) from None  # không lộ key/header
         d = r.json()
         text = d["choices"][0]["message"]["content"]
         usage = d.get("usage", {})
@@ -131,8 +145,10 @@ class NineRouterProvider:
 
 
 class LoiRateLimit(Exception):
-    def __init__(self, key: str):
-        self.key = key
+    """429/nghẽn slot — chỉ mang key_hash (không bao giờ giữ key thô, điều luật #4 mục 4)."""
+
+    def __init__(self, key_hash: str):
+        self.key_hash = key_hash
         super().__init__("429")
 
 
@@ -172,26 +188,44 @@ class GatewayReal:
                                       self._key_hashes(route.provider), route.rpd, now)
 
     # ---------- gọi ----------
+    #: lỗi phản hồi provider bắt được khi gọi route — gồm cả body JSON hỏng
+    #: (ValueError từ r.json()), thiếu choices (IndexError), cấu trúc lạ (TypeError)
+    _LOI_PHAN_HOI = (httpx.HTTPError, KeyError, ValueError, IndexError, TypeError)
+
     def goi(self, req: LLMRequest) -> LLMResponse:
         tier_cfg = self.cfg.get(f"models.tiers.{req.tier}")
         loi_cuoi: Exception | None = None
+        so_attempt_hong = 0
+        co_route_con_rpd = False
         for route in self.routes_cua_tier(req.tier):
             now = time.time()
             if self.con_lai(route, now) <= 0:
                 continue  # route cạn RPD → tràn route sau
+            co_route_con_rpd = True
             for _ in range(self.retry_toi_da + 1):
                 try:
                     resp = self._goi_route(req, route, tier_cfg)
                     self.quota.ghi_call(route.provider, route.model, resp.key_hash,
                                         time.time())
+                    resp.retries = so_attempt_hong  # đếm retry THẬT (điều luật #6)
                     return resp
                 except LoiRateLimit as e:
                     loi_cuoi = e
+                    so_attempt_hong += 1
                     continue  # xoay key / thử lại
-                except (httpx.HTTPError, KeyError) as e:
+                except self._LOI_PHAN_HOI as e:
                     loi_cuoi = e
+                    so_attempt_hong += 1
                     continue
-        raise LoiHetQuota(f"tier {req.tier}: mọi route cạn/lỗi ({loi_cuoi})")
+        thong_bao = che_key(str(loi_cuoi)) if loi_cuoi is not None else "không còn route"
+        if co_route_con_rpd and isinstance(loi_cuoi, self._LOI_PHAN_HOI):
+            # RPD còn mà mọi attempt đều lỗi phản hồi → provider hỏng, đừng chờ slot
+            loi: LoiHetQuota = LoiProviderHong(
+                f"tier {req.tier}: lỗi provider dai dẳng ({thong_bao})")
+        else:
+            loi = LoiHetQuota(f"tier {req.tier}: mọi route cạn/lỗi ({thong_bao})")
+        loi.so_attempt_hong = so_attempt_hong
+        raise loi
 
     def _goi_route(self, req: LLMRequest, route: Route, tier_cfg: dict) -> LLMResponse:
         now = time.time()

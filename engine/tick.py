@@ -81,6 +81,13 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
             hd = w.hop_dong.get(hd_id)
             if hd is not None and hd.trang_thai == "hieu_luc" and aid in hd.cac_ben:
                 contracts.phat_vi_pham(w, hd, aid)
+        # báo hủy đúng luật: hợp đồng chấm dứt sau bao_truoc tick, không mất uy tín
+        for hd_id in ke_hoach[aid].bao_huy:
+            hd = w.hop_dong.get(hd_id)
+            if (hd is not None and hd.trang_thai == "hieu_luc" and aid in hd.cac_ben
+                    and hd.huy_bao_truoc_tu is None):
+                hd.huy_bao_truoc_tu = w.tick
+                w.events.ghi(w.tick, "bao_huy_hd", hd=hd_id, ai=aid)
 
     # 5. san_xuat: sinh công → góp công theo hợp đồng → canh/khai thác/chế tác/xây → R&D
     w.kl_hd_tick = 0.0  # tích lũy giá trị chuyển giao qua hợp đồng trong tick (quy thóc)
@@ -137,11 +144,18 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
             tra_gia.append((aid, thua, float(gia)))
         for hd_id, sl in kh.yeu_cau_rut.items():
             w.yeu_cau_rut_tick[(hd_id, aid)] = float(sl)
-    # rao vặt: ai đang rao bán/cần mua gì — tick sau cả làng nghe phong thanh
-    w.rao_vat = [
+    # rao vặt: ai đang rao bán/cần mua gì — tick sau cả làng nghe phong thanh.
+    # Quá đông thì LẤY MẪU seeded (không cắt đầu — id lớn cũng được thành tin đồn)
+    rao_ca = [
         (le.ai, le.chieu, le.tai_san, le.so_luong, le.gia)
         for le in lenh_tick if le.tai_san != "cong"
-    ][:20]
+    ]
+    rao_toi_da = int(w.cfg.get("thuong_mai.rao_vat_toi_da"))
+    if len(rao_ca) > rao_toi_da:
+        g_rao = w.rng.get("rao_vat", w.tick)
+        chon = sorted(g_rao.choice(len(rao_ca), size=rao_toi_da, replace=False))
+        rao_ca = [rao_ca[int(i)] for i in chon]
+    w.rao_vat = rao_ca
     kl_cho = market.phien_cho(w, lenh_tick)
     market.phien_dat(w, w.niem_yet_dat, tra_gia)
 
@@ -174,8 +188,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     # 10. giao_duc
     education.buoc_giao_duc(w, ke_hoach)
 
-    # 11. ket_toan: đất bỏ hoang hồi màu → công bốc hơi → AUDIT (assert) → ...
+    # 11. ket_toan: đất bỏ hoang hồi màu → quan hệ nhạt dần → công bốc hơi → AUDIT
     production.phuc_hoi_dat(w)
+    xa_hoi.decay_quan_he(w)
     production.boc_hoi_cong(w)
     audit.kiem_toan_the_gioi(w, tong_thua_ban_dau)
     research_mod.cap_nhat_san_tier(w)
@@ -190,8 +205,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     m["so_entity"] = sum(1 for e in w.entities.values() if e.con_hoat_dong)
     m["so_blueprint"] = len(w.blueprints)
     m["so_may"] = round(w.ledger.tong_tai_san("may"), 1)
+    cua_so = int(w.cfg.get("quan_sat.cua_so_tick"))
     cong_4_tam: dict[str, float] = {}
-    for d in [*w.cong_dung_4, w.cong_dung_tick][-4:]:
+    for d in [*w.cong_dung_4, w.cong_dung_tick][-cua_so:]:
         for k, v in d.items():
             cong_4_tam[k] = cong_4_tam.get(k, 0.0) + v
     tong_cong = sum(cong_4_tam.values())
@@ -199,10 +215,10 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
         cong_4_tam.get("phi_nong", 0.0) / tong_cong, 4) if tong_cong else 0.0
     # cửa sổ 4 tick cho cơ cấu công + phương tiện thanh toán (trước khi observatory đọc)
     w.cong_dung_4.append(dict(w.cong_dung_tick))
-    if len(w.cong_dung_4) > 4:
+    if len(w.cong_dung_4) > cua_so:
         w.cong_dung_4.pop(0)
     w.kl_thanh_toan_4.append(dict(w.kl_thanh_toan_tick))
-    if len(w.kl_thanh_toan_4) > 4:
+    if len(w.kl_thanh_toan_4) > cua_so:
         w.kl_thanh_toan_4.pop(0)
     # observatory: nhãn định chế + giai cấp + milestones (chỉ đọc)
     from observatory.observer import buoc_observatory, viet_chronicle
@@ -213,15 +229,15 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     m["cong_nghiep_hoa"] = bool(w.nhan_dinh_che.get("cong_nghiep_hoa"))
     # cửa sổ thu nhập 4 tick (sau khi observatory đã dùng)
     w.thu_nhap_4.append(w.thu_nhap_tick)
-    if len(w.thu_nhap_4) > 4:
+    if len(w.thu_nhap_4) > cua_so:
         w.thu_nhap_4.pop(0)
     w.thu_nhap_tick = {}
     # chronicle mỗi 20 tick
     if w.tick % int(w.cfg.get("minds.chronicle_moi_n_tick")) == 0:
         doan = viet_chronicle(w, m)
         w.events.ghi(w.tick, "chronicle", van=doan)
-    # snapshot giai cấp + của cải mỗi 10 tick — tools/analyze dựng ma trận dịch chuyển
-    if w.tick % 10 == 0:
+    # snapshot giai cấp + của cải định kỳ — tools/analyze dựng ma trận dịch chuyển
+    if w.tick % int(w.cfg.get("quan_sat.snapshot_moi_n_tick")) == 0:
         from engine.entities import tai_san_quy_thoc
 
         snap = {
@@ -233,20 +249,24 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
 
 
 def _di_cu(w: World, aid: str) -> None:
-    """Lập làng mới: cần cụm ≥8 thửa ruộng công cách mọi làng ≥10 ô (chỉ vật lý)."""
+    """Lập làng mới: cần cụm ruộng công đủ rộng, đủ xa mọi làng (tham số di_cu, chỉ vật lý)."""
     from engine.types import Village
 
+    dc = w.cfg.raw()["di_cu"]
+    so_thua_min = int(dc["so_thua_toi_thieu"])
+    cach_min = int(dc["cach_lang_toi_thieu"])
+    ban_kinh_cum = int(dc["ban_kinh_cum"])
     ung_vien = [
         p for p in w.parcels.values()
         if p.loai == "ruong" and p.chu is None
-        and all(abs(p.r - v.r) + abs(p.c - v.c) >= 10 for v in w.villages)
+        and all(abs(p.r - v.r) + abs(p.c - v.c) >= cach_min for v in w.villages)
     ]
-    if len(ung_vien) < 8:
+    if len(ung_vien) < so_thua_min:
         w.ghi_unrecognized(aid, "di_cu", "không còn vùng đất công đủ xa/đủ rộng")
         return
     tam = ung_vien[0]
-    gan_tam = [p for p in ung_vien if abs(p.r - tam.r) + abs(p.c - tam.c) <= 6]
-    if len(gan_tam) < 8:
+    gan_tam = [p for p in ung_vien if abs(p.r - tam.r) + abs(p.c - tam.c) <= ban_kinh_cum]
+    if len(gan_tam) < so_thua_min:
         w.ghi_unrecognized(aid, "di_cu", "cụm đất quá thưa")
         return
     vid = len(w.villages)

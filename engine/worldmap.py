@@ -14,8 +14,9 @@ def sinh_ban_do(cfg: Config, rng: np.random.Generator) -> tuple[dict[str, Parcel
     ty_le_ruong = cfg.get("ban_do.ty_le_ruong")
     mm = cfg.get("ban_do.mau_mo")
 
-    # Sông: một dải dọc uốn nhẹ qua giữa bản đồ
-    song_cot = w // 2 + np.cumsum(rng.integers(-1, 2, size=h)).clip(-w // 4, w // 4)
+    # Sông: một dải dọc uốn nhẹ qua giữa bản đồ (biên độ uốn = rộng / song_bien_do_chia)
+    bien_do = w // int(cfg.get("ban_do.song_bien_do_chia"))
+    song_cot = w // 2 + np.cumsum(rng.integers(-1, 2, size=h)).clip(-bien_do, bien_do)
     song_o: set[tuple[int, int]] = {(r, int(w // 2 + dc) % w) for r, dc in enumerate(song_cot)}
 
     o_con_lai = [(r, c) for r in range(h) for c in range(w) if (r, c) not in song_o]
@@ -58,9 +59,10 @@ def sinh_ban_do(cfg: Config, rng: np.random.Generator) -> tuple[dict[str, Parcel
     rr = int(np.mean([o[0] for o in o_ruong[: max(1, so_ruong // 4)]]))
     cc = int(np.mean([o[1] for o in o_ruong[: max(1, so_ruong // 4)]]))
     villages = [Village(id=0, ten="Làng Gốc Đa", r=rr, c=cc)]
+    ban_kinh_lang = int(cfg.get("ban_do.ban_kinh_lang"))
     for v in villages:
         for p in parcels.values():
-            if abs(p.r - v.r) + abs(p.c - v.c) <= 8:
+            if abs(p.r - v.r) + abs(p.c - v.c) <= ban_kinh_lang:
                 p.lang = v.id
     return parcels, villages
 

@@ -14,16 +14,16 @@ def sinh_cong(w: World) -> None:
     tuoi_gop = w.cfg.get("nhu_cau.tre_em_gop_cong_tu_tuoi")
     ty_le_tre = w.cfg.get("nhu_cau.ty_le_cong_tre_em")
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
-    ld = w.cfg.raw().get("lao_dong_theo_tuoi", {})
-    tuoi_giam = float(ld.get("tuoi_giam_suc", 60))
-    tuoi_nghi = float(ld.get("tuoi_nghi", 70))
+    ld = w.cfg.raw()["lao_dong_theo_tuoi"]
+    tuoi_giam = float(ld["tuoi_giam_suc"])
+    tuoi_nghi = float(ld["tuoi_nghi"])
     for a in w.agents.values():
         if not a.con_song:
             continue
         if a.tuoi_nam > tuoi_nghi:
-            he_so = float(ld.get("he_so_sau_nghi", 0.15))
+            he_so = float(ld["he_so_sau_nghi"])
         elif a.tuoi_nam > tuoi_giam:
-            he_so = float(ld.get("he_so_sau_giam", 0.5))
+            he_so = float(ld["he_so_sau_giam"])
         elif a.truong_thanh(tt):
             he_so = 1.0
         elif a.tuoi_nam >= tuoi_gop:
@@ -144,7 +144,8 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     # 0) Trẻ em góp công cho cha mẹ + biếu tặng (phụng dưỡng, quà cáp)
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
-        if kh.gop_cong_cho and kh.gop_cong_cho in w.agents:
+        # nhận công phải CÒN HOẠT ĐỘNG — không góp cả tick lao động lên xác cha mẹ
+        if kh.gop_cong_cho and w.chu_the_hoat_dong(kh.gop_cong_cho):
             sl = w.ledger.so_du(aid, "cong")
             if sl > 0:
                 w.ledger.chuyen(aid, kh.gop_cong_cho, "cong", sl, "con góp công", w.tick)
@@ -239,8 +240,8 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         # 2) Khai thác gỗ/quặng
         kt = sx["khai_thac"]
         for tai_san, cong_xin, dinh_muc, luong in (
-            ("go", kh.cong_khai_go, float(kt["go_moi_10_cong"]) / 10.0, "khai_thac"),
-            ("quang_dong", kh.cong_khai_quang, float(kt["quang_moi_20_cong"]) / 20.0, "khai_mo"),
+            ("go", kh.cong_khai_go, 1.0 / float(kt["cong_moi_go"]), "khai_thac"),
+            ("quang_dong", kh.cong_khai_quang, 1.0 / float(kt["cong_moi_quang"]), "khai_mo"),
         ):
             if cong_xin <= 0:
                 continue
@@ -350,8 +351,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 if not quyen:
                     w.ghi_unrecognized(aid, "che_hang", f"không có quyền {bp.id}")
                     continue
+            cong_mac_dinh = float(w.cfg.raw()["research"]["hang_moi"]["cong_mac_dinh"])
             for _ in range(int(so_luong)):
-                cong_can = float(bp.recipe.get("cong", 30)) * giam_vl / he_may
+                cong_can = float(bp.recipe.get("cong", cong_mac_dinh)) * giam_vl / he_may
                 tieu = [("cong", cong_can, "dung")] + [
                     (ts, float(sl), "che_tac")
                     for ts, sl in sorted(bp.recipe.items()) if ts != "cong"

@@ -10,9 +10,10 @@ from pathlib import Path
 
 from engine.intents import KeHoach
 from engine.world import World
-from minds.gateway import LLMCallLog, LLMRequest, MockProvider
+from minds.gateway import LLMCallLog, LLMRequest, LLMResponse, MockProvider
 from minds.policy_cards import thi_hanh_the
 from minds.prompts import build_batch_prompt
+from minds.providers_real import LoiHetQuota, che_key
 from minds.repair import parse_batch
 from minds.schemas import TheChinhSach, ap_patch
 from minds.translate import quyet_dinh_thanh_ke_hoach
@@ -31,6 +32,34 @@ def _the_cua(w: World, aid: str) -> TheChinhSach:
     return TheChinhSach(**du_lieu) if du_lieu else TheChinhSach()
 
 
+def _dat_lai_cho(qd, da_nham: set[str], dang_treo: set[tuple[str, str]]) -> None:
+    """Đặt lại chỗ (thửa đã nhắm, mô-típ đang treo) từ một quyết định ĐƯỢC GIỮ.
+
+    Dùng khi batch phải retry: snapshot được khôi phục để id hỏng tái sinh sạch,
+    nhưng phần đặt chỗ của các id parse OK phải được ghi lại (chống thửa ma).
+    """
+    def _mot_hanh_dong_tho(chu: str, d: dict) -> None:
+        loai = d.get("loai")
+        if loai == "phan_bo_cong":
+            for t in d.get("canh_thua") or []:
+                da_nham.add(str(t))
+        elif loai == "khai_hoang" and d.get("thua"):
+            da_nham.add(str(d["thua"]))
+        elif loai == "de_nghi_hop_dong" and isinstance(d.get("hop_dong"), dict):
+            dieu_khoan = d["hop_dong"].get("dieu_khoan") or []
+            motif = "+".join(sorted(str(c.get("loai")) for c in dieu_khoan
+                                    if isinstance(c, dict)))
+            dang_treo.add((chu, motif))
+        elif loai == "quyet_dinh_entity":
+            eid = str(d.get("entity", ""))
+            for con in d.get("hanh_dong_con") or []:
+                if isinstance(con, dict):
+                    _mot_hanh_dong_tho(eid, con)
+
+    for hd in qd.hanh_dong:
+        _mot_hanh_dong_tho(qd.id, hd.model_dump())
+
+
 class MindMock:
     def __init__(self, w: World, fast: bool, run_dir: Path | None, p_malformed: float):
         self.fast = fast
@@ -41,6 +70,7 @@ class MindMock:
         self.so_fallback = 0
         self.so_nghi = 0
         self.het_ngan_sach = False
+        self.ly_do_dung = ""
 
     def _du_ngan_sach(self, w: World, cac_batch: list) -> bool:
         """Mock luôn đủ; MindReal override bằng budget guard thật."""
@@ -91,31 +121,68 @@ class MindMock:
             cac_batch = []
 
         for tier, ids in cac_batch:
+            if self.het_ngan_sach:
+                # quota/route đã hỏng giữa tick → batch còn lại rơi thẳng về thẻ cũ
+                for aid in ids:
+                    self.so_fallback += 1
+                    ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
+                continue
             self.so_nghi += len(ids)
             prompt = build_batch_prompt(w, ids, triggers)
+            # sự cố đã vào prompt tick này → xóa SAU khi build (builder chỉ nên đọc;
+            # idempotent nếu builder cũ còn tự xóa)
+            for aid in ids:
+                a = w.agents.get(aid)
+                if a is not None:
+                    a.su_co = []
             req = LLMRequest(prompt=prompt, ctx=ctx, tier=tier, batch_ids=ids)
-            resp = self.provider.goi(req, attempt=0)
+            # snapshot đặt chỗ TRƯỚC batch — nếu phải retry, id hỏng được tái sinh
+            # trên trạng thái sạch (không để lại thửa ma / mô-típ treo ma)
+            snap_nham = set(da_nham)
+            snap_treo = set(bc.dang_treo)
+            try:
+                resp = self.provider.goi(req, attempt=0)
+            except LoiHetQuota as e:
+                self._ghi_call_loi(w, req, e)
+                self._dung_em_batch(w, ids, str(e), ke_hoach, bc, da_nham)
+                continue
             self.so_call += 1
             ok, hong = parse_batch(resp.text, ids)
             self.log.ghi(w.tick, req, resp, fallback=False)
             if hong:
+                # khôi phục snapshot rồi đặt lại chỗ của các id parse OK
+                da_nham.clear()
+                da_nham.update(snap_nham)
+                bc.dang_treo.clear()
+                bc.dang_treo.update(snap_treo)
+                for qd in ok.values():
+                    _dat_lai_cho(qd, da_nham, bc.dang_treo)
                 # retry 1 lần kèm lỗi validator (mock: sinh lại với attempt=1)
                 req2 = LLMRequest(prompt=prompt + "\n[LỖI JSON — trả lại đúng schema]",
                                   ctx=ctx, tier=tier, batch_ids=hong)
-                resp2 = self.provider.goi(req2, attempt=1)
-                resp2.retries = 1
-                self.so_call += 1
-                ok2, hong2 = parse_batch(resp2.text, hong)
-                ok.update(ok2)
-                self.log.ghi(w.tick, req2, resp2, fallback=bool(hong2))
-                for aid in hong2:  # fallback: giữ thẻ cũ, không hành động mới
-                    self.so_fallback += 1
-                    ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
+                try:
+                    resp2 = self.provider.goi(req2, attempt=1)
+                except LoiHetQuota as e:
+                    self._ghi_call_loi(w, req2, e)
+                    self._dung_em_batch(w, hong, str(e), ke_hoach, bc, da_nham)
+                else:
+                    resp2.retries = max(resp2.retries, 1)
+                    self.so_call += 1
+                    ok2, hong2 = parse_batch(resp2.text, hong)
+                    ok.update(ok2)
+                    self.log.ghi(w.tick, req2, resp2, fallback=bool(hong2))
+                    for aid in hong2:  # fallback: giữ thẻ cũ, không hành động mới
+                        self.so_fallback += 1
+                        ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
             for aid, qd in ok.items():
                 kh = quyet_dinh_thanh_ke_hoach(w, qd, thung_intent_la)
+                the_hien_tai = _the_cua(w, aid)
+                # không kèm patch thẻ → ý định sinh con GIỮ theo thẻ hiện tại
+                # (không reset về mặc định 0.5 chỉ vì agent nghĩ)
+                kh.y_dinh_sinh_con = the_hien_tai.y_dinh_sinh_con
                 if qd.the_chinh_sach is not None:
                     try:
-                        the_moi = ap_patch(_the_cua(w, aid), qd.the_chinh_sach)
+                        the_moi = ap_patch(the_hien_tai, qd.the_chinh_sach)
                         w.policy_cards[aid] = the_moi.model_dump()
                         kh.y_dinh_sinh_con = the_moi.y_dinh_sinh_con
                     except Exception as e:  # noqa: BLE001 — thẻ hỏng thì giữ thẻ cũ
@@ -143,6 +210,25 @@ class MindMock:
             self._nen_hoi_ky(w)
         self.log.flush()
         return ke_hoach
+
+    def _dung_em_batch(self, w: World, ids: list[str], ly_do: str,
+                       ke_hoach: dict[str, KeHoach], bc, da_nham: set[str]) -> None:
+        """Provider cạn quota / hỏng dai dẳng giữa tick: batch rơi về thẻ cũ,
+        đánh dấu dừng êm để run.py checkpoint (điều luật #7 — không degrade, không cố)."""
+        self.het_ngan_sach = True
+        self.ly_do_dung = ly_do
+        for aid in ids:
+            self.so_fallback += 1
+            ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
+
+    def _ghi_call_loi(self, w: World, req: LLMRequest, e: Exception) -> None:
+        """Call thất bại hẳn (hết quota / lỗi HTTP dai dẳng) cũng phải có vết trong
+        llm_calls (điều luật #6) — raw là thông báo lỗi đã che key, tok=0."""
+        resp_loi = LLMResponse(
+            text=f"[LOI] {che_key(str(e))[:500]}", provider="loi", model="",
+            retries=int(getattr(e, "so_attempt_hong", 0)),
+        )
+        self.log.ghi(w.tick, req, resp_loi, fallback=True)
 
     def _nen_hoi_ky(self, w: World) -> None:
         for aid in sorted(w.agents):

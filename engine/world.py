@@ -67,7 +67,9 @@ class World:
     ten_hang: dict[str, str] = field(default_factory=dict)  # mã hàng mới → tên LLM đặt
     tri_thuc: float = 0.0
     san_tri_thuc_tier: int = 0
-    nhan_dinh_che: dict[str, list[str]] = field(default_factory=dict)  # nhãn → chủ thể
+    # nhãn → chủ thể: kênh MỘT CHIỀU observatory→metrics — engine chỉ ghi lại vào
+    # metrics/events, không bao giờ rẽ nhánh hành vi theo nhãn này
+    nhan_dinh_che: dict[str, list[str]] = field(default_factory=dict)
     milestones: list[dict] = field(default_factory=list)
     # thu nhập theo nguồn, cửa sổ 4 tick (observatory đọc để phân giai cấp)
     thu_nhap_tick: dict = field(default_factory=dict)  # aid → {nguon: quy thóc}
@@ -132,7 +134,7 @@ class World:
         ls = self.gia_lich_su.get(tai_san)
         if not ls:
             return None
-        gan = [x for x in ls if x[0] >= self.tick - 4]
+        gan = [x for x in ls if x[0] >= self.tick - int(self.cfg.get("thuong_mai.cua_so_gia_tick"))]
         return sum(x[1] for x in gan) / len(gan) if gan else ls[-1][1]
 
     def vi_tri_cua(self, aid: str) -> tuple[int, int]:
@@ -150,12 +152,18 @@ class World:
         v = self.villages[a.lang if a.lang < len(self.villages) else 0]
         return (v.r, v.c)
 
-    def hang_xom_cua(self, aid: str, ban_kinh: int = 4, toi_da: int = 5) -> list[str]:
+    def hang_xom_cua(self, aid: str, ban_kinh: int | None = None,
+                     toi_da: int | None = None) -> list[str]:
         """Hàng xóm theo khoảng cách cư trú thật (làng xóm 2D)."""
+        if ban_kinh is None:
+            ban_kinh = int(self.cfg.get("quan_he.ban_kinh_lang_gieng"))
+        if toi_da is None:
+            toi_da = int(self.cfg.get("quan_he.lang_gieng_toi_da"))
         r0, c0 = self.vi_tri_cua(aid)
+        tuoi_tt = float(self.cfg.get("nhan_khau.tuoi_truong_thanh"))
         ung_vien = []
         for b in self.agents.values():
-            if not b.con_song or b.id == aid or b.tuoi_nam < 16:
+            if not b.con_song or b.id == aid or b.tuoi_nam < tuoi_tt:
                 continue
             r, c = self.vi_tri_cua(b.id)
             kc = abs(r - r0) + abs(c - c0)
@@ -165,10 +173,11 @@ class World:
         return [bid for _kc, bid in ung_vien[:toi_da]]
 
     def ghi_ky_uc(self, aid: str, noi_dung: str) -> None:
-        """Khắc một biến cố vào ký ức đời agent (≤10 mục, kèm mốc năm)."""
+        """Khắc một biến cố vào ký ức đời agent (giữ N mục gần nhất, kèm mốc năm)."""
         a = self.agents.get(aid)
         if a is not None and a.con_song:
-            a.ky_uc = [*a.ky_uc, f"Năm {self.tick // 2}: {noi_dung}"][-10:]
+            toi_da = int(self.cfg.get("minds.ky_uc_toi_da"))
+            a.ky_uc = [*a.ky_uc, f"Năm {self.tick // 2}: {noi_dung}"][-toi_da:]
 
     def ghi_unrecognized(self, ai: str, loai: str, ly_do: str) -> None:
         """Intent không hợp lệ → bỏ qua + log (điều luật #3) — mỏ 'ý định mới lạ'."""
@@ -189,6 +198,20 @@ class World:
     def uy_tin(self, a: str, b: str) -> float:
         return self.quan_he.get((min(a, b), max(a, b)), 0.0)
 
+    def cong_quan_he_gioi_han(self, a: str, b: str, delta: float) -> None:
+        """Cộng quan hệ từ tương tác kinh tế lặp lại — tối đa 1 lần/cặp/tick
+        (bạn hàng tích lũy, nhưng 100 lệnh khớp một phiên không thành tri kỷ)."""
+        if a == b:
+            return
+        key = (min(a, b), max(a, b))
+        if getattr(self, "_qh_cap_tick", None) != self.tick:
+            self._qh_cap_tick = self.tick
+            self._qh_cap: set[tuple[str, str]] = set()
+        if key in self._qh_cap:
+            return
+        self._qh_cap.add(key)
+        self.cong_quan_he(a, b, delta)
+
     # ---------- hộ gia đình ----------
     def ho_cua(self, aid: str) -> list[str]:
         """Hộ = chủ hộ + vợ/chồng + con (đẻ lẫn nuôi) chưa trưởng thành còn sống.
@@ -204,12 +227,16 @@ class World:
                     a = p
                     break
         ho = [a.id]
+        nguoi_lon = [a]
         if a.vo_chong and a.vo_chong in self.agents and self.agents[a.vo_chong].con_song:
             ho.append(a.vo_chong)
-        for cid in [*a.con, *a.con_nuoi]:
-            c = self.agents.get(cid)
-            if c and c.con_song and not c.truong_thanh(tt) and cid not in ho:
-                ho.append(cid)
+            nguoi_lon.append(self.agents[a.vo_chong])
+        # con (đẻ lẫn nuôi) của CẢ HAI vợ chồng — con riêng nhà tái hôn không bị bỏ rơi
+        for nl in nguoi_lon:
+            for cid in [*nl.con, *nl.con_nuoi]:
+                c = self.agents.get(cid)
+                if c and c.con_song and not c.truong_thanh(tt) and cid not in ho:
+                    ho.append(cid)
         return ho
 
     # ---------- world hash (điều luật #4) ----------
@@ -238,6 +265,10 @@ class World:
         gia_s = sorted(
             (ts, len(ls), round(ls[-1][1], 6)) for ts, ls in self.gia_lich_su.items() if ls
         )
+        # quan hệ ảnh hưởng hành vi (thứ tự khớp bảng rao, trigger...) → phải vào hash
+        qh_s = sorted(
+            (a, b, round(v, 6)) for (a, b), v in self.quan_he.items() if abs(v) > 1e-9
+        )
         p4_s = [
             sorted((e.id, e.ten, e.con_hoat_dong) for e in self.entities.values()),
             sorted((b.id, b.linh_vuc, round(b.do_lon, 6), b.chu)
@@ -247,7 +278,7 @@ class World:
             self.san_tri_thuc_tier,
         ]
         blob = json.dumps(
-            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s, p4_s],
+            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s, p4_s, qh_s],
             ensure_ascii=False, default=str,
         )
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -269,9 +300,17 @@ class World:
 
     @staticmethod
     def nap_checkpoint(duong_dan: Path, events_path: Path | None = None) -> World:
+        from engine.config import load_config
+
         with open(duong_dan, "rb") as f:
             w: World = pickle.load(f)
         w.events = EventLog(events_path)
+        # config đọc lại từ YAML hiện hành (nguồn sự thật duy nhất) — checkpoint cũ
+        # thiếu key mới sẽ không làm code mới KeyError
+        w.cfg = load_config()
+        # migration: checkpoint trước khi có mau_mo_goc → đất không bao giờ hồi màu
+        for p in w.parcels.values():
+            p.mau_mo_goc = p.mau_mo_goc or p.mau_mo
         return w
 
 
@@ -290,7 +329,9 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("go", "xay", "sink")
     f.dang_ky("quang_dong", "khai_mo", "nguon")
     f.dang_ky("quang_dong", "che_tac", "sink")
+    f.dang_ky("thoc", "che_tac", "sink")  # recipe hàng mới có thể ăn thóc làm nguyên liệu
     f.dang_ky("xu", "duc_xu", "nguon")
+    f.dang_ky("xu", "che_tac", "sink")  # dựng máy trả bằng xu
     f.dang_ky("cong", "sinh_cong", "nguon")
     f.dang_ky("cong", "dung", "sink")
     f.dang_ky("cong", "boc_hoi", "sink")
@@ -316,7 +357,7 @@ def dang_ky_flows(ledger: Ledger) -> None:
 
 
 def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> World:
-    """Khởi tạo thế giới t0: bản đồ + 50 người lớn độc thân, 200kg thóc/người, 0 đất."""
+    """Khởi tạo thế giới t0: bản đồ + người lớn độc thân (tham số mục khoi_tao), 0 đất."""
     rng = RngTree(seed)
     w = World(cfg=cfg, seed=seed, rng=rng, events=EventLog(events_path))
     dang_ky_flows(w.ledger)
@@ -326,13 +367,16 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
     n = cfg.get("nhan_khau.dan_so_ban_dau")
     tuoi_min, tuoi_max = cfg.get("nhan_khau.tuoi_ban_dau")
     ty_le_nu = cfg.get("nhan_khau.ty_le_nu")
+    kt = cfg.raw()["khoi_tao"]
+    p_min, p_max = int(kt["persona_min"]), int(kt["persona_max"])
+    nguong_e1, nguong_e2 = (float(x) for x in kt["phan_bo_e"])
     for i in range(n):
         aid = w.id_moi()
         gioi = "nu" if g.random() < ty_le_nu else "nam"
-        persona = Persona(*(int(x) for x in g.integers(1, 10, size=5)))
-        # E ban đầu: 80% E0, 16% E1, 4% E2 (xem DECISIONS.md — gieo mầm tri thức tối thiểu)
+        persona = Persona(*(int(x) for x in g.integers(p_min, p_max + 1, size=5)))  # s5: 5 trục persona
+        # phân bố E ban đầu (xem DECISIONS.md — gieo mầm tri thức tối thiểu)
         r = g.random()
-        e0 = 0 if r < 0.80 else (1 if r < 0.96 else 2)
+        e0 = 0 if r < nguong_e1 else (1 if r < nguong_e2 else 2)
         w.agents[aid] = Agent(
             id=aid,
             ten=f"{HO_TEN[i % len(HO_TEN)]} {i + 1}",
@@ -342,6 +386,7 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
             lang=0,
             e_bac=e0,
         )
-        w.ledger.sinh(aid, "thoc", 200.0, "khoi_tao", "tài sản khởi đầu", tick=0)
+        w.ledger.sinh(aid, "thoc", float(kt["thoc_moi_nguoi"]), "khoi_tao",
+                      "tài sản khởi đầu", tick=0)
         w.events.ghi(0, "sinh", id=aid, ten=w.agents[aid].ten, khoi_tao=True)
     return w

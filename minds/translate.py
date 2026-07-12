@@ -88,9 +88,17 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
         hd_list.append(muc)
     for ref in kh.don_phuong_pha_vo:
         hd_list.append({"loai": "don_phuong_pha_vo", "ref": ref})
+    # báo hủy hợp đồng vô hạn (getattr: không vỡ nếu engine chưa thêm field KeHoach)
+    for ref in getattr(kh, "bao_huy", None) or []:
+        hd_list.append({"loai": "bao_huy", "ref": ref})
     for le in kh.dat_lenh:
-        hd_list.append({"loai": "dat_lenh", "chieu": le.chieu, "tai_san": le.tai_san,
-                        "sl": le.so_luong, "gia": le.gia, "thanh_toan": le.thanh_toan})
+        if le.lang is not None:  # lệnh gửi chợ làng khác = buôn chuyến (giữ lang)
+            hd_list.append({"loai": "buon_chuyen", "chieu": le.chieu,
+                            "tai_san": le.tai_san, "sl": le.so_luong, "gia": le.gia,
+                            "thanh_toan": le.thanh_toan, "lang": le.lang})
+        else:
+            hd_list.append({"loai": "dat_lenh", "chieu": le.chieu, "tai_san": le.tai_san,
+                            "sl": le.so_luong, "gia": le.gia, "thanh_toan": le.thanh_toan})
     for thua, gia in kh.niem_yet_dat:
         hd_list.append({"loai": "niem_yet", "tai_san": f"thua:{thua}", "gia": gia})
     for thua, gia in kh.tra_gia_dat:
@@ -137,13 +145,21 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
             w.ghi_unrecognized(kh.id, str(loai), "loại hành động lạ")
         return
     if loai == "phan_bo_cong":
-        kh.canh_thua = [str(x) for x in d.get("canh_thua", [])][:10]
-        if d.get("gop_cong_cho"):
-            kh.gop_cong_cho = str(d["gop_cong_cho"])
-        kh.cong_khai_go = max(0.0, float(d.get("khai_go_cong", 0) or 0))
-        kh.cong_khai_quang = max(0.0, float(d.get("khai_quang_cong", 0) or 0))
-        kh.hoc = bool(d.get("hoc", False))
-        kh.day_cho = [str(x) for x in d.get("day_cho", [])]
+        # NGUYÊN TỬ: parse hết vào biến cục bộ trước, chỉ mutate kh khi mọi
+        # conversion thành công (tránh áp nửa vời rồi lại bị dịch-intent áp lần hai)
+        canh_thua = [str(x) for x in d.get("canh_thua", [])][:10]
+        gop_cong_cho = str(d["gop_cong_cho"]) if d.get("gop_cong_cho") else None
+        cong_khai_go = max(0.0, float(d.get("khai_go_cong", 0) or 0))
+        cong_khai_quang = max(0.0, float(d.get("khai_quang_cong", 0) or 0))
+        hoc = bool(d.get("hoc", False))
+        day_cho = [str(x) for x in d.get("day_cho", [])]
+        kh.canh_thua = canh_thua
+        if gop_cong_cho is not None:
+            kh.gop_cong_cho = gop_cong_cho
+        kh.cong_khai_go = cong_khai_go
+        kh.cong_khai_quang = cong_khai_quang
+        kh.hoc = hoc
+        kh.day_cho = day_cho
     elif loai == "khai_hoang":
         thua = str(d.get("thua", ""))
         if thua and thua not in kh.canh_thua:
@@ -178,12 +194,25 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
             kh.tra_loi_de_nghi[ref] = tl
     elif loai == "don_phuong_pha_vo":
         kh.don_phuong_pha_vo.append(str(d["ref"]))
+    elif loai == "bao_huy":
+        # báo trước để thoát hợp đồng vô hạn KHÔNG chịu phạt (khác don_phuong_pha_vo)
+        ref = str(d["ref"])
+        hien_co = getattr(kh, "bao_huy", None)
+        if hien_co is None:
+            kh.bao_huy = hien_co = []  # engine chưa có field → gắn động, tick đọc getattr
+        if ref not in hien_co:
+            hien_co.append(ref)
     elif loai == "dat_lenh":
         chieu = d.get("chieu", d.get("mua_ban"))
         if chieu not in ("mua", "ban"):
             raise ValueError(f"chiều lạ: {chieu}")
-        kh.dat_lenh.append(Lenh(kh.id, chieu, str(d["tai_san"]), float(d["sl"]),
-                                float(d["gia"]), str(d.get("thanh_toan", "thoc"))))
+        tai_san = str(d["tai_san"])
+        thanh_toan = str(d.get("thanh_toan", "thoc"))
+        if tai_san == thanh_toan:
+            raise ValueError(f"lệnh {chieu} {tai_san} trả bằng chính {thanh_toan} "
+                             f"là vô nghĩa — hãy thanh toán bằng tài sản khác")
+        kh.dat_lenh.append(Lenh(kh.id, chieu, tai_san, float(d["sl"]),
+                                float(d["gia"]), thanh_toan))
     elif loai == "niem_yet":
         ts = str(d["tai_san"])
         if ts.startswith("thua:"):
@@ -227,8 +256,12 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
     elif loai == "di_cu":
         kh.di_cu = True
     elif loai == "chan_nuoi":
-        kh.bat_ga_cong += max(0.0, float(d.get("bat_ga_cong", 0) or 0))
-        kh.giet_ga += max(0, int(d.get("giet_ga", 0) or 0))
+        # NGUYÊN TỬ: parse cả hai trước rồi mới cộng dồn (giet_ga rác không được
+        # để lại bat_ga_cong đã áp nửa vời)
+        bat_ga_cong = max(0.0, float(d.get("bat_ga_cong", 0) or 0))
+        giet_ga = max(0, int(d.get("giet_ga", 0) or 0))
+        kh.bat_ga_cong += bat_ga_cong
+        kh.giet_ga += giet_ga
     elif loai == "bieu":
         kh.bieu.append((str(d["den"]), str(d.get("tai_san", "thoc")),
                         float(d["so_luong"])))
@@ -243,9 +276,18 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
     elif loai == "buon_chuyen":
         chieu = d.get("chieu", "ban")
         if chieu in ("mua", "ban"):
-            kh.dat_lenh.append(Lenh(kh.id, chieu, str(d["tai_san"]), float(d["sl"]),
-                                    float(d["gia"]), str(d.get("thanh_toan", "thoc")),
-                                    lang=int(d["lang"])))
+            tai_san = str(d["tai_san"])
+            thanh_toan = str(d.get("thanh_toan", "thoc"))
+            if tai_san == thanh_toan:
+                raise ValueError(f"buôn chuyến {chieu} {tai_san} trả bằng chính "
+                                 f"{thanh_toan} là vô nghĩa")
+            # thiếu "lang" → mặc định chợ làng mình (không raise mất cả chuyến hàng)
+            lang = d.get("lang")
+            if lang is None:
+                a = w.agents.get(kh.id)
+                lang = a.lang if a is not None else 0
+            kh.dat_lenh.append(Lenh(kh.id, chieu, tai_san, float(d["sl"]),
+                                    float(d["gia"]), thanh_toan, lang=int(lang)))
     else:
         if thung is not None:
             thung.append((kh.id, d, "nguyên tố chưa mở ở phase hiện tại"))

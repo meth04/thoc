@@ -3,6 +3,8 @@
 
 ban_do:
   kich_thuoc: [30, 30]
+  song_bien_do_chia: 4    # sông uốn tối đa ±(rộng/4) quanh trục giữa
+  ban_kinh_lang: 8        # bán kính gán thửa thuộc làng khi lập làng
   ty_le_ruong: 0.28   # 0.39→0.28 (hiệu chỉnh Phase 4): đất phải khan thì mới có làm thuê
   mau_mo: {min: 0.6, max: 1.4, bonus_ven_song: 0.2}
   so_o_mo_dong: 2
@@ -27,7 +29,7 @@ san_xuat:
     cong_cu: {cong: 60, go: 2, tang_nang_suat: 1.3, hao_mon_moi_tick_dung: 0.05}
     nha:     {cong: 120, go: 6}
     xu:      {quang_dong: 1, cong: 5, ra: 10}
-  khai_thac: {go_moi_10_cong: 1, quang_moi_20_cong: 1, can_cong_cu: true,
+  khai_thac: {cong_moi_go: 10, cong_moi_quang: 20, can_cong_cu: true,
               hieu_suat_khong_cong_cu: 0.5}   # không công cụ vẫn khai thác được, nửa hiệu suất
 
 nhu_cau:
@@ -45,8 +47,8 @@ lao_dong_theo_tuoi:              # người già dưỡng sức — sức lao đ
   hao_suc_gia_moi_tick: 1.5      # >60 mỗi tick hao nhẹ sức khỏe (tuổi tác)
 
 dat_dai:                         # đất canh liên tục thì bạc màu, bỏ hoang thì hồi dần
-  thoai_hoa_moi_vu: 0.01         # ×(1-1%)/vụ → chạm sàn sau ~70 vụ, khớp văn liệu 60-100 năm
-  phuc_hoi_moi_tick_bo_hoang: 0.015
+  thoai_hoa_moi_vu: 0.02         # cân với phục hồi mùa khô: net ~-1%/năm canh liên tục → kiệt sau ~70 năm
+  phuc_hoi_moi_tick_bo_hoang: 0.008
   san_ty_le_mau_mo: 0.5          # không tụt dưới 50% độ màu nguyên thủy
 
 danh_ca:                         # sông là nguồn cá chung của cả làng — đánh nhiều thì cạn
@@ -60,12 +62,16 @@ tiec:                            # tiệc khao xóm — đổi của cải lấy
   khach_toi_da: 8
   tang_suc_khoe_khach: 4
   quan_he_moi_khach: 0.8
+  ban_kinh_moi: 6                # mời khách trong bán kính này quanh nhà
 
 trom:                            # vật lý cho phép lấy trộm — trị an, luật làng phải TỰ PHÁT SINH
   p_thanh_cong: 0.45
   ty_le_lay_toi_da: 0.25         # mỗi lần lấy được tối đa 25% kho nạn nhân
   quan_he_nan_nhan: -3.0         # bị bắt quả tang: nạn nhân thù
   quan_he_hang_xom: -1.0         # ... và cả xóm nạn nhân xa lánh
+  nhieu_uoc_luong: 0.4           # nạn nhân chỉ ước lượng được lượng mất (±20%)
+  ban_kinh_xom: 6                # xóm của nạn nhân (lan tiếng xấu khi bắt quả tang)
+  xom_toi_da: 8
 
 tay_nghe:                        # kinh nghiệm đồng áng tích qua mỗi vụ (learning by doing)
   tang_moi_vu: 0.004
@@ -79,9 +85,11 @@ chan_nuoi:                       # vật lý chăn nuôi (gà) — nguồn thu n
   thit_moi_ga_kg: 8              # giết 1 gà → 8kg thịt
   thit_hao_moi_tick: 0.2         # thịt không trữ lâu được (hao 20%/tick)
   thit_quy_doi_dinh_duong: 3.0   # 1kg thịt no bằng 3kg thóc
+  ga_chet_gia_moi_tick: 0.05     # tử suất tự nhiên của đàn (gà già, chồn cáo)
 
 suc_khoe:
   hoi_khi_an_du: 10
+  nguong_phan_loai_chet_doi: 50   # chết khi vừa đói + health dưới ngưỡng → nhãn chet_doi
   mat_toi_da_khi_doi: 25
   mat_khi_vo_gia_cu_mua_mua: 10
   nguong_nguy_kich: 20
@@ -92,10 +100,30 @@ nhan_khau:
   tuoi_ban_dau: [16, 28]
   ty_le_nu: 0.52
   tuoi_truong_thanh: 16
-  sinh_san: {p_goc: 0.15, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20}
+  sinh_san: {p_goc: 0.15, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20,
+             y_te_giam_rui_ro_san: 0.2}   # rủi ro sinh nở không giảm dưới 20% mức gốc
   # p_goc 0.22 → 0.15: hiệu chỉnh Phase 1 để dân số cân bằng ≤500 (xem DECISIONS.md)
   tu_vong_gompertz: {q20: 0.005, q60: 0.03, q75: 0.12}
+  tu_vong_noi_suy: {moc_tuoi: [20, 60, 75], tran_q_nam: 0.8}  # mốc nội suy log-linear + trần q/năm
+  dot_bien_persona: {bien_do: 2, min: 1, max: 9}  # con = trung bình cha mẹ ± biên độ, clip [min,max]
   di_chuc: {tuoi_trigger: 50, health_trigger: 30}
+
+khoi_tao:                        # tài sản + phân bố t0 (chỉ dùng khi tạo thế giới mới)
+  thoc_moi_nguoi: 200
+  persona_min: 1
+  persona_max: 9
+  phan_bo_e: [0.80, 0.96]        # r<0.80 → E0, r<0.96 → E1, còn lại E2 (gieo mầm tri thức)
+
+phap_nhan:                       # tham số vật lý pháp nhân (KHÔNG phải định chế có tên)
+  von_luu_dong_san: 4000         # thóc giữ lại tối thiểu trước khi chia lợi nhuận
+  he_so_dem_nghia_vu: 2.0        # đệm = max(sàn, nghĩa vụ × hệ số)
+  giai_the_sau_tick: 24          # entity cạn vốn kéo dài quá N tick → tự giải thể
+  giai_the_thoc_duoi: 50         # ... khi thóc < ngưỡng này và không có đất
+
+tieu_dung:
+  he_so_tien_nghi_health: 10.0   # health cộng thêm = độ lớn hiệu ứng × hệ số này
+  nguong_an_doi_event: 0.75      # tỷ lệ no dưới ngưỡng này mới ghi event an_doi
+  san_hao_kho: 0.1               # blueprint lưu kho không giảm hao hụt dưới 10% mức gốc
 
 giao_duc:                      # bac: [hoc_phi_goi_y_thoc_tick, so_tick, phan_cong_mat]
   E1: [40, 2, 0.5]             # học phí THẬT do hợp đồng hai bên quyết — số này chỉ là
@@ -107,17 +135,30 @@ giao_duc:                      # bac: [hoc_phi_goi_y_thoc_tick, so_tick, phan_co
 
 hop_dong:
   van_ban_can_E_nguoi_soan: 1
-  uy_tin: {phat_vi_pham_mieng: -0.5, lan_tin_don_buoc: 2, decay_moi_nam: 0.05}
+  uy_tin: {phat_vi_pham_mieng: -0.5, lan_tin_don_buoc: 2, decay_moi_nam: 0.05,
+           he_so_lan_tin_don: 0.2}   # người quen nạn nhân dè chừng = phạt × hệ số
   mac_ca_toi_da_vong: 3
+  de_nghi_het_han_tick: 4        # đề nghị trên bảng rao không ai nhận → gỡ sau N tick
   mau_khoi_dau:                # imitation pool khởi đầu — CHỈ 2 mẫu tối giản
     - "doi_cong_lay_thoc_mot_lan"
     - "cho_muon_co_hoan_tra"
 
 thuong_mai:
   phi_van_chuyen_moi_khoang_cach: 0.02
+  cua_so_gia_tick: 4             # giá "gần nhất" = trong vòng N tick
   nhieu_tin_don_gia: 0.15
+  chuan_hoa_khoang_cach: 10      # phí = giá trị × phí/kc × (kc / chuẩn hóa)
+  niem_yet_het_han_tick: 4       # niêm yết đất không ai mua → tự gỡ sau N tick
+  rao_vat_toi_da: 20             # số lệnh chợ thành tin rao vặt mỗi tick (lấy mẫu seeded)
+
+di_cu:                           # luật vật lý lập làng mới (không phải định chế)
+  so_thua_toi_thieu: 8           # cần cụm ruộng công đủ rộng
+  cach_lang_toi_thieu: 10        # cách mọi làng hiện có ít nhất N ô
+  ban_kinh_cum: 6                # cụm tính trong bán kính này quanh thửa tâm
 
 quan_sat:                      # ngưỡng để OBSERVATORY dán nhãn (không phải cơ chế engine)
+  cua_so_tick: 4               # cửa sổ trượt cho cơ cấu công/thanh toán/thu nhập
+  snapshot_moi_n_tick: 10      # chu kỳ ghi giai_cap_snapshot (chỉ logging)
   ngan_hang: {nghia_vu_hoan_tra_toi_thieu_thoc: 1500, so_chu_no_toi_thieu: 5}
   bao_hiem: {so_hop_dong_su_kien_toi_thieu: 5}
   xuong: {so_hop_dong_gop_cong_toi_thieu: 3}
@@ -140,11 +181,14 @@ giai_cap:                      # ngưỡng classifier (SPEC 9.1)
   cua_so_thu_nhap_tick: 4
 
 quan_he:
-  ban_kinh_lang_gieng: 3
+  ban_kinh_lang_gieng: 4         # hàng xóm = trong bán kính này quanh nơi cư trú
+  lang_gieng_toi_da: 5
   cong_moi_tuong_tac: 0.1
-  decay_moi_nam: 0.02
+  decay_moi_nam: 0.02            # quan hệ không nuôi thì nhạt dần (áp cuối mỗi năm)
+  nguong_xoa_canh: 0.05          # |trọng số| dưới ngưỡng → cạnh bị quên hẳn
 
 minds:
+  ky_uc_toi_da: 10               # ký ức đời người — giữ N biến cố gần nhất
   batch_toi_da: 8
   nghi_dinh_ky_moi_n_tick: 4
   nguong_trigger_gia: 0.30

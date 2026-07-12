@@ -31,6 +31,8 @@ class KeHoach:
     # trả lời đề nghị trên bảng rao: ref → "chap_nhan" | "tu_choi" | HopDong (mặc cả)
     tra_loi_de_nghi: dict = field(default_factory=dict)
     don_phuong_pha_vo: list[str] = field(default_factory=list)  # hd ids
+    # báo hủy hợp đồng vô hạn ĐÚNG LUẬT (điều khoản bao_truoc) — không phạt uy tín
+    bao_huy: list[str] = field(default_factory=list)  # hd ids
     dat_lenh: list = field(default_factory=list)  # list[Lenh]
     niem_yet_dat: list = field(default_factory=list)  # [(thua, gia_ask)]
     tra_gia_dat: list = field(default_factory=list)  # [(thua, gia)]
