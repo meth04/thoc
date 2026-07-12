@@ -20,4 +20,6 @@ ninerouter:                     # NGÂN SÁCH TỔNG (9router tự xoay 3 tài k
     "gc/gemini-2.5-flash":              {rpm: 20, rpd: 1500}
     "gc/gemini-2.5-pro":                {rpm: 8,  rpd: 900}   # pro chậm → RPM thấp hơn
 
-retry: {toi_da: 2, backoff_s: 2.0, jitter_s: 1.0, cooldown_429_s: 60}
+# cooldown_429_s: cooldown GỐC khi key 429; cooldown_toi_da_s: TRẦN (RPM-429 tự hết sau
+# ~60s cửa sổ RPM → phạt lũy tiến dài chỉ đẩy key ra khỏi vòng quay, làm lệch tải).
+retry: {toi_da: 2, backoff_s: 2.0, jitter_s: 1.0, cooldown_429_s: 45, cooldown_toi_da_s: 90}

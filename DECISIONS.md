@@ -242,3 +242,15 @@
   GỐC SÂU HƠN: 15 key aistudio có thể chung 1 project Google → RPM chia sẻ PER-PROJECT (4 tổng,
   không phải 60) → giải thích 429 dù trải đều + window mới. 9router (provider riêng) né được
   điều này. Cần chủ dự án xác nhận key có ở các project/tài khoản KHÁC nhau không.
+- 2026-07-12 (chẩn đoán lại sau xác nhận 15 key RIÊNG project): giả thuyết chung-project SAI.
+  Soi quota per-key: RPD hôm nay chỉ 30-55/450 (không cạn RPD), cả 15 key đều dùng. Nút thắt
+  THẬT: (1) RPM 4/key của Gemini free tier THẤP + fan-out 1-to-1 bắn 25-32 call/burst mỗi
+  ~31s → 2 tick chồng nhau trong cửa sổ RPM 60s ⇒ ~3,3 call/key, chạm trần 4 ⇒ 429 lác đác;
+  (2) cooldown LŨY TIẾN (60→120→240→480s) đẩy key 429 ra khỏi vòng quay hàng phút → đuôi key
+  chỉ 1-2 call (lệch tải). FIX: chặn TRẦN cooldown (cooldown_429_s 60→45, cooldown_toi_da_s=90)
+  — RPM-429 tự hết sau ~60s nên phạt dài vô nghĩa; giữ 15 key luôn trong vòng quay → aistudio
+  gánh gần 60 RPM, bớt phụ thuộc 9router. Overflow 9router + 0% fallback vẫn là lưới an toàn.
+  GHI NHỚ cho run 300 năm: trần thật là RPD/NGÀY tổng (aistudio 6750 + 9router 3000 ≈ 9750/ngày)
+  → 300 năm (~50k call) cần nhiều ngày HOẶC thêm key (project) HOẶC tier trả phí.
+  NGHIỆM THU: 15 test key/provider + toàn bộ + ruff sạch (chưa đốt call thật lại — fix cấu hình
+  cooldown, kiểm bằng unit test).

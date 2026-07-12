@@ -74,10 +74,12 @@ class KeyPool:
     tiến (60s × 2^n). Với NHIỀU key (20-30), chọn key theo TẢI (lay_key_tot_nhat) thay
     vì xoay vòng mù — key rảnh nhất được ưu tiên, key cạn RPM/RPD bị bỏ qua."""
 
-    def __init__(self, keys: list[str], cooldown_goc_s: float = 60.0):
+    def __init__(self, keys: list[str], cooldown_goc_s: float = 60.0,
+                 cooldown_toi_da_s: float = 90.0):
         self._keys = [_TrangThaiKey(k) for k in keys]
         self._i = 0
         self._cooldown_goc = cooldown_goc_s
+        self._cooldown_toi_da = cooldown_toi_da_s  # trần cooldown (RPM-429 hồi nhanh)
         self._lock = threading.Lock()
 
     def so_key(self) -> int:
@@ -123,7 +125,10 @@ class KeyPool:
             for ts in self._keys:
                 if ts.key == key:
                     ts.so_lan_429 += 1
-                    ts.cooldown_den = now + self._cooldown_goc * (2 ** (ts.so_lan_429 - 1))
+                    # lũy tiến NHƯNG chặn trần: RPM-429 tự hết sau ~60s, phạt dài vô ích
+                    cd = min(self._cooldown_goc * (2 ** (ts.so_lan_429 - 1)),
+                             self._cooldown_toi_da)
+                    ts.cooldown_den = now + cd
                     return
 
     def bao_ok(self, key: str) -> None:

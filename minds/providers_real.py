@@ -236,6 +236,7 @@ class GatewayReal:
         self.pool_aistudio = KeyPool(
             env.gemini_keys,
             cooldown_goc_s=float(cfg.get("quotas.retry.cooldown_429_s")),
+            cooldown_toi_da_s=float(cfg.get("quotas.retry.cooldown_toi_da_s")),
         )
         self.aistudio = AIStudioProvider(self.pool_aistudio, transport=transport)
         self.ninerouter = NineRouterProvider(env.nine_key, env.nine_base or "http://localhost",

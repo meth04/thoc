@@ -37,6 +37,19 @@ def test_key_cooldown_bi_loai():
     assert chon == "k1"  # k0 đang cooldown → bỏ
 
 
+def test_cooldown_chan_tran_hoi_nhanh():
+    """429 liên tiếp KHÔNG đẩy cooldown lên vô hạn — chặn trần để key hồi nhanh, không
+    bị loại khỏi vòng quay hàng phút (nguyên nhân lệch tải trong run15 thật)."""
+    pool = KeyPool(["k0"], cooldown_goc_s=45.0, cooldown_toi_da_s=90.0)
+    now = 1000.0
+    for _ in range(6):  # 6 lần 429 liên tiếp
+        pool.bao_429("k0", now)
+    ts = pool._keys[0]
+    # lũy tiến 45,90,180,... nhưng chặn ở 90 → cooldown ≤ now+90 (không phải now+1440)
+    assert ts.cooldown_den <= now + 90.0 + 1e-6
+    assert pool.lay_key_tot_nhat(now + 91.0, lambda k: 1.0) == "k0"  # hồi sau 91s
+
+
 def _env(n: int) -> EnvKeys:
     return EnvKeys(gemini_keys=[f"gkey_{i}" for i in range(n)],
                    nine_key="nk", nine_base="http://x/v1")
