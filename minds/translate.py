@@ -71,6 +71,8 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
     if kh.trom:
         hd_list.append({"loai": "trom", "muc_tieu": kh.trom[0], "tai_san": kh.trom[1],
                         "so_luong": kh.trom[2]})
+    for den, noi_dung in kh.nhan_tin:
+        hd_list.append({"loai": "nhan_tin", "den": den, "noi_dung": noi_dung})
     for hd, den in kh.de_nghi_hop_dong:
         hd_list.append({
             "loai": "de_nghi_hop_dong",
@@ -273,6 +275,11 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
     elif loai == "trom":
         kh.trom = (str(d["muc_tieu"]), str(d.get("tai_san", "thoc")),
                    max(0.0, float(d.get("so_luong", 50) or 0)))
+    elif loai == "nhan_tin":
+        den = str(d.get("den", ""))
+        noi = str(d.get("noi_dung", d.get("noi_dong", "")))[:300]
+        if den and noi:
+            kh.nhan_tin.append((den, noi))
     elif loai == "buon_chuyen":
         chieu = d.get("chieu", "ban")
         if chieu in ("mua", "ban"):

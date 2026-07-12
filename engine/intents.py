@@ -55,3 +55,5 @@ class KeHoach:
     danh_ca_cong: float = 0.0  # công dành ra sông đánh cá (trữ lượng chung của làng)
     mo_tiec: tuple | None = None  # (thoc, thit) — tiệc khao xóm
     trom: tuple | None = None  # (muc_tieu, tai_san, so_luong) — làm liều, rủi ro thể diện
+    # P2P (PART 5.4): nhắn tin 1-1 mặc cả/vận động — [(người nhận, nội dung)]; giao tick sau
+    nhan_tin: list = field(default_factory=list)

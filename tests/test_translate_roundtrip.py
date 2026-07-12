@@ -76,6 +76,7 @@ def _ke_hoach_du_truong(w, aid: str) -> KeHoach:
     kh.danh_ca_cong = 30.0
     kh.mo_tiec = (100.0, 8.0)
     kh.trom = ("A0009", "thoc", 40.0)
+    kh.nhan_tin = [("A0002", "để lại cho tôi ít gỗ nhé")]  # P2P (5.4)
     # hợp đồng: đề nghị + trả lời (chấp nhận & mặc cả) + phá vỡ + BÁO HỦY
     kh.de_nghi_hop_dong = [(_hop_dong_lam_cong(aid, "A0002"), "A0002")]
     kh.tra_loi_de_nghi = {

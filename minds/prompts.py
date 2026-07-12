@@ -157,6 +157,8 @@ MUC_HANH_DONG: list[str] = [
     '- {"loai":"mo_tiec","thoc":150,"thit":10}  (mở tiệc mời hàng xóm)',
     '- {"loai":"trom","muc_tieu":"A0002","tai_san":"thoc","so_luong":100}  (lấy trộm —\n'
     '  hơn nửa số lần bị bắt quả tang)',
+    '- {"loai":"nhan_tin","den":"A0002","noi_dung":"..."}  (nhắn riêng 1 người: mặc cả giá,\n'
+    '  hỏi mua, rủ hùn hạp, vận động... — họ đọc được ở lượt sau và có thể nhắn lại)',
 ]
 
 VAN_PHAM_CLAUSE = """Văn phạm dieu_khoan (9 loại — ghép tự do thành mọi kiểu thỏa thuận):
@@ -430,6 +432,10 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         dong.append("CHUYỆN GẦN ĐÂY: " + " | ".join(a.ky_uc[-7:]))
     if a.niem_tin:
         dong.append(f"NIỀM TIN CỐT LÕI CỦA BẠN (đúc từ trải đời): {a.niem_tin}")
+    thu = w.hom_thu.get(aid) or []
+    if thu:
+        dong.append("📨 TIN NHẮN GỬI RIÊNG BẠN (trả lời bằng nhan_tin nếu muốn tiếp chuyện): "
+                    + " | ".join(f"{tu} nhắn: \"{noi}\"" for tu, noi, _t in thu[:5]))
     if gia_dinh:
         dong.append("Gia đình: " + "; ".join(gia_dinh) + ".")
     # thân quen & ân oán — trải nghiệm tích lũy của CHÍNH BẠN với từng người còn sống

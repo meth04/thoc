@@ -194,3 +194,16 @@
   hoi_ky) → không ảnh hưởng tất định (đã kiểm: mock cùng seed cùng hash 6a495a9474644056).
   Budget guard cộng thêm lô phản tư. NGHIỆM THU: 3 test reflection (ân oán→niềm tin, tất
   định, không sụp) + 93/93 test + ruff sạch + mock determinism giữ.
+- 2026-07-12 (PART 5 Bước 5 — P2P Agent-to-Agent, REPORTS.md §5.4): nhắn tin 1-1 mặc cả/vận
+  động. THIẾT KẾ: tin nhắn TRỄ MỘT TICK (gửi tick T → người nhận đọc ở prompt tick T+1),
+  đồng nhất với cơ chế bảng rao/tin đồn sẵn có. Vì sao không chat đồng bộ nhiều-vòng trong
+  tick: N² hội thoại × nhiều vòng × call thật = bùng nổ chi phí + phá tất định. Trễ-một-tick
+  cho: (1) TẤT ĐỊNH (tin là dữ liệu, apply sorted, giao tick sau), (2) 0 call phụ (tin nằm
+  trong quyết định thường của agent), (3) hội thoại nhiều tick vẫn nổi lên (T: A→B, T+1: B→A...),
+  (4) KHÔNG chạm Ledger (thuần thông tin — điều luật #1). w.hom_thu (checkpoint được), thay mới
+  mỗi tick (tin sống đúng 1 tick, muốn nhớ thì ghi ky_uc). Intent nhan_tin{den,noi_dung} +
+  cap ≤3 gửi/người/tick, ≤5 nhận/người (chống spam) + cộng nhẹ quan hệ. Prompt hiện "📨 TIN
+  NHẮN GỬI RIÊNG BẠN". Mock: rulebot người hợp tác cao thi thoảng nhắn hàng xóm thân (seeded).
+  NGHIỆM THU: 4 test P2P (giao tick sau + hiện prompt, sống 1 tick, không gửi người chết/mình,
+  tất định+bảo toàn) + roundtrip phủ nhan_tin; 97/97 test; ruff sạch; mock cùng seed cùng hash
+  1b9edf2a3beeaede; 44 tin P2P trong mock 80 tick. ⇒ TOÀN BỘ PART 5 (5.1–5.4) HOÀN TẤT.

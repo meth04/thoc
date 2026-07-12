@@ -64,6 +64,22 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
                 w.ghi_unrecognized(aid, "quyet_dinh_entity",
                                    f"không điều hành {eid}")
 
+    # 3c. P2P (PART 5.4): thư gửi tick này → hòm thư, GIAO Ở PROMPT TICK SAU. Thuần thông
+    # tin (mặc cả/vận động), KHÔNG chạm Ledger. Cap chống spam; cộng nhẹ quan hệ (đã liên lạc).
+    hom_thu_moi: dict[str, list] = {}
+    cong_lien_lac = float(w.cfg.get("quan_he.cong_moi_tuong_tac"))
+    for aid in sorted(ke_hoach):
+        if not w.chu_the_hoat_dong(aid):
+            continue
+        for den, noi_dung in ke_hoach[aid].nhan_tin[:3]:
+            if not w.chu_the_hoat_dong(den) or den == aid:
+                continue
+            if len(hom_thu_moi.get(den, ())) >= 5:  # hòm thư đầy → bỏ (chống spam)
+                continue
+            hom_thu_moi.setdefault(den, []).append((aid, str(noi_dung)[:300], w.tick))
+            w.cong_quan_he(aid, den, cong_lien_lac)
+            w.events.ghi(w.tick, "nhan_tin", tu=aid, den=den)
+
     # 4. bang_rao: đăng đề nghị, trả lời, khớp; đơn phương phá vỡ
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
@@ -247,6 +263,8 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
             for aid, ag in w.agents.items() if ag.con_song
         }
         w.events.ghi(w.tick, "giai_cap_snapshot", du_lieu=snap)
+    # P2P: thư gửi tick này thay hòm thư cũ (đã đọc ở prompt tick này) → giao tick sau
+    w.hom_thu = hom_thu_moi
     return m
 
 

@@ -42,6 +42,9 @@ class World:
     metrics_lich_su: list[dict[str, Any]] = field(default_factory=list)
     # đề nghị cầu hôn chờ trả lời tick sau: (tu, den, tick_gui)
     cau_hon_cho: list[tuple[str, str, int]] = field(default_factory=list)
+    # hòm thư P2P (PART 5.4): người nhận → [(người gửi, nội dung, tick)] — giao ở prompt
+    # tick SAU (mặc cả/vận động qua nhiều tick), thuần THÔNG TIN, không chạm Ledger
+    hom_thu: dict[str, list] = field(default_factory=dict)
     # uy tín / quan hệ xã hội: (a,b) → trọng số (âm = ân oán)
     quan_he: dict[tuple[str, str], float] = field(default_factory=dict)
     # ---- Phase 2: hợp đồng, bảng rao, chợ ----

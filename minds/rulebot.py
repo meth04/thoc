@@ -311,6 +311,13 @@ def ke_hoach_mot_nguoi(
 def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float,
                               bc: _BoiCanhTick) -> None:
     aid = a.id
+    # P2P (PART 5.4): người hợp tác cao, thi thoảng nhắn thẳng một hàng xóm THÂN để mặc
+    # cả/hỏi mua (thông tin lan 1-1, ngoài chợ) — mock exercise nhan_tin, tất định seeded
+    if a.persona.hop_tac >= 6 and g.random() < 0.04:
+        than = [h for h in w.hang_xom_cua(aid, toi_da=3) if w.uy_tin(aid, h) > 0]
+        if than:
+            kh.nhan_tin.append(
+                (than[0], "Nhà bác có dư gỗ/gà/thóc để lại cho tôi giá phải chăng không?"))
     # phụng dưỡng: cha mẹ >60 tuổi thiếu ăn mà mình dư → biếu thóc
     if an_ninh > 1.2:
         for pid in (a.cha, a.me):
