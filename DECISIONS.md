@@ -112,3 +112,11 @@
      mô-típ — chỉ đo được trên run real ≥100 năm; không thêm mô-típ mồi (= ngụy tạo).
   11. E1-E8 chỉ BÁO CÁO (quy tắc sắt §4): E1 Pareto khớp, E4 Malthus một phần, E7 lệch trên
      mock (rulebot định giá đất thô) — không nắn tham số theo E.
+- 2026-07-12 (hồi quy mock 300 năm sau tổng kiểm định, seed 42): audit bảo toàn xanh 600/600
+  tick, fallback 0.02%, dân đỉnh 394 → cuối 215 (bền vững, hết sụp đổ như bản chưa hiệu chỉnh);
+  mọi cơ chế realism sống (17.202 lượt đánh cá, 451 tiệc, 300 vụ trộm, 201 trẻ được cưu mang,
+  7.786 hợp đồng, 58 máy, 35 pháp nhân). Chết đói 61% tổng tử vong — kinh tế khan đất, ĐÓ LÀ
+  KẾT QUẢ (điều luật #7, không nắn cho đẹp). Nhãn công-nghiệp-hóa KHÔNG chạm (phi nông
+  0.21-0.32 < 0.40): vật lý realism (trẻ học tới 15, già nghỉ, đất bạc màu) kéo lao động về
+  nông — cần vòng hiệu chỉnh CNH riêng (hiệu chỉnh DUY NHẤT được SPEC #10 cho phép, mục tiêu
+  trung vị năm 160-280) trước Phase 7/8; chưa làm trong đợt này.
