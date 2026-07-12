@@ -71,32 +71,44 @@ Làm sao để Agent thực sự biết "Bầu cử" hay "Bạo động" một c
 Để đạt được *Full Autonomy*, lõi tương tác giữa Engine và LLM hiện tại (Batching JSON) phải bị đập bỏ và nâng cấp lên kiến trúc Multi-Agent hiện đại.
 
 ### 5.1. Mô Hình 1-to-1 (Độc Lập Nhận Thức Hoàn Toàn)
-*   **Hạn chế cũ:** Nhồi nhiều Agent vào 1 LLM Call làm mất đi "Bất đối xứng thông tin" (Information Asymmetry).
-*   **Đột phá:** Mỗi tác tử là 1 Thread, 1 LLM Call độc lập. Chấp nhận tăng số lượng Request và thời gian chờ để lấy sự tinh khiết tuyệt đối của dữ liệu. Tác tử A không biết ví tiền của tác tử B.
+*   Mỗi tác tử là 1 Thread, 1 LLM Call độc lập. 
+*   **Giá trị:** Tạo ra "Bất đối xứng thông tin" (Information Asymmetry). Tác tử A không biết ví tiền của tác tử B.
 
 ### 5.2. Function Calling và Model Context Protocol (MCP)
-*   **Hạn chế cũ:** Output JSON cứng nhắc dễ gây lỗi cú pháp (Parsing errors).
-*   **Đột phá:** Chuyển Không gian Hành động thành **Native Function Calling**. 
-    *   LLM gọi `ky_hop_dong()`, `bo_phieu()`.
-    *   Dùng **MCP** để cho phép LLM chủ động "hỏi" thế giới: `check_weather()`, `get_market_price('thoc')`. LLM từ kẻ thụ động (bị nhồi prompt) trở thành kẻ chủ động khám phá.
+*   Chuyển Không gian Hành động thành **Native Function Calling**. 
+*   Dùng **MCP** để cho phép LLM chủ động "hỏi" thế giới: `check_weather()`, `get_market_price('thoc')`.
 
 ### 5.3. Bộ Nhớ Phân Tầng (Episodic Memory & Reflection)
-*   Tích hợp Vector Database (như ChromaDB/Faiss) vào mỗi Agent.
-*   **Episodic Memory:** Lưu trữ mọi giao dịch đã xảy ra ("Bị X lừa 2 thóc vào tick 40").
-*   **Reflection (Tự Phản Tư):** Sau mỗi 10 tick, Agent gọi LLM để tóm tắt các mảnh ký ức thành "Niềm tin cốt lõi" (Core Beliefs). Ví dụ: "X là kẻ lừa đảo". Uy tín (Reputation) của xã hội sẽ tự phát sinh từ trí nhớ này.
-
-### 5.4. Mạng Lưới P2P (Agent-to-Agent Communication)
-*   Cho phép tác tử mở luồng chat 1-1 với nhau để "Mặc cả giá" hoặc "Lobby chính trị" trước khi kết thúc một Tick. Đây là nơi phát sinh Chủ nghĩa Tư bản Thân hữu.
-
-### 5.5. Chuyển Đổi Sang Framework Chuyên Dụng (AutoGen / LangGraph)
-*   Để quản lý hàng trăm LLM Calls độc lập, P2P Chat, và Auto-retry, Engine cần được bọc trong các Framework công nghiệp như **Microsoft AutoGen** hoặc **LangGraph**. Việc này giải quyết triệt để bài toán Concurrency (Đồng thời) của dự án.
+*   **Episodic Memory:** Lưu trữ mọi giao dịch đã xảy ra vào Vector DB.
+*   **Reflection (Tự Phản Tư):** Tóm tắt các mảnh ký ức thành "Niềm tin cốt lõi" (Core Beliefs). Ví dụ: "X là kẻ lừa đảo".
 
 ---
 
-## 6. HƯỚNG DẪN THỰC THI DÀNH CHO CLAUDE CODE (IMPLEMENTATION DIRECTIVES)
+## PHẦN 6: KỶ LUẬT THÉP CHO PROMPT & TOOL SCHEMA (ANTI-HALLUCINATION)
 
-Khi **Claude Code** (hoặc bất kỳ AI Agent nào) nhận nhiệm vụ thực thi tài liệu này, CẦN TUÂN THỦ TỐI ĐA các nguyên tắc sau:
+Khi chuyển sang kiến trúc tự chủ bằng LLM Tools, rủi ro lớn nhất là Agent gọi tool bừa bãi hoặc truyền tham số sai logic vật lý. Hệ thống Prompt phải được cấu trúc lại cực kỳ chặt chẽ (Hardened Prompts).
 
-1. **Sự Tôn Nghiêm Của Ledger (Ledger Sanctity):** Mọi Intent mới (Bạo động, Cướp đoạt, Thuế) bắt buộc phải đi qua hệ thống `Double-Entry Ledger`. Không bao giờ được cung cấp hàm cho LLM sửa trực tiếp object `World.agents[id].tai_san`.
-2. **Backward Compatibility:** 9 điều khoản hợp đồng gốc (`engine/contracts.py`) là nền tảng của nền kinh tế. Khi thêm các tính năng về Chính quyền, tuyệt đối không làm gãy logic của Hợp đồng làm thuê và Cổ phần.
-3. **Thứ tự Triển khai (Execution Pipeline):** Bắt buộc phải thực hiện **PHẦN 5 (Tái cấu trúc 1-to-1 + Function Calling)** đầu tiên. Chỉ khi lõi kiến trúc Multi-Agent ổn định, mới được đắp thêm các Logic Chính trị (Bầu cử/Bạo động) của Phần 3 vào. Hãy bắt đầu bằng việc phân tích module sinh prompt và chuyển đổi nó sang cơ chế 1 LLM Call.
+### 6.1. Thiết Kế Tool Schema Chuẩn Mực Cấp Enterprise
+Tuyệt đối không dùng mô tả tool chung chung. Phải dùng schema nghiêm ngặt:
+*   **Mô tả rõ ràng giới hạn:** Ví dụ tool `bo_phieu(candidate_id)` phải ghi rõ `"Chỉ được truyền ID của những người có Intent ung_cu. Nếu truyền ID không hợp lệ, phiếu sẽ bị hủy."`
+*   **Ép kiểu dữ liệu (Strict Typing):** Sử dụng `enum` cho các tham số cố định (như loại hàng hóa `thoc`, `go`, `xu`).
+*   **Tool Phản hồi Trạng thái (Feedback Loops):** Nếu Agent gọi tool sai, Engine không được crash. Hàm phải trả về mã lỗi bằng ngôn ngữ tự nhiên để Agent tự sửa sai. Ví dụ: `{"status": "error", "message": "Bạn không đủ số dư lúa để ký hợp đồng này. Đề nghị gọi tool check_balance() trước."}`
+
+### 6.2. Cấu Trúc System Prompt Cho Sub-Agents (The "Iron-Clad" Prompt)
+Mỗi Agent con khi được khởi tạo phải nhận một System Prompt chứa 3 lớp (3-layer Context):
+1.  **Lớp Căn Cước (Identity Layer):** *"Bạn là [Tên], thuộc giai cấp [Giai cấp], tài sản hiện tại [N]. Mục tiêu sinh tồn của bạn là tối đa hóa tài sản và quyền lực. Bạn rất [Thù dai / Nhát gan] dựa trên lịch sử của bạn."*
+2.  **Lớp Môi Trường (State Layer):** *"Thế giới đang ở năm thứ [Y]. Trưởng làng hiện tại là [Z]. Mức thuế là [T]%. Thời tiết đang là [W]. Giá thóc trung bình là [P]."*
+3.  **Lớp Kỷ Luật (Constraint Layer):** *"CẢNH BÁO QUAN TRỌNG: Bạn chỉ được phép thực hiện hành động thông qua việc gọi Tools. Không được bịa đặt ID của người khác. Nếu bạn đói, hãy dùng tool `tim_viec()`. Nếu bạn phẫn nộ với giai cấp thống trị, dùng tool `bao_dong()`."*
+
+---
+
+## PHẦN 7: HƯỚNG DẪN THỰC THI DÀNH CHO TRƯỞNG NHÓM (AI LEAD ARCHITECT)
+
+Khi **Claude Code** đọc tài liệu này, hãy đóng vai trò là một **Lead Architect**. Bạn phải chia nhỏ công việc và ủy quyền cho các Agent con (Sub-agents) xử lý song song để tiết kiệm thời gian.
+
+1. **Sự Tôn Nghiêm Của Ledger:** Mọi tool calls từ Sub-agents phải đi qua hệ thống `Double-Entry Ledger`. Không bao giờ cấp quyền sửa trực tiếp `World.agents[id].tai_san`.
+2. **Kích hoạt Sub-agents Workflow:** 
+   * Agent 1: Viết test cases và logic cho `metrics.py` (Phase 1).
+   * Agent 2: Bổ sung cấu trúc dữ liệu `ChinhQuyen` và Intents chính trị (Phase 2).
+   * Agent 3: Viết lại toàn bộ hệ thống System Prompts với chuẩn "Kỷ luật thép" (Phase 6).
+3. **Mục tiêu:** Hoàn thiện toàn bộ các Phase còn lại nhanh nhất, chuẩn xác nhất và sát với thực tế nhất!

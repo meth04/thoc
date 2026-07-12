@@ -7,7 +7,6 @@ import re
 
 import httpx
 
-from engine.config import load_config
 from minds.keypool import EnvKeys
 from minds.real import MindReal
 from tests.helpers import chay_tick, the_gioi_test
@@ -74,7 +73,11 @@ def transport_hong():
 
 
 def lam_mind(w, tmp_path, transport) -> MindReal:
-    return MindReal(w, tmp_path, load_config(), lam_env(), tmp_path / "quota.sqlite",
+    # orchestrator đọc w.cfg → override CHÍNH w.cfg (test env 2 key: kiểm cơ chế pipeline
+    # base; MCP + every-agent test riêng ở test_world_tools / run thật)
+    w.cfg.raw()["minds"]["dung_cong_cu_the_gioi"] = False
+    w.cfg.raw()["minds"]["nghi_dinh_ky_moi_n_tick"] = 4
+    return MindReal(w, tmp_path, w.cfg, lam_env(), tmp_path / "quota.sqlite",
                     transport=transport, cho_toi_s=2.0)
 
 

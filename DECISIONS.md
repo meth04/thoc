@@ -254,3 +254,15 @@
   → 300 năm (~50k call) cần nhiều ngày HOẶC thêm key (project) HOẶC tier trả phí.
   NGHIỆM THU: 15 test key/provider + toàn bộ + ruff sạch (chưa đốt call thật lại — fix cấu hình
   cooldown, kiểm bằng unit test).
+- 2026-07-12 (theo yêu cầu chủ dự án: mỗi agent nghĩ MỖI tick + tự quyết 1..10 call/tick):
+  nghi_dinh_ky_moi_n_tick 4→1 (mọi người lớn nghĩ mỗi tick, tự chủ hoàn toàn REPORTS.md 5.1);
+  BẬT MCP (dung_cong_cu_the_gioi=true), cong_cu_max_luot 4→10 (LLM tự dừng khi đủ → call/agent
+  LINH ĐỘNG 1-10). MẤU CHỐT: RPM 4/key khiến 1 vòng agentic 10 lượt = 10 request > RPM 1 key →
+  tự dội 429. FIX: MỖI LƯỢT lấy KEY MỚI (goi_agentic nhận chon_key/xong_key callback) — 10 lượt
+  trải trên 10 key, hội thoại nằm trong contents (không phụ thuộc key), ghi quota per-lượt.
+  Thêm function-calling OpenAI-format cho 9router (NineRouterProvider.goi_agentic) để call TRÀN
+  cũng deliberate được (aistudio bão nhanh, phần lớn tràn 9router). Cạn slot giữa vòng → LoiHetSlot
+  tràn cả vòng sang 9router. Test base pipeline tắt MCP + nghi_dinh_ky=4 (env 2-key không tải nổi
+  every-agent). LƯU Ý CHI PHÍ: every-agent + MCP ≈ 3-4× call so với trigger-thưa (~3-4k call/15
+  năm, ~$2-3) — 300 năm cần nhiều ngày quota/tier trả phí. NGHIỆM THU: 106/106 test + ruff sạch;
+  smoke thật MCP còn phải kiểm 9router có nhận OpenAI tools không.

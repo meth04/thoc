@@ -200,10 +200,10 @@ minds:
   concurrency: 48            # PART 5: TRẦN số call LLM song song/tick. Real TỰ CO GIÃN
                              # theo số key (2×số_key+4, chặn bởi trần này) — nhiều key thì
                              # chạy song song nhiều hơn; 2 key→8, 20 key→44, 30 key→48.
-  dung_cong_cu_the_gioi: false  # PART 5 MCP: LLM tự hỏi thế giới (vòng agentic nhiều lượt) —
-                                # CHỈ real+aistudio, TỐN nhiều call/agent → mặc định TẮT
-  cong_cu_max_luot: 4        # trần số lượt gọi công cụ mỗi agent (chống bùng nổ call)
-  nghi_dinh_ky_moi_n_tick: 4
+  dung_cong_cu_the_gioi: true   # PART 5 MCP BẬT: mỗi agent tự hỏi thế giới nhiều lượt rồi
+                                # mới quyết — call/agent LINH ĐỘNG 1..cong_cu_max_luot
+  cong_cu_max_luot: 10       # trần số lượt gọi công cụ/agent/tick (LLM tự dừng khi đủ)
+  nghi_dinh_ky_moi_n_tick: 1   # 4→1: MỌI người lớn nghĩ MỖI tick (tự chủ hoàn toàn, REPORTS.md 5.1)
   nguong_trigger_gia: 0.30
   hoi_ky_token_toi_da: 250
   gia_huan_token_toi_da: 100
