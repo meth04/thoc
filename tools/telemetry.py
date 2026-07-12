@@ -95,7 +95,8 @@ def viet_md(kq: dict, run_name: str) -> str:
         return f"# Telemetry LLM — `{run_name}`\n\n(không có call nào trong llm_calls.sqlite)\n"
     d = [f"# Telemetry LLM — run `{run_name}`", ""]
     d.append(f"- **Tổng call:** {kq['tong_call']:,} · fallback {kq['fallback_rate']:.2%} "
-             f"({kq['fallback']}) · lượt gọi công cụ MCP {kq['luot_cong_cu']:,}")
+             f"({kq['fallback']}) · retry/lượt-công-cụ {kq['luot_cong_cu']:,} "
+             f"(cột retries: MCP tắt = số retry; MCP bật = số lượt gọi công cụ)")
     d.append(f"- **Token:** vào {kq['tok_in']:,} + ra {kq['tok_out']:,} = "
              f"**{kq['tok_tong']:,}** · ước tính **${kq['chi_phi_usd']:.4f}** (giá xấp xỉ, cấu hình được)")
     lm = kq["latency_ms"]
