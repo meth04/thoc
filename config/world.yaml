@@ -199,6 +199,9 @@ minds:
   batch_toi_da: 8            # (di sản batch cũ — kiến trúc 1-to-1 không còn gộp agent)
   concurrency: 24            # PART 5: số call LLM per-agent chạy song song tối đa mỗi tick
                              # (mock: chỉ giới hạn fan-out; real: nên ≤ tổng RPM các route)
+  dung_cong_cu_the_gioi: false  # PART 5 MCP: LLM tự hỏi thế giới (vòng agentic nhiều lượt) —
+                                # CHỈ real+aistudio, TỐN nhiều call/agent → mặc định TẮT
+  cong_cu_max_luot: 4        # trần số lượt gọi công cụ mỗi agent (chống bùng nổ call)
   nghi_dinh_ky_moi_n_tick: 4
   nguong_trigger_gia: 0.30
   hoi_ky_token_toi_da: 250

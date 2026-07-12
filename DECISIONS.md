@@ -171,3 +171,15 @@
   NGHIỆM THU: smoke thật ≤12 call — 8/8 route OK, mọi provider (AIStudio gemini-3.1-flash-lite
   + 9router gc/gemini-2.5-*) chấp nhận JSON mode, trả JSON hợp lệ; FakeTransport e2e 14 test
   xanh; 87/87 test; ruff sạch. Run 1-to-1 thật ĐẦY ĐỦ vẫn là HUMAN-GATE (tiền) — chưa kích hoạt.
+- 2026-07-12 (PART 5 Bước 3 — MCP world-tools CHỈ ĐỌC + vòng agentic, REPORTS.md §5.2/§4.3):
+  LLM chủ động HỎI thế giới trước khi quyết (xem_thoi_tiet, gia_cho, tai_san_cua_toi,
+  dat_cong_gan, uy_tin_voi, nghe_ve) qua Gemini function-calling nhiều lượt.
+  BẤT BIẾN: (1) mọi công cụ CHỈ ĐỌC — test snapshot world_hash trước/sau khi gọi MỌI công
+  cụ cho MỌI agent, bất biến (điều luật #1); (2) vòng nhiều lượt chỉ ở pha GATHER, quyết định
+  apply sorted-id → replay transcript nhiều lượt cho cùng hash (điều luật #4). Lượt cuối ép
+  responseMimeType JSON để vòng luôn kết thúc; trần cong_cu_max_luot chống bùng nổ call.
+  PHẠM VI: chỉ real + route aistudio (Gemini FC); tier toàn 9router → single-turn không công
+  cụ (ghi nhận, OpenAI tool-calling để sau). Cờ minds.dung_cong_cu_the_gioi MẶC ĐỊNH TẮT →
+  mock + run hiện có KHÔNG đổi. Nén hồi ký/dịch intent chưa dùng công cụ.
+  NGHIỆM THU: 3 test (purity world_hash, tên-lạ-không-sập, vòng agentic gọi-tool-rồi-quyết);
+  90/90 test; ruff sạch. Chạy MCP thật ĐẦY ĐỦ = HUMAN-GATE (tốn nhiều call/agent) — chưa bật.

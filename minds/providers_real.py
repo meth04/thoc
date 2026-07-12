@@ -99,6 +99,66 @@ class AIStudioProvider:
             latency_s=time.time() - t0, key_hash=key_hash(key),
         )
 
+    def goi_agentic(self, req: LLMRequest, model: str, temperature: float,
+                    max_tokens: int, w, aid: str, khai_bao: list, thuc_thi,
+                    max_luot: int, key: str | None = None) -> LLMResponse:
+        """Vòng agentic Gemini function-calling (PART 5 MCP): LLM có thể gọi công cụ
+        CHỈ ĐỌC (thuc_thi) nhiều lượt trước khi trả quyết định. Công cụ không chạm state
+        (điều luật #1). Cộng dồn token mọi lượt; tất định qua replay transcript."""
+        now = time.time()
+        if key is None:
+            key = self.pool.lay_key(now)
+        if key is None:
+            raise LoiHetQuota("aistudio: mọi key đang cooldown")
+        t0 = time.time()
+        contents: list[dict] = [{"role": "user", "parts": [{"text": req.prompt}]}]
+        tools = [{"functionDeclarations": khai_bao}]
+        tok_in = tok_out = 0
+        for luot in range(max_luot + 1):
+            cfg = {"temperature": temperature, "maxOutputTokens": max_tokens}
+            body: dict = {"contents": contents, "generationConfig": cfg}
+            # lượt cuối: ép ra JSON quyết định (bỏ công cụ) để vòng luôn kết thúc
+            if luot < max_luot:
+                body["tools"] = tools
+            else:
+                cfg["responseMimeType"] = "application/json"
+            r = self.client.post(
+                f"{self.base}/v1beta/models/{model}:generateContent",
+                params={"key": key}, json=body,
+            )
+            if r.status_code == 429:
+                self.pool.bao_429(key, time.time())
+                raise LoiRateLimit(key_hash(key))
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise httpx.HTTPError(che_key(str(e))) from None
+            d = r.json()
+            usage = d.get("usageMetadata", {})
+            tok_in += int(usage.get("promptTokenCount", 0))
+            tok_out += int(usage.get("candidatesTokenCount", 0))
+            parts = (d.get("candidates", [{}])[0].get("content", {}).get("parts", []))
+            goi_cong_cu = [p["functionCall"] for p in parts if "functionCall" in p]
+            if not goi_cong_cu:
+                self.pool.bao_ok(key)
+                text = "".join(p.get("text", "") for p in parts)
+                return LLMResponse(
+                    text=text, provider="aistudio", model=model, tok_in=tok_in,
+                    tok_out=tok_out, latency_s=time.time() - t0, key_hash=key_hash(key),
+                    retries=luot,  # số lượt gọi công cụ (đo độ sâu suy nghĩ)
+                )
+            # LLM gọi công cụ → thực thi CHỈ ĐỌC, đưa kết quả vào hội thoại rồi lặp
+            contents.append({"role": "model", "parts": [
+                {"functionCall": fc} for fc in goi_cong_cu]})
+            contents.append({"role": "user", "parts": [
+                {"functionResponse": {"name": fc.get("name", ""),
+                                      "response": thuc_thi(w, aid, fc.get("name", ""),
+                                                           fc.get("args"))}}
+                for fc in goi_cong_cu]})
+        self.pool.bao_ok(key)  # không bao giờ tới (lượt cuối luôn return) — an toàn
+        return LLMResponse(text="{}", provider="aistudio", model=model, tok_in=tok_in,
+                           tok_out=tok_out, latency_s=time.time() - t0, key_hash=key_hash(key))
+
 
 class NineRouterProvider:
     ten = "ninerouter"
@@ -229,6 +289,67 @@ class GatewayReal:
             # RPD còn mà mọi attempt đều lỗi phản hồi → provider hỏng, đừng chờ slot
             loi: LoiHetQuota = LoiProviderHong(
                 f"tier {req.tier}: lỗi provider dai dẳng ({thong_bao})")
+        else:
+            loi = LoiHetQuota(f"tier {req.tier}: mọi route cạn/lỗi ({thong_bao})")
+        loi.so_attempt_hong = so_attempt_hong
+        raise loi
+
+    def goi_agentic(self, req: LLMRequest, w, aid: str) -> LLMResponse:
+        """Vòng công cụ CHỈ ĐỌC (MCP): ưu tiên route aistudio (Gemini function-calling);
+        tier không có route aistudio → single-turn không công cụ (9router bản này chưa hỗ
+        trợ vòng công cụ). Cùng xử lý tràn route / lỗi như goi()."""
+        from minds.world_tools import KHAI_BAO_CONG_CU, thuc_thi
+
+        tier_cfg = self.cfg.get(f"models.tiers.{req.tier}")
+        temperature = float(tier_cfg.get("temperature", 0.9))
+        max_tokens = int(tier_cfg.get("max_output_tokens", 2000))
+        max_luot = int(self.cfg.get("minds.cong_cu_max_luot"))
+        loi_cuoi: Exception | None = None
+        so_attempt_hong = 0
+        co_route_con_rpd = False
+        for route in self.routes_cua_tier(req.tier):
+            now = time.time()
+            if self.con_lai(route, now) <= 0:
+                continue
+            co_route_con_rpd = True
+            if route.provider != "aistudio":
+                # single-turn (không công cụ) qua đường thường
+                for _ in range(self.retry_toi_da + 1):
+                    try:
+                        resp = self._goi_route(req, route, tier_cfg)
+                        self.quota.ghi_call(route.provider, route.model, resp.key_hash,
+                                            time.time())
+                        resp.retries = so_attempt_hong
+                        return resp
+                    except (LoiRateLimit, *self._LOI_PHAN_HOI) as e:
+                        loi_cuoi = e
+                        so_attempt_hong += 1
+                continue
+            key = self.pool_aistudio.lay_key(now)
+            if key is None:
+                loi_cuoi = LoiRateLimit("aistudio-cooldown")
+                so_attempt_hong += 1
+                continue
+            kh = key_hash(key)
+            if not self.quota.cho_phep(route.provider, route.model, kh,
+                                       route.rpm, route.rpd, now):
+                loi_cuoi = LoiRateLimit(kh)
+                so_attempt_hong += 1
+                continue
+            for _ in range(self.retry_toi_da + 1):
+                try:
+                    resp = self.aistudio.goi_agentic(
+                        req, route.model, temperature, max_tokens, w, aid,
+                        KHAI_BAO_CONG_CU, thuc_thi, max_luot, key=key)
+                    self.quota.ghi_call(route.provider, route.model, resp.key_hash,
+                                        time.time())
+                    return resp
+                except (LoiRateLimit, *self._LOI_PHAN_HOI) as e:
+                    loi_cuoi = e
+                    so_attempt_hong += 1
+        thong_bao = che_key(str(loi_cuoi)) if loi_cuoi is not None else "không còn route"
+        if co_route_con_rpd and isinstance(loi_cuoi, self._LOI_PHAN_HOI):
+            loi: LoiHetQuota = LoiProviderHong(f"tier {req.tier}: lỗi dai dẳng ({thong_bao})")
         else:
             loi = LoiHetQuota(f"tier {req.tier}: mọi route cạn/lỗi ({thong_bao})")
         loi.so_attempt_hong = so_attempt_hong

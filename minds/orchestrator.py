@@ -181,8 +181,15 @@ class MindMock:
         tier = tier_cua(w, aid)
         req_ctx = {**ctx, "aid": aid}  # da_nham đã nằm trong ctx (chia sẻ/rỗng tùy chế độ)
         req = LLMRequest(prompt=prompt, ctx=req_ctx, tier=tier, batch_ids=[aid])
+        # MCP (PART 5.2): real + cờ bật + provider hỗ trợ → vòng công cụ CHỈ ĐỌC
+        dung_cong_cu = (not self._tuan_tu
+                        and bool(w.cfg.get("minds.dung_cong_cu_the_gioi"))
+                        and hasattr(self.provider, "goi_agentic"))
         try:
-            resp = self.provider.goi(req, attempt=0)  # NGOÀI khoá — I/O chạy song song
+            if dung_cong_cu:
+                resp = self.provider.goi_agentic(req, w, aid)  # NGOÀI khoá — I/O song song
+            else:
+                resp = self.provider.goi(req, attempt=0)  # NGOÀI khoá — I/O chạy song song
         except LoiHetQuota as e:
             with self._lock:
                 self._ghi_call_loi(w, req, e)

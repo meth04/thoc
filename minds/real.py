@@ -43,14 +43,21 @@ class GatewayCoPacing:
         return any(self.gw.con_lai(r, now) > 0 for r in self.gw.routes_cua_tier(tier))
 
     def goi(self, req: LLMRequest, attempt: int = 0) -> LLMResponse:
+        return self._cho_slot(lambda: self.gw.goi(req), req.tier)
+
+    def goi_agentic(self, req: LLMRequest, w, aid: str) -> LLMResponse:
+        """Vòng công cụ MCP với pacing (chờ slot RPM như goi)."""
+        return self._cho_slot(lambda: self.gw.goi_agentic(req, w, aid), req.tier)
+
+    def _cho_slot(self, ham, tier: str) -> LLMResponse:
         han = time.time() + self.cho_toi_s
         while True:
             try:
-                return self.gw.goi(req)
+                return ham()
             except LoiProviderHong:
                 raise  # lỗi HTTP dai dẳng dù RPD còn — chờ slot RPM là vô ích
             except LoiHetQuota:
-                if not self._con_rpd(req.tier) or time.time() >= han:
+                if not self._con_rpd(tier) or time.time() >= han:
                     raise
                 time.sleep(3.0)  # nghẽn RPM/cooldown tạm thời — chờ slot
 
