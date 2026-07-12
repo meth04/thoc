@@ -57,3 +57,13 @@ class KeHoach:
     trom: tuple | None = None  # (muc_tieu, tai_san, so_luong) — làm liều, rủi ro thể diện
     # P2P (PART 5.4): nhắn tin 1-1 mặc cả/vận động — [(người nhận, nội dung)]; giao tick sau
     nhan_tin: list = field(default_factory=list)
+    # ---- Chính trị (bầu cử, lập pháp, nghiệp đoàn, bạo động) ----
+    # engine chỉ cung cấp cơ chế trung lập; MỌI ý định dưới đây do agent tự phát
+    ung_cu: bool = False  # ra ứng cử chức trưởng làng kỳ này
+    bo_phieu: str | None = None  # id ứng viên mình bầu
+    ban_hanh_luat: dict | None = None  # trưởng làng ra luật, vd {"loai":"thue","suat":0.1}
+    hoi_lo: tuple | None = None  # (den, thoc) — đút lót một người
+    gia_nhap_nghiep_doan: bool = False  # gia nhập nghiệp đoàn (thương lượng tập thể)
+    dinh_cong: bool = False  # đình công tick này
+    bao_dong: bool = False  # tham gia bạo động (vật lý sung công khi đủ số đông + Gini cao)
+    keu_goi: str | None = None  # vận động townhall — thông tin thuần, không dịch chuyển tài sản

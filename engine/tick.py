@@ -107,6 +107,12 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
                 hd.huy_bao_truoc_tu = w.tick
                 w.events.ghi(w.tick, "bao_huy_hd", hd=hd_id, ai=aid)
 
+    # 4b. chính quyền (TRƯỚC sản xuất): bầu cử, lập pháp, hối lộ, nghiệp đoàn, đình công,
+    # kêu gọi. Đánh dấu đình công tick này để hook góp công (bước 5) hoãn giao công.
+    from engine import politics
+
+    politics.buoc_chinh_quyen(w, ke_hoach)
+
     # 5. san_xuat: sinh công → góp công theo hợp đồng → canh/khai thác/chế tác/xây → R&D
     w.kl_hd_tick = 0.0  # tích lũy giá trị chuyển giao qua hợp đồng trong tick (quy thóc)
     w.gat_tick.clear()
@@ -115,6 +121,8 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     production.sinh_cong(w)
     contracts.gop_cong_dau_san_xuat(w)
     production.thi_hanh_san_xuat(w, ke_hoach)
+    # thuế SAU thu hoạch: thu theo suất trên sản lượng gặt → công quỹ → chia đều đầu người
+    politics.thu_thue_va_chia(w)
     # chăn nuôi: bắt gà / giết thịt theo kế hoạch
     from engine import chan_nuoi as cn_mod
     from engine import xa_hoi
@@ -212,6 +220,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     production.phuc_hoi_dat(w)
     xa_hoi.decay_quan_he(w)
     production.boc_hoi_cong(w)
+    # bạo động: cơ chế trung lập — sung công + chia lại QUA LEDGER khi Gini quá ngưỡng
+    # VÀ đủ số đông bạo động (chuyển CÂN nên audit vẫn xanh)
+    politics.buoc_bao_dong(w, ke_hoach)
     audit.kiem_toan_the_gioi(w, tong_thua_ban_dau)
     research_mod.cap_nhat_san_tier(w)
     m = metrics.buoc_ket_toan(w)
@@ -225,6 +236,14 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     m["so_entity"] = sum(1 for e in w.entities.values() if e.con_hoat_dong)
     m["so_blueprint"] = len(w.blueprints)
     m["so_may"] = round(w.ledger.tong_tai_san("may"), 1)
+    # chính trị (đặt tại đây — KHÔNG đụng engine/metrics.py; getattr an toàn khi vô chính phủ)
+    cq = w.chinh_quyen
+    m["truong_lang"] = cq.truong_lang if cq else None
+    m["thue_suat"] = round(cq.thue_suat, 4) if cq else 0.0
+    m["luong_toi_thieu"] = round(cq.luong_toi_thieu, 4) if cq else 0.0
+    m["so_nghiep_doan"] = len(cq.nghiep_doan) if cq else 0
+    m["so_dinh_cong"] = len(cq.dinh_cong_tick) if cq else 0
+    m["so_bao_dong"] = w.so_bao_dong_tick
     cua_so = int(w.cfg.get("quan_sat.cua_so_tick"))
     cong_4_tam: dict[str, float] = {}
     for d in [*w.cong_dung_4, w.cong_dung_tick][-cua_so:]:
@@ -246,6 +265,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     obs = buoc_observatory(w)
     m["giai_cap"] = obs["giai_cap"]
     m["nhan_dinh_che"] = obs["nhan_dinh_che"]
+    # cache nhãn giai cấp lên w (kênh MỘT CHIỀU observatory→prompt): persona đọc
+    # w.phan_loai để nói "Bạn là [giai cấp]..." — engine KHÔNG rẽ nhánh theo nhãn này
+    w.phan_loai = obs["phan_loai"]
     m["cong_nghiep_hoa"] = bool(w.nhan_dinh_che.get("cong_nghiep_hoa"))
     # cửa sổ thu nhập 4 tick (sau khi observatory đã dùng)
     w.thu_nhap_4.append(w.thu_nhap_tick)

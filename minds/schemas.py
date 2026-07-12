@@ -18,6 +18,9 @@ LOAI_HANH_DONG = {
     "khai_hoang", "xay", "nghien_cuu", "buon_chuyen", "cau_hon", "tra_loi_cau_hon",
     "viet_di_chuc", "di_cu", "yeu_cau_hoan_tra", "chan_nuoi", "bieu",
     "danh_ca", "mo_tiec", "trom", "nhan_tin",
+    # chính trị (bầu cử, lập pháp, nghiệp đoàn, đình công, bạo động, vận động)
+    "ung_cu", "bo_phieu", "ban_hanh_luat", "hoi_lo", "nghiep_doan",
+    "dinh_cong", "bao_dong", "keu_goi",
 }
 
 

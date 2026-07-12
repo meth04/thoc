@@ -111,6 +111,24 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
         hd_list.append({"loai": "cau_hon", "den": kh.cau_hon})
     for tu, dong_y in kh.tra_loi_cau_hon.items():
         hd_list.append({"loai": "tra_loi_cau_hon", "cua": tu, "dong_y": dong_y})
+    # ---- chính trị (getattr: không vỡ nếu engine chưa thêm field KeHoach) ----
+    if getattr(kh, "ung_cu", False):
+        hd_list.append({"loai": "ung_cu"})
+    if getattr(kh, "bo_phieu", None):
+        hd_list.append({"loai": "bo_phieu", "cho": kh.bo_phieu})
+    if getattr(kh, "ban_hanh_luat", None):
+        hd_list.append({"loai": "ban_hanh_luat", "luat": kh.ban_hanh_luat})
+    if getattr(kh, "hoi_lo", None):
+        den, thoc = kh.hoi_lo
+        hd_list.append({"loai": "hoi_lo", "den": den, "thoc": thoc})
+    if getattr(kh, "gia_nhap_nghiep_doan", False):
+        hd_list.append({"loai": "nghiep_doan", "gia_nhap": True})
+    if getattr(kh, "dinh_cong", False):
+        hd_list.append({"loai": "dinh_cong"})
+    if getattr(kh, "bao_dong", False):
+        hd_list.append({"loai": "bao_dong"})
+    if getattr(kh, "keu_goi", None):
+        hd_list.append({"loai": "keu_goi", "noi_dung": kh.keu_goi})
     qd: dict[str, Any] = {"id": kh.id, "hanh_dong": hd_list, "ly_do": ly_do}
     if patch:
         qd["the_chinh_sach"] = patch
@@ -135,6 +153,25 @@ def quyet_dinh_thanh_ke_hoach(w, qd: QuyetDinh,
                 w.ghi_unrecognized(qd.id, hd.loai, f"tham số sai: {e}")
     # ý định sinh con nằm trong thẻ (patch xử lý ở orchestrator)
     return kh
+
+
+def _chuan_hoa_luat(luat: Any) -> dict[str, Any]:
+    """Chuẩn hóa AN TOÀN một đạo luật do agent đề xuất (điều luật #3 — input LLM
+    không tin được). Bắt buộc là dict; tham số số ép về float ≥0 (thuế suất, mức
+    lương...), còn lại ép về str. Không phải dict → raise để rơi thùng intent lạ.
+    Ví dụ: {"loai":"thue","suat":0.1} hoặc {"loai":"luong_toi_thieu","muc":2.0}.
+    """
+    if not isinstance(luat, dict):
+        raise ValueError("luật phải là dict")
+    ra: dict[str, Any] = {}
+    for k, v in luat.items():
+        if isinstance(v, bool):
+            ra[str(k)] = v
+        elif isinstance(v, int | float):
+            ra[str(k)] = max(0.0, float(v))
+        else:
+            ra[str(k)] = str(v)
+    return ra
 
 
 def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> None:
@@ -295,6 +332,30 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
                 lang = a.lang if a is not None else 0
             kh.dat_lenh.append(Lenh(kh.id, chieu, tai_san, float(d["sl"]),
                                     float(d["gia"]), thanh_toan, lang=int(lang)))
+    elif loai == "ung_cu":
+        kh.ung_cu = True
+    elif loai == "bo_phieu":
+        cho = str(d["cho"])  # thiếu ứng viên → KeyError → rơi thùng (điều luật #3)
+        if cho:
+            kh.bo_phieu = cho
+    elif loai == "ban_hanh_luat":
+        # luat PHẢI là dict; tham số số bị ép về float ≥0 (không tin dữ liệu LLM)
+        kh.ban_hanh_luat = _chuan_hoa_luat(d.get("luat"))
+    elif loai == "hoi_lo":
+        den = str(d["den"])
+        thoc = max(0.0, float(d.get("thoc", 0) or 0))
+        if den:
+            kh.hoi_lo = (den, thoc)
+    elif loai == "nghiep_doan":
+        kh.gia_nhap_nghiep_doan = bool(d.get("gia_nhap", True))
+    elif loai == "dinh_cong":
+        kh.dinh_cong = True
+    elif loai == "bao_dong":
+        kh.bao_dong = True
+    elif loai == "keu_goi":
+        noi = str(d.get("noi_dung", d.get("noi_dong", "")))[:300]
+        if noi:
+            kh.keu_goi = noi
     else:
         if thung is not None:
             thung.append((kh.id, d, "nguyên tố chưa mở ở phase hiện tại"))

@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from engine.metrics import gini
 from engine.world import World
 
 # Khai báo công cụ theo lược đồ functionDeclarations của Gemini (OpenAI tools tương tự).
@@ -70,6 +71,14 @@ KHAI_BAO_CONG_CU: list[dict[str, Any]] = [
             "properties": {"nguoi": {"type": "string", "description": "id người cần nghe ngóng"}},
             "required": ["nguoi"],
         },
+    },
+    {
+        "name": "get_phan_bo_cua_cai",
+        "description": "Phổ tài sản của cả làng để cân nhắc TRƯỚC KHI đánh thuế / trợ cấp "
+                       "(Agentic RAG lập pháp): phân vị 10/50/90 của kho thóc dân làng, hệ số "
+                       "Gini bất bình đẳng (0=đều, 1=lệch cực đoan), và số hộ thiếu ăn "
+                       "(kho thóc dưới nhu cầu một tick). Chỉ tham khảo, không thay đổi gì.",
+        "parameters": {"type": "object", "properties": {}},
     },
 ]
 
@@ -127,6 +136,59 @@ def _nghe_ve(w: World, aid: str, args: dict) -> dict:
             "nghe_ngong": "; ".join(chi_tiet)}
 
 
+def _phan_vi(x_sap_xep: list[float], q: float) -> float:
+    """Phân vị nearest-rank TẤT ĐỊNH trên danh sách ĐÃ sắp xếp tăng dần (không cần numpy).
+
+    q là tỷ lệ trong [0,1]. Không nội suy → độc lập nền tảng, replay ổn định.
+    """
+    import math
+    n = len(x_sap_xep)
+    if n == 0:
+        return 0.0
+    k = min(n, max(1, math.ceil(q * n)))
+    return x_sap_xep[k - 1]
+
+
+def _get_phan_bo_cua_cai(w: World, aid: str, args: dict) -> dict:
+    """Phổ tài sản làng cho Trưởng làng RAG trước khi lập pháp (REPORTS.md §4.3).
+
+    THUẦN ĐỌC (điều luật #1): chỉ đọc ledger/agents, không chuyển/sinh/hủy gì.
+    Gini dùng CHUNG công thức với engine.metrics để nhất quán với ngưỡng bạo động.
+    """
+    tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    nc = w.cfg.raw()["nhu_cau"]
+    nguoi_lon_kg = float(nc["nguoi_lon_kg_tick"])
+    tre_em_kg = float(nc["tre_em_kg_tick"])
+    song = [a for a in w.agents.values() if a.con_song]
+    thoc = sorted(w.ledger.so_du(a.id, "thoc") for a in song)
+    # hộ nghèo: kho thóc cả hộ dưới nhu cầu ăn MỘT tick của hộ (dedup theo hộ)
+    da_xu_ly: set[str] = set()
+    so_ho = 0
+    so_ho_ngheo = 0
+    for aid2 in sorted(w.agents):
+        a = w.agents[aid2]
+        if not a.con_song or aid2 in da_xu_ly:
+            continue
+        ho = [m for m in w.ho_cua(aid2) if w.agents[m].con_song]
+        da_xu_ly.update(ho)
+        if not ho:
+            continue
+        so_ho += 1
+        ton = sum(w.ledger.so_du(m, "thoc") for m in ho)
+        nhu = sum(nguoi_lon_kg if w.agents[m].truong_thanh(tt) else tre_em_kg for m in ho)
+        if ton < nhu:
+            so_ho_ngheo += 1
+    return {
+        "so_dan": len(song),
+        "so_ho": so_ho,
+        "thoc_p10": round(_phan_vi(thoc, 0.1), 1),
+        "thoc_p50": round(_phan_vi(thoc, 0.5), 1),
+        "thoc_p90": round(_phan_vi(thoc, 0.9), 1),
+        "gini_thoc": round(gini(thoc), 4),
+        "so_ho_ngheo": so_ho_ngheo,
+    }
+
+
 CONG_CU: dict[str, Callable[[World, str, dict], dict]] = {
     "xem_thoi_tiet": _xem_thoi_tiet,
     "gia_cho": _gia_cho,
@@ -134,6 +196,7 @@ CONG_CU: dict[str, Callable[[World, str, dict], dict]] = {
     "dat_cong_gan": _dat_cong_gan,
     "uy_tin_voi": _uy_tin_voi,
     "nghe_ve": _nghe_ve,
+    "get_phan_bo_cua_cai": _get_phan_bo_cua_cai,
 }
 
 

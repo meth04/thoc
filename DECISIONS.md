@@ -266,3 +266,32 @@
   every-agent). LƯU Ý CHI PHÍ: every-agent + MCP ≈ 3-4× call so với trigger-thưa (~3-4k call/15
   năm, ~$2-3) — 300 năm cần nhiều ngày quota/tier trả phí. NGHIỆM THU: 106/106 test + ruff sạch;
   smoke thật MCP còn phải kiểm 9router có nhận OpenAI tools không.
+
+- **Nhà nước tự phát (POL-ENGINE, engine/politics.py):** `w.chinh_quyen` khởi tạo None — làng
+  vô chính phủ cho tới HÀNH VI CHÍNH TRỊ ĐẦU TIÊN (điều luật #7); prompts.py đã dựa trên đúng
+  giả định này (getattr → "" khi None). Công quỹ là CHỦ THỂ ledger "CONG_QUY" (như VO_THUA_NHAN):
+  thuế = chuyen(dân→CONG_QUY) rồi chia đều đầu người lớn (chuyen ngược), sung công bạo động cũng
+  qua CONG_QUY — mọi bước là chuyển CÂN nên audit bảo toàn tự xanh (điều luật #1), CONG_QUY về 0
+  sau mỗi lần (người cuối nhận phần dư chống trôi float). Bầu cử: ứng viên tích lũy trong nhiệm
+  kỳ, tick bầu đếm phiếu (1 người 1 phiếu), NHIỀU PHIẾU NHẤT + tie-break id nhỏ thắng nếu hết
+  nhiệm kỳ; chỉ nhậm chức khi có ≥1 phiếu. Bạo động = decile trên/dưới theo thóc (k=max(1,n//10)),
+  chỉ kích hoạt khi Gini>gini_nguong_bao_dong VÀ số bạo động≥ty_le_so_dong×người_lớn (ngưỡng là
+  HẰNG VẬT LÝ config chinh_tri). Đình công: thành viên nghiệp đoàn hoãn giao công tick đó (hook 1
+  dòng trong contracts.gop_cong_dau_san_xuat), KHÔNG tính vi phạm. world_hash thêm trạng thái
+  chinh_quyen (truong_lang, thuế, nhiệm kỳ, nghiệp đoàn, phiếu) cho tất định. NGHIỆM THU: 148/148
+  test + ruff sạch.
+- 2026-07-12 (Lead integration — REPORTS.md Phase 1+2+3+Part6 qua workflow 4 agent song song):
+  PHÁN QUYẾT KIẾN TRÚC: chính trị là NGUYÊN TỐ TRUNG LẬP thứ 4 (như hợp đồng) — engine cấp
+  VẬT LÝ (đếm phiếu, thu thuế theo suất, sung công khi Gini>ngưỡng+đủ đông), còn ai thắng/
+  thuế bao nhiêu/có bạo động không đều TỰ PHÁT từ ý định agent (điều luật #7). Mọi dịch chuyển
+  qua ledger + chủ thể CONG_QUY (bảo toàn tự xanh).
+  GHÉP NỐI (Lead tự làm, không giao sub-agent phần ledger): (1) cache w.phan_loai=obs["phan_loai"]
+  trong tick.py để persona hiện nhãn giai cấp THẬT ("trung nông", "kẻ không nhà" + lịch sử đời);
+  (2) thêm phan_loai field + 2 khóa config quan_sat (nguong_sigma_phi_ly, min_diem_gia_phi_ly);
+  (3) sửa precondition test persona-fallback (phan_loai nay là {} rỗng thay vì vắng).
+  NGHIỆM THU TÍCH HỢP: 148 test xanh (11 metrics + 13 politics + 9 prompt + 115 cũ), ruff sạch,
+  mock 200 tick AUDIT XANH TỪNG TICK với chính trị hoạt động (thuế/bạo động chỉ CHUYỂN không
+  sinh/hủy), bầu cử tất định (A0001 thắng đúng phiếu), persona giai cấp render đúng. Phase 1
+  (GDP value-added/velocity/gini động/phi-lý-trí), Phase 2 (bầu cử/thuế/hối lộ/nghiệp đoàn/đình
+  công/bạo động), Phase 3 (demographic persona + RAG get_phan_bo_cua_cai), Part 6 (system prompt
+  kỷ luật, P4 sạch) — HOÀN TẤT.

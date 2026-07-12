@@ -104,14 +104,34 @@ def build_user_chung(w: World) -> str:
         f"(hệ số {he_so}). Làng có {dan_song} nhân khẩu; đất công chưa ai khai hoang "
         f"còn {dat_cong_con} thửa; {ta_song}. "
         f"Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. "
-        f"Bảng rao có {so_rao} đề nghị. "
+        f"Bảng rao có {so_rao} đề nghị.{_tinh_hinh_viec_lang(w)} "
         f"[CÁC DẠNG THỎA THUẬN ĐANG LƯU HÀNH] {mau if mau else '(chưa từng có thỏa thuận nào)'} "
         f"[BẠN CÓ THỂ] đề nghị/trả lời hợp đồng (văn phạm 9 điều khoản: chuyen_giao_dinh_ky, "
         f"chuyen_giao_mot_lan, quyen_su_dung, gop_cong, chia_san_luong, chia_loi_nhuan, "
         f"dieu_kien_su_kien, hoan_tra_theo_yeu_cau, khi_pha_vo), lap_phap_nhan, dat_lenh "
         f"mua/bán mọi tài sản, niem_yet/tra_gia_dat, phan_bo_cong, khai_hoang, xay, "
-        f"nghien_cuu, buon_chuyen, cau_hon, viet_di_chuc, di_cu."
+        f"nghien_cuu, buon_chuyen, cau_hon, viet_di_chuc, di_cu, ung_cu, bo_phieu."
     )
+
+
+def _tinh_hinh_viec_lang(w: World) -> str:
+    """Trạng thái nhà nước làng (Trưởng làng, thuế, lương tối thiểu, ứng viên) — thuần dữ
+    kiện, sinh từ w.chinh_quyen nếu định chế chính trị đã tồn tại (getattr an toàn)."""
+    cq = getattr(w, "chinh_quyen", None)
+    if cq is None:
+        return ""
+    truong = getattr(cq, "truong_lang", None)
+    ten_truong = (f"{w.agents[truong].ten} ({truong})"
+                  if truong and truong in w.agents else "chưa bầu ai")
+    thue = float(getattr(cq, "thue_suat", 0.0) or 0.0)
+    luong = float(getattr(cq, "luong_toi_thieu", 0.0) or 0.0)
+    phieu = getattr(cq, "phieu", None)
+    ung_vien = sorted(phieu) if isinstance(phieu, dict) and phieu else []
+    s = (f" [VIỆC LÀNG] Trưởng làng đương nhiệm: {ten_truong}; thuế thu hoạch {thue:.0%} "
+         f"nộp công quỹ chia đều lại; lương tối thiểu {luong:.1f} thóc/công.")
+    if ung_vien:
+        s += f" Người đang ứng cử: {ung_vien}."
+    return s
 
 
 SCHEMA_DAU = """[ĐỊNH DẠNG TRẢ LỜI — BẮT BUỘC]
@@ -159,6 +179,22 @@ MUC_HANH_DONG: list[str] = [
     '  hơn nửa số lần bị bắt quả tang)',
     '- {"loai":"nhan_tin","den":"A0002","noi_dung":"..."}  (nhắn riêng 1 người: mặc cả giá,\n'
     '  hỏi mua, rủ hùn hạp, vận động... — họ đọc được ở lượt sau và có thể nhắn lại)',
+    # ---- việc làng: bầu bán, thuế khóa, đấu tranh (mọi thứ tự phát từ ý dân) ----
+    '- {"loai":"ung_cu"}  (tự ra ứng cử làm Trưởng làng ở kỳ bầu tới)',
+    '- {"loai":"bo_phieu","cho":"A0001"}  (bỏ lá phiếu cho một người đang ứng cử Trưởng làng)',
+    '- {"loai":"ban_hanh_luat","luat":{"loai":"thue","suat":0.1}}  hoặc\n'
+    '  {"loai":"ban_hanh_luat","luat":{"loai":"luong_toi_thieu","muc":2.0}}\n'
+    '  (chỉ Trưởng làng đương nhiệm: đặt thuế suất trên thu hoạch nộp vào công quỹ, hoặc\n'
+    '   mức lương tối thiểu cho mỗi công làm thuê)',
+    '- {"loai":"hoi_lo","den":"A0001","thoc":100}  (đưa riêng thóc cho một người để đổi lấy\n'
+    '  lá phiếu hoặc ân huệ — người kia nhận hay không là tùy họ)',
+    '- {"loai":"nghiep_doan","gia_nhap":true}  (gia nhập nhóm người làm công cùng thương\n'
+    '  lượng điều kiện; đặt false để rời nhóm)',
+    '- {"loai":"dinh_cong"}  (ngừng góp công theo giao kèo làm thuê để gây sức ép)',
+    '- {"loai":"bao_dong"}  (cùng nhiều người nổi dậy sung công của cải nhà giàu chia lại —\n'
+    '  chỉ diễn ra được khi bất bình đẳng cực đoan và đủ đông người cùng nổi dậy)',
+    '- {"loai":"keu_goi","noi_dung":"..."}  (nói trước cả làng ở buổi họp — lời vận động\n'
+    '  thuần, tự nó không dịch chuyển của cải)',
 ]
 
 VAN_PHAM_CLAUSE = """Văn phạm dieu_khoan (9 loại — ghép tự do thành mọi kiểu thỏa thuận):
@@ -224,6 +260,13 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   KHÔNG có tuần đinh hay hình phạt dựng sẵn nào.
 - TRẺ MỒ CÔI cả cha lẫn mẹ được thân nhân gần nhất (hoặc một hàng xóm) cưu mang,
   ăn chung nồi cơm nhà người nuôi — nhà cưu mang có thêm một miệng ăn.
+- VIỆC LÀNG: cứ định kỳ cả làng bầu một Trưởng làng bằng lá phiếu — ai cũng có thể tự
+  ứng cử hoặc bỏ phiếu. Trưởng làng đương nhiệm được ban thuế suất trên thu hoạch và mức
+  lương tối thiểu cho công làm thuê. Thuế thu vào CÔNG QUỸ chung rồi chia đều lại cho cả
+  làng. Khi chênh lệch giàu nghèo (hệ số Gini) vượt ngưỡng VÀ đủ đông người cùng bạo động,
+  một phần của cải nhà giàu bị sung công chia lại cho người nghèo. Người làm công có thể
+  lập nghiệp đoàn và đình công để gây sức ép. Ngoài những gì dân tự lập ra, làng KHÔNG có
+  sẵn nhà nước, luật lệ hay lực lượng cưỡng chế nào.
 
 [BẠN LÀ NGƯỜI SỐNG] Bạn có nhu cầu như mọi con người: no bụng hôm nay; an toàn ngày
 mai (dự trữ, nhà cửa); gia đình (dựng vợ gả chồng, con cái, cha mẹ già, để lại gia
@@ -291,11 +334,45 @@ def _mo_ta_clause(ck, aid: str) -> str:
     return loai
 
 
+# Nhãn giai cấp (observatory) → cụm danh xưng tiếng Việt cho câu CĂN TÍNH ở đầu khối riêng.
+# Chỉ là DỮ KIỆN về thân phận hiện thời (không phải bẩm sinh, không phải lời khuyên); tránh
+# đúng chữ định chế bị check.md P1 cấm (ngân hàng/công ty/bảo hiểm/xưởng).
+GIAI_CAP_VN: dict[str, str] = {
+    "phu_thuoc": "người sống lệ thuộc",
+    "vo_gia_cu": "kẻ không nhà",
+    "chu_xuong": "chủ cơ sở làm ăn",
+    "dia_chu": "địa chủ",
+    "phu_nong": "phú nông",
+    "thuong_nhan": "thương nhân",
+    "tho_thu_cong": "thợ thủ công",
+    "gioi_dich_vu": "người làm nghề dịch vụ",
+    "cong_nhan": "người làm công",
+    "ta_dien": "tá điền",
+    "co_nong": "cố nông",
+    "trung_nong": "trung nông",
+}
+
 # Cap hiển thị trong prompt riêng — chống phình prompt khi tài sản/giao kèo tích lũy.
 HD_HIEN_TOI_DA = 10       # giao kèo liệt kê chi tiết (ưu tiên sắp đáo hạn), dư thì đếm gộp
 DAT_HIEN_TOI_DA = 8       # thửa đất liệt kê chi tiết, dư thì tóm tắt
 QUAN_HE_DUONG_TOI_DA = 4  # số mối thân thiết hiện trong THÂN QUEN & ÂN OÁN
 QUAN_HE_AM_TOI_DA = 3     # số mối hiềm khích hiện trong THÂN QUEN & ÂN OÁN
+
+
+def _cau_can_tinh(w: World, a) -> str:
+    """Câu CĂN TÍNH GIAI CẤP mở đầu khối riêng — rút TỪ SỰ KIỆN: nhãn giai cấp hiện thời
+    (nếu observatory đã phân loại vào w.phan_loai), tuổi, và tối đa 2 dấu mốc đời nặng nhất
+    từ ky_uc_doi. Thuần dữ kiện đời người, KHÔNG lời khuyên (giữ check.md P4)."""
+    phan_loai = getattr(w, "phan_loai", None)
+    nhan = None
+    if isinstance(phan_loai, dict):
+        nhan = GIAI_CAP_VN.get(phan_loai.get(a.id))
+    than_phan = nhan or "dân làng"
+    cau = f"Bạn là {than_phan} {a.tuoi_nam:.0f} tuổi"
+    bien_co = list(a.ky_uc_doi)[-2:] if a.ky_uc_doi else []
+    if bien_co:
+        cau += "; đời bạn từng trải: " + "; ".join(bien_co)
+    return cau + "."
 
 
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
@@ -377,7 +454,7 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
             dat_ho = sum(1 for p in w.parcels.values() if p.chu == tu)
             cau_hon_cho_toi.append(
                 f"{nguoi.ten} ({tu}, {nguoi.tuoi_nam:.0f} tuổi, {gia_san:.0f}kg thóc, "
-                f"{dat_ho} thửa đất) đã NGỎ LỜI CẦU HÔN bạn — hãy đáp bằng "
+                f"{dat_ho} thửa đất) đã NGỎ LỜI CẦU HÔN bạn — đáp bằng "
                 f'{{"loai":"tra_loi_cau_hon","cua":"{tu}","dong_y":true/false}}'
             )
     # ứng viên hôn nhân (độc thân, khác giới, cùng làng — đồ thị xã hội rút gọn)
@@ -417,6 +494,7 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     ]
     tinh_trang = "độc thân" if a.vo_chong is None else "đã có gia đình"
     dong = [
+        _cau_can_tinh(w, a),
         f"[NGƯỜI {aid}] {a.ten}, {a.tuoi_nam:.0f} tuổi, {'nữ' if a.gioi_tinh == 'nu' else 'nam'}, "
         f"{tinh_trang}, học vấn E{a.e_bac}, sức khỏe {a.health:.0f}/100. "
         f"Tính cách (1-9): {a.persona.as_dict()}.",

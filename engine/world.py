@@ -18,6 +18,25 @@ from engine.worldmap import sinh_ban_do
 
 # Chủ thể đặc biệt trong sổ cái
 VO_THUA_NHAN = "VO_THUA_NHAN"  # tài sản không người thừa kế
+CONG_QUY = "CONG_QUY"  # công quỹ làng — một CHỦ THỂ ledger như VO_THUA_NHAN; thu thuế/
+# tái phân phối/sung công đều là chuyen CÂN giữa dân và chủ thể này (bảo toàn tự xanh)
+
+
+@dataclass
+class ChinhQuyen:
+    """Nhà nước làng — TỰ PHÁT SINH từ ý định agent (bầu cử, lập pháp, nghiệp đoàn).
+
+    Engine chỉ giữ TRẠNG THÁI trung lập; không chủ thể nào được thiên vị. Struct này
+    chỉ tồn tại (w.chinh_quyen ≠ None) SAU khi có hành vi chính trị đầu tiên — trước
+    đó làng vô chính phủ, đúng nguyên tắc tự phát (điều luật #7)."""
+
+    truong_lang: str | None = None  # id người đang giữ chức; None = khuyết
+    nhiem_ky_den: int = 0  # tick hết nhiệm kỳ đương nhiệm
+    thue_suat: float = 0.0  # suất thuế thu hoạch (0..thue_suat_toi_da)
+    luong_toi_thieu: float = 0.0  # sàn lương (thóc/công) — chỉ là dữ kiện dân đọc
+    phieu: dict[str, int] = field(default_factory=dict)  # ứng viên id → số phiếu kỳ này
+    nghiep_doan: set[str] = field(default_factory=set)  # thành viên nghiệp đoàn
+    dinh_cong_tick: set[str] = field(default_factory=set)  # ai đình công tick hiện tại
 
 HO_TEN = [
     "An", "Bình", "Cúc", "Dần", "Đào", "Gấm", "Hạnh", "Khang", "Lan", "Mận",
@@ -61,6 +80,9 @@ class World:
     unrecognized_path: Path | None = None
     # kho trạng thái của tầng minds (engine không đọc — chỉ mang theo checkpoint)
     policy_cards: dict[str, dict] = field(default_factory=dict)
+    # nhà nước làng — None cho tới khi có hành vi chính trị đầu tiên (tự phát, điều luật #7)
+    chinh_quyen: ChinhQuyen | None = None
+    so_bao_dong_tick: int = 0  # số người bạo động tick này (metric, đặt trong buoc_bao_dong)
     # ---- Phase 4: pháp nhân, R&D, tri thức ----
     entities: dict = field(default_factory=dict)  # id → Entity
     _next_entity: int = 0
@@ -73,6 +95,8 @@ class World:
     # nhãn → chủ thể: kênh MỘT CHIỀU observatory→metrics — engine chỉ ghi lại vào
     # metrics/events, không bao giờ rẽ nhánh hành vi theo nhãn này
     nhan_dinh_che: dict[str, list[str]] = field(default_factory=dict)
+    # nhãn giai cấp aid→nhãn (observatory→prompt persona; engine không rẽ nhánh theo nó)
+    phan_loai: dict[str, str] = field(default_factory=dict)
     milestones: list[dict] = field(default_factory=list)
     # thu nhập theo nguồn, cửa sổ 4 tick (observatory đọc để phân giai cấp)
     thu_nhap_tick: dict = field(default_factory=dict)  # aid → {nguon: quy thóc}
@@ -292,8 +316,18 @@ class World:
             round(self.tri_thuc, 6),
             self.san_tri_thuc_tier,
         ]
+        cq = self.chinh_quyen
+        cq_s = (
+            (
+                cq.truong_lang or "", round(cq.thue_suat, 6), round(cq.luong_toi_thieu, 6),
+                cq.nhiem_ky_den, tuple(sorted(cq.nghiep_doan)),
+                tuple(sorted(cq.phieu.items())),
+            )
+            if cq is not None else ()
+        )
         blob = json.dumps(
-            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s, p4_s, qh_s],
+            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s, p4_s, qh_s,
+             cq_s],
             ensure_ascii=False, default=str,
         )
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -332,6 +366,11 @@ class World:
         for a in w.agents.values():
             if not hasattr(a, "ky_uc_doi"):
                 a.ky_uc_doi = []
+        # migration: checkpoint trước khi có định chế chính trị
+        if not hasattr(w, "chinh_quyen"):
+            w.chinh_quyen = None
+        if not hasattr(w, "so_bao_dong_tick"):
+            w.so_bao_dong_tick = 0
         return w
 
 

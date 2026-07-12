@@ -250,6 +250,26 @@ def quet_milestones(w: World, nhan: dict[str, list[str]]) -> None:
             break
 
 
+# ---------------------------------------------- chỉ số vĩ mô (CHỈ ĐỌC metrics)
+
+# Bốn chỉ số kinh tế vĩ mô "viện hàn lâm" — GDP thực, vòng quay tiền (velocity),
+# Gini thu nhập, tỷ lệ giao dịch phi lý — do engine/metrics.py TÍNH và ghi vào mỗi
+# bản ghi metrics. Chúng THUẦN QUAN SÁT (điều luật #7): không một quy luật kinh tế
+# nào bị mã hóa để engine rẽ nhánh theo — ta chỉ ĐO cái đã tự phát xảy ra. Hàm dưới
+# đây thuộc observatory (CHỈ ĐỌC nhật ký metrics) để tools trực quan hóa quỹ đạo.
+GINI_QUY_DAO = ("gini_thoc", "gini_dat", "gini_thu_nhap")
+
+
+def quy_dao_gini(w: World) -> list[tuple[int, float, float, float]]:
+    """Quỹ đạo bất bình đẳng theo thời gian để tools vẽ đường: mỗi phần tử là
+    (tick, gini_thoc, gini_dat, gini_thu_nhap). Chỉ đọc w.metrics_lich_su."""
+    return [
+        (m["tick"], m.get("gini_thoc", 0.0), m.get("gini_dat", 0.0),
+         m.get("gini_thu_nhap", 0.0))
+        for m in w.metrics_lich_su
+    ]
+
+
 def buoc_observatory(w: World) -> dict:
     """Chạy trong bước két toán: dán nhãn, milestones; trả metrics bổ sung."""
     nhan = nhan_dinh_che(w)

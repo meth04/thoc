@@ -165,6 +165,8 @@ di_cu:                           # luật vật lý lập làng mới (không ph
 quan_sat:                      # ngưỡng để OBSERVATORY dán nhãn (không phải cơ chế engine)
   cua_so_tick: 4               # cửa sổ trượt cho cơ cấu công/thanh toán/thu nhập
   snapshot_moi_n_tick: 10      # chu kỳ ghi giai_cap_snapshot (chỉ logging)
+  nguong_sigma_phi_ly: 3.0     # giao dịch lệch >Nσ so mặt bằng lịch sử = "phi lý trí"
+  min_diem_gia_phi_ly: 5       # cần ≥N điểm giá của mặt hàng mới tính σ (bounded rationality)
   ngan_hang: {nghia_vu_hoan_tra_toi_thieu_thoc: 1500, so_chu_no_toi_thieu: 5}
   bao_hiem: {so_hop_dong_su_kien_toi_thieu: 5}
   xuong: {so_hop_dong_gop_cong_toi_thieu: 3}
@@ -192,6 +194,14 @@ quan_he:
   cong_moi_tuong_tac: 0.1
   decay_moi_nam: 0.02            # quan hệ không nuôi thì nhạt dần (áp cuối mỗi năm)
   nguong_xoa_canh: 0.05          # |trọng số| dưới ngưỡng → cạnh bị quên hẳn
+
+chinh_tri:                       # nhà nước TỰ PHÁT SINH — engine chỉ cấp cơ chế trung lập
+  bau_cu_moi_n_tick: 20          # chu kỳ bầu cử (10 năm); ứng cử/bỏ phiếu do agent tự phát
+  nhiem_ky_tick: 20              # nhiệm kỳ trưởng làng (bằng chu kỳ bầu → tái cử mỗi kỳ)
+  thue_suat_toi_da: 0.5          # trần thuế suất trưởng làng được đặt (engine cưỡng chế)
+  gini_nguong_bao_dong: 0.85     # HẰNG VẬT LÝ: Gini thóc trên ngưỡng này mới có thể bạo động
+  ty_le_so_dong_bao_dong: 0.3    # cần ≥30% người lớn cùng bạo động thì mới thành sung công
+  ty_le_sung_cong_bao_dong: 0.3  # sung công 30% thóc nhóm giàu nhất → chia đều nhóm nghèo nhất
 
 minds:
   ky_uc_toi_da: 10

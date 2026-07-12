@@ -451,6 +451,11 @@ def gop_cong_dau_san_xuat(w) -> None:
             # (hợp đồng sẽ bị hủy ở bước 7 cùng tick)
             if not (w.chu_the_hoat_dong(tu) and w.chu_the_hoat_dong(den)):
                 continue
+            # đình công: bên góp công là thành viên nghiệp đoàn đình công tick này →
+            # HOÃN giao công (không thực hiện clause tick này), KHÔNG tính vi phạm
+            cq = getattr(w, "chinh_quyen", None)
+            if cq is not None and tu in cq.dinh_cong_tick:
+                continue
             if not _chuyen_an_toan(w, tu, den, "cong", ck.so_cong_moi_tick,
                                    f"góp công {hd.id}", hd_id=hd.id):
                 phat_vi_pham(w, hd, tu)
