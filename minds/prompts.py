@@ -53,7 +53,7 @@ def mau_hop_dong_luu_hanh(w: World, top_k: int) -> list[str]:
 
 
 def mo_ta_the_gioi(w: World) -> str:
-    """Khối mô tả thế giới sinh động từ trạng thái thật (không kỷ nguyên kịch bản)."""
+    """Khối mô tả thế giới sinh động từ trạng thái thật — KHÔNG gán nhãn bối cảnh dựng sẵn."""
     # lọc tài sản kỹ thuật nội bộ (vi_the:* là vị thế hợp đồng — không phải của cải,
     # phơi ra là lộ mọi cặp bên hợp đồng toàn thế giới)
     tai_san_ton_tai = sorted(

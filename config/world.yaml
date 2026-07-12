@@ -211,3 +211,5 @@ minds:
   chronicle_moi_n_tick: 20
   checkpoint_moi_n_tick: 10
   reflection_moi_n_tick: 10   # tự phản tư: cô đọng ký ức+ân oán → niềm tin cốt lõi (5.3)
+  p2p_gui_toi_da: 3           # PART 5.4: mỗi agent gửi tối đa N tin/tick
+  p2p_hom_thu_toi_da: 5       # hòm thư mỗi người nhận tối đa N tin/tick (chống spam)

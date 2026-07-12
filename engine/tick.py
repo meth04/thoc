@@ -68,13 +68,15 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     # tin (mặc cả/vận động), KHÔNG chạm Ledger. Cap chống spam; cộng nhẹ quan hệ (đã liên lạc).
     hom_thu_moi: dict[str, list] = {}
     cong_lien_lac = float(w.cfg.get("quan_he.cong_moi_tuong_tac"))
+    gui_toi_da = int(w.cfg.get("minds.p2p_gui_toi_da"))
+    nhan_toi_da = int(w.cfg.get("minds.p2p_hom_thu_toi_da"))
     for aid in sorted(ke_hoach):
         if not w.chu_the_hoat_dong(aid):
             continue
-        for den, noi_dung in ke_hoach[aid].nhan_tin[:3]:
+        for den, noi_dung in ke_hoach[aid].nhan_tin[:gui_toi_da]:
             if not w.chu_the_hoat_dong(den) or den == aid:
                 continue
-            if len(hom_thu_moi.get(den, ())) >= 5:  # hòm thư đầy → bỏ (chống spam)
+            if len(hom_thu_moi.get(den, ())) >= nhan_toi_da:  # hòm thư đầy → bỏ (chống spam)
                 continue
             hom_thu_moi.setdefault(den, []).append((aid, str(noi_dung)[:300], w.tick))
             w.cong_quan_he(aid, den, cong_lien_lac)
