@@ -11,8 +11,9 @@
 tiers:
   T0:
     ten: "mù chữ"
-    routes:
-      - {provider: aistudio, model: "gemini-3.1-flash-lite"}
+    routes:                       # aistudio (15 key × 4 RPM = 60) cạn slot → tràn 9router
+      - {provider: aistudio,  model: "gemini-3.1-flash-lite"}
+      - {provider: ninerouter, model: "gc/gemini-3.1-flash-lite-preview"}
     temperature: 0.9
     max_output_tokens: 4096  # batch 8 quyết định ~2.4-3k tok — trần thấp sẽ cắt cụt
   T1:

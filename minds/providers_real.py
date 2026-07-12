@@ -220,6 +220,11 @@ class LoiRateLimit(Exception):
         super().__init__("429")
 
 
+class LoiHetSlot(LoiRateLimit):
+    """Route CẠN SLOT cục bộ (mọi key RPM đầy / cooldown / RPD cạn) — retry cùng route
+    vô ích, phải TRÀN sang route sau. Khác 429 server (retry cùng route bằng key khác)."""
+
+
 class GatewayReal:
     """Routes/tier có tràn: thử route đầu còn ngân sách → tràn route sau (SPEC 7.2)."""
 
@@ -289,10 +294,13 @@ class GatewayReal:
                                         time.time())
                     resp.retries = so_attempt_hong  # đếm retry THẬT (điều luật #6)
                     return resp
+                except LoiHetSlot as e:
+                    loi_cuoi = e  # route này cạn slot cục bộ → TRÀN route sau, khỏi retry
+                    break
                 except LoiRateLimit as e:
                     loi_cuoi = e
                     so_attempt_hong += 1
-                    continue  # xoay key / thử lại
+                    continue  # 429 server → xoay key / thử lại cùng route
                 except self._LOI_PHAN_HOI as e:
                     loi_cuoi = e
                     so_attempt_hong += 1
@@ -403,8 +411,8 @@ class GatewayReal:
         max_tokens = int(tier_cfg.get("max_output_tokens", 2000))
         if route.provider == "aistudio":
             key = self._chon_key_aistudio(route, now)
-            if key is None:  # mọi key cạn RPM/RPD hoặc đang cooldown
-                raise LoiRateLimit("aistudio-het-slot")
+            if key is None:  # mọi key cạn RPM/RPD/cooldown → TRÀN route sau (đừng retry)
+                raise LoiHetSlot("aistudio-het-slot")
             try:
                 return self.aistudio.goi(req, route.model, temperature, max_tokens, key=key)
             finally:
@@ -412,7 +420,7 @@ class GatewayReal:
         kh = key_hash(self._env.nine_key)
         if not self.quota.cho_phep(route.provider, route.model, kh,
                                    route.rpm, route.rpd, now):
-            raise LoiRateLimit(kh)
+            raise LoiHetSlot(kh)  # 9router cạn slot → tràn route sau
         return self.ninerouter.goi(req, route.model, temperature, max_tokens)
 
 

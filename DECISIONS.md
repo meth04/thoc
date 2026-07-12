@@ -232,3 +232,13 @@
   slot giảm → trải đều. Test: 30 chọn song song → ≥8 key, không key nào vượt RPM 4 (trước
   1 key ăn 28). Cơ chế least-loaded + cooldown + budget_guard giữ nguyên; đây là lớp reserve
   còn thiếu. NGHIỆM THU: 22/22 test key+provider + toàn bộ test + ruff sạch.
+- 2026-07-12 (fix tràn-route theo RPM + T0 có route dự phòng, sau run15 lần 2 vẫn dừng tick 3):
+  Fix giữ-chỗ đã trải đều 15 key (lệch 4 call) NHƯNG vẫn 429 vì (a) T0 chỉ có 1 route
+  aistudio RPM=4/key, (b) gateway chỉ tràn route khi cạn RPD, KHÔNG tràn khi cạn RPM → retry
+  vô ích trên route bão thay vì nhảy 9router. FIX: (A) T0 thêm route dự phòng 9router
+  (gc/gemini-3.1-flash-lite-preview, RPM 20/RPD 3000 — provider RIÊNG, quota độc lập); (B)
+  LoiHetSlot (cạn slot cục bộ: mọi key RPM đầy/cooldown) khác 429-server: goi() gặp LoiHetSlot
+  thì TRÀN route sau ngay (break), gặp 429-server thì retry cùng route (xoay key). NGHI NGỜ
+  GỐC SÂU HƠN: 15 key aistudio có thể chung 1 project Google → RPM chia sẻ PER-PROJECT (4 tổng,
+  không phải 60) → giải thích 429 dù trải đều + window mới. 9router (provider riêng) né được
+  điều này. Cần chủ dự án xác nhận key có ở các project/tài khoản KHÁC nhau không.

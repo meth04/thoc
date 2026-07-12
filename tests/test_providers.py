@@ -105,11 +105,20 @@ def test_d_budget_thieu_dung_em_khong_degrade():
     cfg = load_config()
     quota = QuotaCounter(None)
     gw = GatewayReal(cfg, env, quota, transport=fake_transport(lambda r: resp_aistudio()))
-    # đốt gần hết RPD của T0
-    route = gw.routes_cua_tier("T0")[0]
-    kh = key_hash(env.gemini_keys[0])
-    for _ in range(route.rpd - 3):
-        quota.ghi_call(route.provider, route.model, kh, time.time())
+    # đốt gần hết RPD MỌI route của T0 (T0 nay có route aistudio + tràn 9router) — chừa 3
+    now = time.time()
+    con_tong = sum(gw.con_lai(r, now) for r in gw.routes_cua_tier("T0"))
+    for route in gw.routes_cua_tier("T0"):
+        kh = key_hash(env.gemini_keys[0]) if route.provider == "aistudio" \
+            else key_hash(env.nine_key)
+        for _ in range(route.rpd):  # đốt cạn từng route
+            quota.ghi_call(route.provider, route.model, kh, now)
+    # chừa lại 3 slot ở route đầu
+    route0 = gw.routes_cua_tier("T0")[0]
+    quota._conn.execute("UPDATE quota_counters SET so_call = so_call - 3 "
+                        "WHERE provider=? AND model=?", (route0.provider, route0.model))
+    quota._conn.commit()
+    assert sum(gw.con_lai(r, now) for r in gw.routes_cua_tier("T0")) == 3 < con_tong
     du, ly_do = budget_guard(gw, {"T0": 100})
     assert not du and "T0" in ly_do
     du2, _ = budget_guard(gw, {"T0": 2})
