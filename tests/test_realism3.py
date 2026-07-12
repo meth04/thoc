@@ -48,22 +48,21 @@ def test_tay_nghe_tang_va_co_tran():
     assert a.tay_nghe <= tran + 1e-9
 
 
-def test_danh_ca_bat_duoc_ca_va_pool_co_han():
+def test_danh_ca_bat_duoc_ca_va_tru_luong_co_han():
+    from engine.world import _ca_suc_chua
+
     w = the_gioi_test(seed=7, giu_lai=2, thoc_moi_nguoi=2000.0)
     a1, a2 = sorted(a for a, ag in w.agents.items() if ag.con_song)
+    ton_truoc = w.ca_ton
     t = w.tick + 1
     kh1 = KeHoach(id=a1, danh_ca_cong=120.0)
     kh2 = KeHoach(id=a2, danh_ca_cong=120.0)
     chay_tick(w, mind_tinh({t: {a1: kh1, a2: kh2}}), 1)
     ca1 = w.ledger.so_du(a1, "ca")
     assert ca1 > 0
-    # 120 công / 6 công/kg = 20kg trước hao hụt; hao 15% cuối tick
-    dc = w.cfg.raw()["danh_ca"]
-    ky_vong = (120.0 / dc["cong_moi_kg_ca"]) * (1 - dc["ca_hao_moi_tick"])
-    assert abs(ca1 - ky_vong) < 1.0 or ca1 < ky_vong  # có thể chạm trần pool
-    # pool giới hạn: tổng cá 2 người không vượt trữ lượng sông một tick
-    so_o_song = sum(1 for p in w.parcels.values() if p.loai == "song")
-    assert ca1 + w.ledger.so_du(a2, "ca") <= so_o_song * dc["ca_moi_o_song_kg"]
+    # trữ lượng sông không vượt sức chứa và đã bị rút bởi lượng đánh bắt
+    assert w.ca_ton <= _ca_suc_chua(w) + 1e-6
+    assert w.ca_ton < ton_truoc + ton_truoc * 0.2  # không thể tăng vọt phi lý
 
 
 def test_an_ca_khi_het_thoc():
@@ -102,9 +101,11 @@ def test_trom_thanh_cong_va_bi_bat():
     for _ in range(14):
         kh = KeHoach(id=ke, trom=(nan_nhan, "thoc", 100.0))
         chay_tick(w, mind_tinh({w.tick + 1: {ke: kh}}), 1)
-    # đọc từ quan hệ + ký ức thay vì file log (fixture không ghi file)
-    thay_bi_bat = any("bắt quả tang" in ku for ku in w.agents[ke].ky_uc)
-    thay_thanh_cong = any("trót lọt" in ku for ku in w.agents[ke].ky_uc)
+    # đọc từ quan hệ + ký ức thay vì file log (fixture không ghi file);
+    # "bị bắt quả tang" là DẤU MỐC ĐỜI (ky_uc_doi), trót lọt là chuyện thường
+    moi_ky_uc = [*w.agents[ke].ky_uc, *w.agents[ke].ky_uc_doi]
+    thay_bi_bat = any("bắt quả tang" in ku for ku in moi_ky_uc)
+    thay_thanh_cong = any("trót lọt" in ku for ku in moi_ky_uc)
     assert thay_thanh_cong and thay_bi_bat
     # bị bắt → quan hệ với nạn nhân âm nặng
     assert w.uy_tin(ke, nan_nhan) < 0
@@ -126,7 +127,7 @@ def test_cuu_mang_mo_coi_va_an_chung_noi_com():
     ho = w.ho_cua(tre.id)
     assert tre.giam_ho in ho and tre.id in ho
     assert any("cưu mang" in ku or "nhận nuôi" in ku or "nuôi" in ku
-               for ku in w.agents[tre.giam_ho].ky_uc)
+               for ku in [*w.agents[tre.giam_ho].ky_uc, *w.agents[tre.giam_ho].ky_uc_doi])
 
 
 def test_xiet_the_chap_khong_gan_dat_cho_vo_thua_nhan():

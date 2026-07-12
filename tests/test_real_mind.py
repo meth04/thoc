@@ -205,4 +205,4 @@ def test_prompt_hien_cau_hon_va_ky_uc():
     prompt = build_user_rieng(w, b, ["duoc_cau_hon"])
     assert "NGỎ LỜI CẦU HÔN" in prompt and a in prompt
     assert "tra_loi_cau_hon" in prompt
-    assert "CHUYỆN ĐỜI BẠN" in prompt and "khai hoang" in prompt
+    assert "CHUYỆN GẦN ĐÂY" in prompt and "khai hoang" in prompt

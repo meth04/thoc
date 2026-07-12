@@ -101,6 +101,8 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     from engine import chan_nuoi as cn_mod
     from engine import xa_hoi
 
+    cn_mod.tai_sinh_ca(w)  # đàn cá sông hồi trước, người đánh sau (trong 6 tháng đó)
+    cn_mod.truong_thanh_ga(w)  # gà con của tick trước nay đủ 6 tháng nuôi
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
         if not w.chu_the_hoat_dong(aid):

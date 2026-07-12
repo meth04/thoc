@@ -55,10 +55,21 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
     else:
         go_co = w.ledger.so_du(aid, "go")
         co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in ho)
+        # nhà 240 công: một người không đủ — cần vợ/chồng góp công hoặc công thuê vào
+        vc = w.agents.get(a.vo_chong) if a.vo_chong else None
+        vc_lon = vc is not None and vc.con_song and vc.truong_thanh(tt)
+        cong_du_kien = (180.0 * (a.health / 100.0) + bc.cong_thue_vao.get(aid, 0.0)
+                        + (180.0 * (vc.health / 100.0) if vc_lon else 0.0))
         if not co_nha and go_co >= sx["recipe"]["nha"]["go"]:
-            kh.xay_nha = 1
+            if cong_du_kien >= float(sx["recipe"]["nha"]["cong"]):
+                kh.xay_nha = 1
         elif not co_nha and the.khai_go_khi_ranh and an_ninh > 0.4:
             kh.cong_khai_go = 120.0
+        # vợ/chồng (id lớn hơn) góp công cho người dựng nhà cùng hộ
+        if (not co_nha and a.vo_chong and aid > a.vo_chong and vc is not None
+                and vc.con_song and w.ledger.so_du(a.vo_chong, "go")
+                >= sx["recipe"]["nha"]["go"]):
+            kh.gop_cong_cho = a.vo_chong
         if the.hoc_khi_du_an and a.e_bac < 4 and an_ninh > 0.8:
             kh.hoc = True
 

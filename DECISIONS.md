@@ -120,3 +120,22 @@
   0.21-0.32 < 0.40): vật lý realism (trẻ học tới 15, già nghỉ, đất bạc màu) kéo lao động về
   nông — cần vòng hiệu chỉnh CNH riêng (hiệu chỉnh DUY NHẤT được SPEC #10 cho phép, mục tiêu
   trung vị năm 160-280) trước Phase 7/8; chưa làm trong đợt này.
+- 2026-07-12 (gói realism 3 — theo yêu cầu chủ dự án: chăn nuôi cần thời gian, tự nhiên hữu
+  hạn, dựng nhà cần hợp tác, agent thấy môi trường + nhớ tốt hơn):
+  1. GÀ CON (`ga_con`): bắt rừng/đẻ ra là gà con — nuôi trọn 1 tick (6 tháng) mới trưởng
+     thành (đầu tick sau); chưa đẻ, giết non chỉ 3kg thịt (gà lớn 8kg), ăn 1kg/tick (lớn 2kg).
+  2. TRỮ LƯỢNG CÁ LOGISTIC (Gordon-Schaefer): thay pool-hồi-đầy bằng w.ca_ton bền vững,
+     ΔS = r·S·(1−S/K) (r=0.15, K=600kg/ô sông); CPUE ∝ mật độ — sông cạn thì cùng công bắt
+     được ít hẳn, hồi mất nhiều năm. Sanity 100 năm: làng tự cân bằng ở mật độ ~0.70 (khai
+     thác bền vững TỰ PHÁT — không luật nào ép).
+  3. NHÀ = 8 gỗ + 240 CÔNG (> 180 công/người/tick): không ai tự dựng nổi một mình một mùa —
+     vợ/chồng góp công (gop_cong_cho), thuê thợ (hợp đồng gop_cong — truyền thống đổi công),
+     hoặc mua nhà. Rulebot/thẻ: người id nhỏ trong cặp xây, người id lớn góp công; độc thân
+     dư thóc thì treo đề nghị thuê thợ 120 công/300 thóc.
+  4. MÔI TRƯỜNG TRONG PROMPT: dân số làng, đất công còn trống, tình trạng sông (đầy cá/thưa
+     dần/gần cạn theo mật độ) — agent nhìn tự nhiên mà liệu kế sinh nhai.
+  5. KÝ ỨC HAI TẦNG: ky_uc_doi (≤12, KHÔNG trôi — cưới, sinh con, tang thân nhân, thừa kế,
+     khai hoang, mua bán đất, bị bắt trộm/bắt được trộm, cưu mang) + ky_uc rolling (≤10);
+     prompt hiện "DẤU MỐC ĐỜI BẠN" và "CHUYỆN GẦN ĐÂY" riêng.
+  Sanity mock 100 năm: dân 391↑, chết đói giảm còn 54% tử vong, 118 nhà dựng bằng hợp tác,
+  2.423 hợp đồng, cá cân bằng bền vững. 87/87 test, gate S+P 100%.

@@ -57,7 +57,10 @@ class Agent:
     # ký ức đời người — engine tự ghi các biến cố (cưới, sinh con, tang, giao kèo,
     # đất đai...); LLM đọc trong prompt để sống TIẾP một cuộc đời, không phải mỗi
     # lần được hỏi lại là một người xa lạ
-    ky_uc: list = field(default_factory=list)  # ≤10 mục gần nhất
+    ky_uc: list = field(default_factory=list)  # chuyện gần đây (rolling, cap theo config)
+    # dấu mốc đời — cưới, sinh con, tang thân nhân, đất đai, dựng nhà, lập pháp nhân,
+    # ân oán trộm cắp... KHÔNG bị trôi theo thời gian (con người không quên đám cưới mình)
+    ky_uc_doi: list = field(default_factory=list)
     # cư trú: nhà đặt trên thửa nào (làng xóm 2D — hàng xóm theo khoảng cách thật)
     nha_thua: str | None = None
     # tay nghề đồng áng — kinh nghiệm tích qua mỗi vụ (learning by doing)

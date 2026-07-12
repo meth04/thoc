@@ -89,9 +89,21 @@ def build_user_chung(w: World) -> str:
                    "(dat_lenh sẽ khớp khi có người mua-bán gặp giá nhau)")
     so_rao = len(w.bang_rao)
     mau = mau_hop_dong_luu_hanh(w, int(w.cfg.get("minds.mau_hop_dong_trong_prompt_top_k")))
+    # môi trường tự nhiên — agent nhìn sông, nhìn đất mà liệu kế sinh nhai
+    from engine.world import _ca_suc_chua
+
+    suc_chua = _ca_suc_chua(w)
+    mat_do_ca = (float(getattr(w, "ca_ton", suc_chua)) / suc_chua) if suc_chua > 0 else 0.0
+    ta_song = ("sông đầy cá" if mat_do_ca > 0.6 else
+               "cá sông thưa dần" if mat_do_ca > 0.3 else
+               "sông gần cạn cá — đánh cả buổi được vài con")
+    dat_cong_con = sum(1 for p in w.parcels.values() if p.loai == "ruong" and p.chu is None)
+    dan_song = sum(1 for a in w.agents.values() if a.con_song)
     return (
         f"[TÌNH HÌNH CHUNG] Mùa {'mưa' if w.mua_mua() else 'khô'}, thời tiết {loai_tt} "
-        f"(hệ số {he_so}). Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. "
+        f"(hệ số {he_so}). Làng có {dan_song} nhân khẩu; đất công chưa ai khai hoang "
+        f"còn {dat_cong_con} thửa; {ta_song}. "
+        f"Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. "
         f"Bảng rao có {so_rao} đề nghị. "
         f"[CÁC DẠNG THỎA THUẬN ĐANG LƯU HÀNH] {mau if mau else '(chưa từng có thỏa thuận nào)'} "
         f"[BẠN CÓ THỂ] đề nghị/trả lời hợp đồng (văn phạm 9 điều khoản: chuyen_giao_dinh_ky, "
@@ -172,16 +184,20 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   sức khỏe, sức khỏe cạn là CHẾT. Không ai phát chẩn cho bạn.
 - Kho thóc hao 3%/tick (mọt, chuột). Mỗi tick bạn có 180 ngày công (theo sức khỏe).
 - MÙA MƯA (tick lẻ): gieo + gặt cùng tick. Mỗi thửa cần 60kg thóc giống + 60 công,
-  thu ~600kg × màu mỡ. Tự canh tối đa 3 thửa (thửa 2-3 kém dần). MÙA KHÔ (tick chẵn):
+  thu ~650kg × màu mỡ. Tự canh tối đa 3 thửa (thửa 2-3 kém dần). MÙA KHÔ (tick chẵn):
   không trồng được gì — dành cho khai thác gỗ/quặng, chế tác, xây, học, hôn sự.
 - Canh CÙNG MỘT thửa đất công 2 mùa mưa liên tiếp → thửa đó thành CỦA BẠN (khai hoang).
-- Nhà = 6 gỗ + 120 công (không nhà → mất sức mùa mưa). Công cụ = 2 gỗ + 60 công
-  (+30% năng suất, mòn dần). Gỗ ~10 công/cây (rừng), quặng ~20 công (mỏ).
+- Nhà = 8 gỗ + 240 CÔNG (không nhà → mất sức mùa mưa). Một người chỉ có 180 công/tick
+  — KHÔNG AI tự dựng nổi nhà một mình trong một mùa: cần người góp công (vợ/chồng,
+  con lớn gop_cong_cho, hoặc thuê thợ bằng hợp đồng gop_cong), hoặc mua nhà có sẵn.
+  Công cụ = 2 gỗ + 60 công (+30% năng suất, mòn dần). Gỗ ~10 công/cây, quặng ~20 công.
 - Đời người hữu hạn (già là chết). KHÔNG kết hôn thì không con cái — của cải về công,
   dòng họ tuyệt tự. Cầu hôn ở mùa nào cũng được; người kia trả lời tick sau.
-- CHĂN NUÔI: bắt gà rừng về nuôi (30 công/con, làng có rừng). Gà ăn 4kg thóc/tick
-  (đói thì chết), no đủ thì đàn đẻ +15%/tick. Giết 1 gà → 8kg thịt (1kg thịt no bằng
-  3kg thóc); thịt ôi nhanh (hao 20%/tick), gà sống thì không hao.
+- CHĂN NUÔI cần THỜI GIAN: bắt gà rừng được GÀ CON (30 công/con, làng có rừng); gà
+  đẻ ra cũng là gà con. Gà con nuôi 1 tick (6 tháng) mới thành gà lớn — chưa đẻ,
+  giết non chỉ được 3kg thịt. Gà lớn ăn 2kg thóc/tick (gà con 1kg), no đủ thì đàn
+  đẻ +15%/tick. Giết 1 gà lớn → 8kg thịt (1kg thịt no bằng 3kg thóc); thịt ôi nhanh
+  (hao 20%/tick), gà sống thì không hao.
 - TUỔI TÁC: trẻ dưới 15 KHÔNG làm đồng (đi học thì được — hoc/day_cho). Từ 15 tuổi
   phụ giúp được 30% sức. Quá 60 tuổi sức yếu dần (nửa công, hao sức mỗi tick), quá 70
   gần như nghỉ hẳn — người già không còn tự kiếm ăn được, không có thóc là đói.
@@ -189,15 +205,16 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
   người biết chữ day_cho). Hợp đồng MIỆNG ai cũng lập được; hợp đồng VĂN BẢN — loại
   duy nhất kèm được thế chấp và cưỡng chế khi phá vỡ — chỉ người biết chữ (E1 trở
   lên) soạn được.
-- SINH NỞ có rủi ro cho sản phụ; nếu trong làng có người nắm bí quyết y_te thì sản
-  phụ tự trả người đó 20kg thóc và rủi ro giảm hẳn.
-- ĐẤT BẠC MÀU: canh cùng một thửa liên tục thì độ màu giảm 4%/vụ (chạm đáy ở nửa độ
+- SINH NỞ có rủi ro cho sản phụ; rủi ro chỉ giảm khi hộ sản phụ CÓ HỢP ĐỒNG hiệu lực
+  với người nắm bí quyết y_te (giá cả, điều khoản do hai bên tự thỏa thuận).
+- ĐẤT BẠC MÀU: canh cùng một thửa liên tục thì độ màu giảm 2%/vụ (chạm đáy ở nửa độ
   màu gốc); BỎ HOANG thì độ màu hồi dần.
 - TAY NGHỀ: mỗi vụ trực tiếp canh tác, kinh nghiệm đồng áng tăng dần (tối đa +20%
   năng suất) — lão nông tri điền gặt nhiều hơn tay mơ trên cùng một thửa.
-- ĐÁNH CÁ: sông là CỦA CHUNG, không cần ruộng, mùa nào cũng được — 6 công/kg cá,
-  1kg cá no bằng 2.5kg thóc, cá ươn nhanh (hao 15%/tick); trữ lượng mỗi mùa CÓ HẠN:
-  cả làng cùng đổ ra sông là cạn.
+- ĐÁNH CÁ: sông là CỦA CHUNG, không cần ruộng, mùa nào cũng được — sông đầy cá thì
+  ~4.5 công/kg; đàn cá là TÀI NGUYÊN TÁI TẠO CÓ HẠN: đánh quá tay thì cá thưa dần,
+  cùng buổi công bắt được ít hẳn đi, và trữ lượng phải NHIỀU NĂM mới hồi. 1kg cá no
+  bằng 2.5kg thóc, cá ươn nhanh (hao 15%/tick).
 - TIỆC KHAO XÓM: bỏ ra ≥60kg (thóc/thịt quy đổi) mời hàng xóm — của cải mất đi,
   những người đến dự thêm quý mến người mở tiệc.
 - TRỘM CẮP: về mặt vật lý KHÔNG gì ngăn bạn lấy trộm (được thì ~1/4 kho người ta),
@@ -405,8 +422,10 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     if a.tay_nghe > 1.02:
         dong.append(f"Kinh nghiệm đồng áng: năng suất +{(a.tay_nghe - 1) * 100:.0f}% "
                     f"(tay nghề tích qua từng vụ).")
+    if a.ky_uc_doi:
+        dong.append("DẤU MỐC ĐỜI BẠN (không bao giờ quên): " + " | ".join(a.ky_uc_doi))
     if a.ky_uc:
-        dong.append("CHUYỆN ĐỜI BẠN (chớ quên): " + " | ".join(a.ky_uc[-7:]))
+        dong.append("CHUYỆN GẦN ĐÂY: " + " | ".join(a.ky_uc[-7:]))
     if gia_dinh:
         dong.append("Gia đình: " + "; ".join(gia_dinh) + ".")
     # thân quen & ân oán — trải nghiệm tích lũy của CHÍNH BẠN với từng người còn sống

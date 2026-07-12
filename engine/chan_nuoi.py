@@ -15,28 +15,32 @@ from engine.world import World
 def buoc_chan_nuoi(w: World) -> None:
     cn = w.cfg.raw()["chan_nuoi"]
     an_moi_con = float(cn["ga_an_thoc_moi_tick"])
+    an_moi_con_non = float(cn["ga_con_an_thoc_moi_tick"])
     sinh_san = float(cn["ga_sinh_san_moi_tick"])
     tran = float(cn["ga_toi_da_moi_ho"])
     g = w.rng.get("chan_nuoi", w.tick)
 
-    chu_ga = sorted(
-        (ct, v) for (ct, ts), v in w.ledger._so_du.items() if ts == "ga" and v >= 1
-    )
-    for chu, so_ga in chu_ga:
+    chu_dan = sorted({
+        ct for (ct, ts), v in w.ledger._so_du.items()
+        if ts in ("ga", "ga_con") and v >= 1
+    })
+    for chu in chu_dan:
         # chủ không hoạt động (chết, VO_THUA_NHAN, entity giải thể) → đàn đứng im,
         # không ăn thóc ma, không sinh sôi, không tiêu RNG
         if not w.chu_the_hoat_dong(chu):
             continue
-        so_ga = float(so_ga)
-        # 1) gà ăn thóc — chủ nghèo thì đàn đói
-        can_thoc = so_ga * an_moi_con
+        so_ga = w.ledger.so_du(chu, "ga")
+        # 1) đàn ăn thóc — chủ nghèo thì đàn đói (gà con mới đẻ tick này chưa tính)
+        can_thoc = so_ga * an_moi_con + w.ledger.so_du(chu, "ga_con") * an_moi_con_non
+        if so_ga < 1e-9 and can_thoc < 1e-9:
+            continue
         co_thoc = w.ledger.so_du(chu, "thoc")
         cho_an = min(can_thoc, co_thoc)
         if cho_an > 0:
             w.ledger.huy(chu, "thoc", cho_an, "nuoi_ga", "nuôi gà", w.tick)
         ty_le_no = cho_an / can_thoc if can_thoc > 0 else 1.0
         # 2) thiếu ăn → chết dần (nửa phần đói); no đủ → sinh sôi (trừ khi quá đông)
-        if ty_le_no < 1.0 - 1e-9:
+        if ty_le_no < 1.0 - 1e-9 and so_ga >= 1e-9:
             chet = min(so_ga, so_ga * (1.0 - ty_le_no) * 0.5 + 0.5)
             w.ledger.huy(chu, "ga", chet, "chet_doi_ga", "gà chết đói", w.tick)
             so_ga = w.ledger.so_du(chu, "ga")
@@ -55,14 +59,15 @@ def buoc_chan_nuoi(w: World) -> None:
                 w.ledger.huy(chu, "ga", min(float(nguyen_cg), so_ga), "chet_doi_ga",
                              "gà già/chồn bắt", w.tick)
                 so_ga = w.ledger.so_du(chu, "ga")
-        if ty_le_no >= 1.0 - 1e-9 and so_ga < tran:
+        if ty_le_no >= 1.0 - 1e-9 and 1e-9 <= so_ga < tran:
             de_them = min(so_ga * sinh_san, tran - so_ga)
-            # phần lẻ thành xác suất — đàn nhỏ vẫn lớn dần được
+            # phần lẻ thành xác suất — đàn nhỏ vẫn lớn dần được; đẻ ra GÀ CON,
+            # tick sau mới trưởng thành (chăn nuôi cần thời gian)
             nguyen = int(de_them)
             if g.random() < de_them - nguyen:
                 nguyen += 1
             if nguyen > 0:
-                w.ledger.sinh(chu, "ga", float(nguyen), "sinh_san", "gà đẻ", w.tick)
+                w.ledger.sinh(chu, "ga_con", float(nguyen), "sinh_san", "gà đẻ", w.tick)
 
 
 def bat_ga(w: World, aid: str, so_cong: float) -> None:
@@ -82,20 +87,28 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
     from engine.production import ghi_cong_dung
 
     ghi_cong_dung(w, "phi_nong", so_con * float(cn["bat_ga_cong_moi_con"]))
-    w.ledger.sinh(aid, "ga", float(so_con), "bat_rung", "bắt gà rừng", w.tick)
+    # bắt được GÀ CON — phải nuôi 1 tick (6 tháng) mới thành gà đẻ/thịt đầy
+    w.ledger.sinh(aid, "ga_con", float(so_con), "bat_rung", "bắt gà rừng", w.tick)
     w.events.ghi(w.tick, "bat_ga", id=aid, so_con=so_con)
 
 
 def giet_ga(w: World, aid: str, so_con: int) -> None:
-    """Giết gà lấy thịt (thịt mau hỏng — giết vừa đủ ăn/bán)."""
+    """Giết gà lấy thịt — gà trưởng thành trước (8kg), túng lắm mới thịt gà con (3kg)."""
     cn = w.cfg.raw()["chan_nuoi"]
-    so_con = int(min(so_con, w.ledger.so_du(aid, "ga")))
+    so_con = int(so_con)
     if so_con <= 0:
         return
-    w.ledger.huy(aid, "ga", float(so_con), "giet_thit", "giết gà", w.tick)
-    w.ledger.sinh(aid, "thit", so_con * float(cn["thit_moi_ga_kg"]), "giet_thit",
-                  "thịt gà", w.tick)
-    w.events.ghi(w.tick, "giet_ga", id=aid, so_con=so_con)
+    lon = int(min(so_con, w.ledger.so_du(aid, "ga")))
+    non = int(min(so_con - lon, w.ledger.so_du(aid, "ga_con")))
+    thit = lon * float(cn["thit_moi_ga_kg"]) + non * float(cn["thit_moi_ga_con_kg"])
+    if lon + non <= 0:
+        return
+    if lon > 0:
+        w.ledger.huy(aid, "ga", float(lon), "giet_thit", "giết gà", w.tick)
+    if non > 0:
+        w.ledger.huy(aid, "ga_con", float(non), "giet_thit", "giết gà con", w.tick)
+    w.ledger.sinh(aid, "thit", thit, "giet_thit", "thịt gà", w.tick)
+    w.events.ghi(w.tick, "giet_ga", id=aid, so_con=lon + non)
 
 
 def hao_thit(w: World) -> None:
@@ -109,31 +122,67 @@ def hao_thit(w: World) -> None:
             w.ledger.huy(ct, "ca", v * ty_le_ca, "hao_thit", "cá ươn", w.tick)
 
 
-def danh_ca(w: World, aid: str, so_cong: float) -> None:
-    """Đánh cá trên sông — trữ lượng là CỦA CHUNG cả làng, đánh nhiều thì cạn.
+def truong_thanh_ga(w: World) -> None:
+    """Đầu tick: gà con bắt/đẻ từ tick TRƯỚC nay đủ 6 tháng, thành gà lớn.
 
-    Không cần đất: đây là sinh kế của người không ruộng (văn liệu kinh tế nông thôn).
+    Chạy trước mọi hành động trong tick — gà bắt/đẻ trong tick này phải đợi
+    trọn một tick nuôi (chăn nuôi cần thời gian)."""
+    chu_non = sorted(
+        ct for (ct, ts), v in w.ledger._so_du.items() if ts == "ga_con" and v > 1e-9
+    )
+    for chu in chu_non:
+        if not w.chu_the_hoat_dong(chu):
+            continue
+        non = w.ledger.so_du(chu, "ga_con")
+        w.ledger.huy(chu, "ga_con", non, "truong_thanh", "gà con lớn", w.tick)
+        w.ledger.sinh(chu, "ga", non, "truong_thanh", "gà con lớn", w.tick)
+
+
+def tai_sinh_ca(w: World) -> None:
+    """Trữ lượng cá hồi theo logistic mỗi tick: ΔS = r·S·(1−S/K).
+
+    Đánh vừa phải thì sông nuôi làng mãi (sản lượng bền vững ≈ r·K/4);
+    đánh kiệt thì trữ lượng sập và hồi RẤT chậm — bi kịch của cải chung thật.
+    """
+    from engine.world import _ca_suc_chua
+
+    suc_chua = _ca_suc_chua(w)
+    if suc_chua <= 0:
+        return
+    r = float(w.cfg.get("danh_ca.tai_sinh_moi_tick"))
+    s = float(getattr(w, "ca_ton", suc_chua))
+    w.ca_ton = min(suc_chua, s + r * s * (1.0 - s / suc_chua))
+
+
+def danh_ca(w: World, aid: str, so_cong: float) -> None:
+    """Đánh cá trên sông — trữ lượng CHUNG có hạn; cá càng thưa càng khó bắt.
+
+    Hiệu suất tỷ lệ mật độ đàn cá (CPUE ∝ S/K): cùng một buổi công, sông đầy
+    cá bắt được nhiều, sông cạn về tay không — không thể săn bắt mãi.
     """
     from engine.production import _ghi_su_co, ghi_cong_dung
+    from engine.world import _ca_suc_chua
 
     dc = w.cfg.raw()["danh_ca"]
-    so_o_song = sum(1 for p in w.parcels.values() if p.loai == "song")
-    if so_o_song == 0:
+    suc_chua = _ca_suc_chua(w)
+    if suc_chua <= 0:
         _ghi_su_co(w, aid, "vùng này không có sông để đánh cá")
         return
-    # trữ lượng chung tái sinh mỗi tick — ai đánh trước được trước (thứ tự id tất định)
-    if getattr(w, "_ca_pool_tick", None) != w.tick:
-        w._ca_pool_tick = w.tick
-        w._ca_pool = so_o_song * float(dc["ca_moi_o_song_kg"])
+    ton = float(getattr(w, "ca_ton", suc_chua))
+    mat_do = max(0.0, ton / suc_chua)
     cong_moi_kg = float(dc["cong_moi_kg_ca"])
     cong_co = min(max(0.0, so_cong), w.ledger.so_du(aid, "cong"))
-    kg = min(cong_co / cong_moi_kg, w._ca_pool)
-    if kg <= 1e-9:
-        _ghi_su_co(w, aid, "ra sông nhưng cá đã bị đánh cạn mùa này (hoặc hết công)")
+    # cùng công đó, cá thưa thì bắt được ít — và không bao giờ vét quá phần còn lại
+    kg = min((cong_co / cong_moi_kg) * mat_do, ton)
+    if kg <= 1e-6:
+        _ghi_su_co(w, aid, "ra sông về tay không — cá đã bị đánh gần cạn (hoặc hết công)")
         return
-    w.ledger.huy(aid, "cong", kg * cong_moi_kg, "dung", "đánh cá", w.tick)
-    ghi_cong_dung(w, "nong", kg * cong_moi_kg)
+    w.ledger.huy(aid, "cong", cong_co, "dung", "đánh cá", w.tick)
+    ghi_cong_dung(w, "nong", cong_co)
     w.ledger.sinh(aid, "ca", kg, "danh_ca", "đánh cá", w.tick)
-    w._ca_pool -= kg
+    w.ca_ton = ton - kg
     w.ghi_thu_nhap(aid, "nong", kg * float(dc["ca_quy_doi_dinh_duong"]))
-    w.events.ghi(w.tick, "danh_ca", id=aid, kg=round(kg, 1))
+    w.events.ghi(w.tick, "danh_ca", id=aid, kg=round(kg, 1),
+                 mat_do=round(mat_do, 2))
+    if mat_do < float(dc["nguong_mat_do_canh_bao"]) and aid in w.agents:
+        _ghi_su_co(w, aid, f"sông thưa cá hẳn (chỉ được {kg:.0f}kg) — đánh mãi thì cạn")

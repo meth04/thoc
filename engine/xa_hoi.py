@@ -77,8 +77,8 @@ def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> Non
             if hx != ke:
                 w.cong_quan_he(ke, hx, float(tr["quan_he_hang_xom"]))
         if muc_tieu in w.agents:
-            w.ghi_ky_uc(muc_tieu, f"bắt quả tang {ke} lẻn vào kho nhà tôi — đồ ăn trộm!")
-        w.ghi_ky_uc(ke, f"bị bắt quả tang ăn trộm nhà {muc_tieu} — cả xóm coi khinh")
+            w.ghi_ky_uc(muc_tieu, f"bắt quả tang {ke} lẻn vào kho nhà tôi — đồ ăn trộm!", doi=True)
+        w.ghi_ky_uc(ke, f"bị bắt quả tang ăn trộm nhà {muc_tieu} — cả xóm coi khinh", doi=True)
         _ghi_su_co(w, ke, f"trộm nhà {muc_tieu} THẤT BẠI: bị bắt quả tang, cả xóm đã biết")
         w.events.ghi(w.tick, "trom", ke=ke, nan_nhan=muc_tieu, tai_san=tai_san,
                      so_luong=0.0, bi_bat=True)
@@ -151,6 +151,6 @@ def cuu_mang_mo_coi(w: World) -> None:
         if aid not in nguoi_nuoi.con_nuoi:
             nguoi_nuoi.con_nuoi.append(aid)
         w.cong_quan_he(gid, aid, 1.0)
-        w.ghi_ky_uc(gid, f"tôi nhận cưu mang bé {aid} mồ côi — thêm miệng ăn nhưng là phúc đức")
-        w.ghi_ky_uc(aid, f"cha mẹ mất cả, {gid} đưa tôi về nuôi")
+        w.ghi_ky_uc(gid, f"tôi nhận cưu mang bé {aid} mồ côi — thêm miệng ăn nhưng là phúc đức", doi=True)
+        w.ghi_ky_uc(aid, f"cha mẹ mất cả, {gid} đưa tôi về nuôi", doi=True)
         w.events.ghi(w.tick, "cuu_mang", tre=aid, nguoi_nuoi=gid)

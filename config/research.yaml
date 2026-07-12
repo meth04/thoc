@@ -28,7 +28,7 @@ blueprint:
   do_lon_tran: 0.8
   # hiệu chỉnh Phase 4 (DECISIONS.md): máy móc phải đủ mạnh thì xưởng mới có lãi
   he_so_theo_linh_vuc: {cong_cu_may_moc: 3.0}
-  tran_theo_linh_vuc: {cong_cu_may_moc: 2.0}
+  tran_theo_linh_vuc: {cong_cu_may_moc: 3.0}
 
 hang_moi:                    # chỉ cho lĩnh vực che_bien
   input_menu: [thoc, go, quang_dong]

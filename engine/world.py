@@ -172,12 +172,24 @@ class World:
         ung_vien.sort()
         return [bid for _kc, bid in ung_vien[:toi_da]]
 
-    def ghi_ky_uc(self, aid: str, noi_dung: str) -> None:
-        """Khắc một biến cố vào ký ức đời agent (giữ N mục gần nhất, kèm mốc năm)."""
+    def ghi_ky_uc(self, aid: str, noi_dung: str, doi: bool = False) -> None:
+        """Khắc một biến cố vào ký ức agent (kèm mốc năm).
+
+        doi=True → DẤU MỐC ĐỜI (cưới, sinh, tang, đất đai, nhà cửa, ân oán lớn):
+        không bị trôi theo thời gian. Mặc định → chuyện gần đây (rolling)."""
         a = self.agents.get(aid)
-        if a is not None and a.con_song:
+        if a is None or not a.con_song:
+            return
+        dong = f"Năm {self.tick // 2}: {noi_dung}"
+        if doi:
+            toi_da = int(self.cfg.get("minds.ky_uc_doi_toi_da"))
+            if len(a.ky_uc_doi) < toi_da:
+                a.ky_uc_doi = [*a.ky_uc_doi, dong]
+            else:  # đầy thì vẫn không quên — dồn vào chuyện gần đây
+                a.ky_uc = [*a.ky_uc, dong][-int(self.cfg.get("minds.ky_uc_toi_da")):]
+        else:
             toi_da = int(self.cfg.get("minds.ky_uc_toi_da"))
-            a.ky_uc = [*a.ky_uc, f"Năm {self.tick // 2}: {noi_dung}"][-toi_da:]
+            a.ky_uc = [*a.ky_uc, dong][-toi_da:]
 
     def ghi_unrecognized(self, ai: str, loai: str, ly_do: str) -> None:
         """Intent không hợp lệ → bỏ qua + log (điều luật #3) — mỏ 'ý định mới lạ'."""
@@ -311,6 +323,12 @@ class World:
         # migration: checkpoint trước khi có mau_mo_goc → đất không bao giờ hồi màu
         for p in w.parcels.values():
             p.mau_mo_goc = p.mau_mo_goc or p.mau_mo
+        # migration: checkpoint trước khi có trữ lượng cá / ký ức đời
+        if not hasattr(w, "ca_ton"):
+            w.ca_ton = _ca_suc_chua(w) * float(w.cfg.get("danh_ca.ty_le_ton_ban_dau"))
+        for a in w.agents.values():
+            if not hasattr(a, "ky_uc_doi"):
+                a.ky_uc_doi = []
         return w
 
 
@@ -338,10 +356,14 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("cong_cu", "che_tac", "nguon")
     f.dang_ky("cong_cu", "hao_mon", "sink")
     # chăn nuôi: gà bắt từ rừng, sinh sản; giết lấy thịt; thịt ăn được, mau hỏng
-    f.dang_ky("ga", "bat_rung", "nguon")
-    f.dang_ky("ga", "sinh_san", "nguon")
+    f.dang_ky("ga", "truong_thanh", "nguon")
     f.dang_ky("ga", "chet_doi_ga", "sink")
     f.dang_ky("ga", "giet_thit", "sink")
+    f.dang_ky("ga_con", "bat_rung", "nguon")
+    f.dang_ky("ga_con", "sinh_san", "nguon")
+    f.dang_ky("ga_con", "truong_thanh", "sink")
+    f.dang_ky("ga_con", "chet_doi_ga", "sink")
+    f.dang_ky("ga_con", "giet_thit", "sink")
     f.dang_ky("thoc", "nuoi_ga", "sink")
     f.dang_ky("thit", "giet_thit", "nguon")
     f.dang_ky("thit", "an", "sink")
@@ -356,6 +378,12 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("may", "hao_mon", "sink")
 
 
+def _ca_suc_chua(w: World) -> float:
+    """Sức chứa trữ lượng cá của sông (K) = số ô sông × sức chứa mỗi ô."""
+    so_o = sum(1 for p in w.parcels.values() if p.loai == "song")
+    return so_o * float(w.cfg.get("danh_ca.suc_chua_moi_o_kg"))
+
+
 def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> World:
     """Khởi tạo thế giới t0: bản đồ + người lớn độc thân (tham số mục khoi_tao), 0 đất."""
     rng = RngTree(seed)
@@ -363,6 +391,7 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
     dang_ky_flows(w.ledger)
     g = rng.get("khoi_tao", 0)
     w.parcels, w.villages = sinh_ban_do(cfg, g)
+    w.ca_ton = _ca_suc_chua(w) * float(cfg.get("danh_ca.ty_le_ton_ban_dau"))
 
     n = cfg.get("nhan_khau.dan_so_ban_dau")
     tuoi_min, tuoi_max = cfg.get("nhan_khau.tuoi_ban_dau")

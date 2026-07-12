@@ -216,11 +216,33 @@ def ke_hoach_mot_nguoi(
             # chuyên môn hóa theo persona: chăm chỉ tự khai thác/chế; lười thì MUA ở chợ
             tu_lam = p5.cham_chi >= 5
             if not co_nha_ho and an_ninh > 0.4:
+                # nhà 240 công — quá sức MỘT người một mùa: vợ/chồng góp công,
+                # không thì thuê thợ (truyền thống đổi công dựng nhà)
+                vc = w.agents.get(a.vo_chong) if a.vo_chong else None
+                vc_lon = vc is not None and vc.con_song and vc.truong_thanh(tt)
+                cong_du_kien = (180.0 * (a.health / 100.0)
+                                + bc.cong_thue_vao.get(aid, 0.0)
+                                + (180.0 * (vc.health / 100.0) if vc_lon else 0.0))
                 if go_co >= r_nha["go"]:
-                    kh.xay_nha = 1
+                    if cong_du_kien >= float(r_nha["cong"]):
+                        kh.xay_nha = 1
+                    elif w.ledger.so_du(aid, "thoc") > 450:
+                        # thuê thợ dựng nhà: 120 công một mùa, trả 300 thóc khi xong
+                        _dang_neu_chua_treo(kh, bc, aid, HopDong(
+                            cac_ben=[aid, "?"], hinh_thuc="mieng", thoi_han=1,
+                            dieu_khoan=[
+                                ClauseGopCong(tu="?", den=aid, so_cong_moi_tick=120.0),
+                                ClauseChuyenGiaoMotLan(tu=aid, den="?", tai_san="thoc",
+                                                       so_luong=300.0, tai="dao_han"),
+                            ], nguoi_soan=aid))
                 elif tu_lam:
                     kh.cong_khai_go = 120.0
                 # người lười: gỗ sẽ được đặt mua ở khối chợ bên dưới
+            # vợ/chồng (id lớn hơn) góp công cho người dựng nhà (id nhỏ hơn cùng hộ)
+            if (not co_nha_ho and an_ninh > 0.4 and a.vo_chong and aid > a.vo_chong
+                    and a.vo_chong in w.agents and w.agents[a.vo_chong].con_song
+                    and w.ledger.so_du(a.vo_chong, "go") >= r_nha["go"]):
+                kh.gop_cong_cho = a.vo_chong
             elif not co_cong_cu and an_ninh > 0.6 and tu_lam:
                 if go_co >= r_cu["go"]:
                     kh.che_tao_cong_cu = 1
@@ -496,10 +518,10 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g,
 
     if chien_luoc:
         # thuê người làm: có máy = xưởng, thuê hết cỡ; chưa máy = trại, thuê theo đất
-        tran_theo_quy = int(thoc // 700)  # mỗi thợ cần ~700 thóc quỹ lương gối đầu
+        tran_theo_quy = int(thoc // 500)  # mỗi thợ cần ~500 thóc quỹ lương gối đầu
         muc_tieu_nhan_cong = min(10 if co_may else min(8, max(2, len(ruong) // 2)),
                                  max(tran_theo_quy, 1))
-        if thoc > 800 and so_nhan_cong < muc_tieu_nhan_cong:
+        if thoc > 600 and so_nhan_cong < muc_tieu_nhan_cong:
             # thuê người: TẠM ỨNG khi ký + lương mỗi tick; hợp đồng DÀI HẠN (12 năm)
             # để đội thợ tích lũy được — churn 8 tick giữ mãi mức 1-2 người/xưởng
             gia_cong_thue = 2.0 + 0.6 * float(g.random())
@@ -842,7 +864,10 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
         if so_nha >= 2:
             kh.dat_lenh.append(Lenh(aid, "ban", "nha", round(so_nha - 1, 1),
                                     round(max(gia_nha * 0.95, 350), 0)))
-        elif w.ledger.so_du(aid, "go") >= 6 and an_ninh > 1.0 and g.random() < 0.5:
+        elif (w.ledger.so_du(aid, "go")
+                >= w.cfg.get("san_xuat.recipe.nha.go") and an_ninh > 1.0
+                and bc.cong_thue_vao.get(aid, 0.0) >= 60 and g.random() < 0.5):
+            # thợ chuyên dựng nhà bán: chỉ khi có công thuê vào (240 công/căn)
             kh.xay_nha = max(kh.xay_nha, 1)
 
     cong_cu_co = w.ledger.so_du(aid, "cong_cu")

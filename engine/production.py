@@ -230,7 +230,7 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                         p.chu = aid
                         p.homestead_ai, p.homestead_dem = None, 0
                         w.events.ghi(w.tick, "homestead", id=aid, thua=pid)
-                        w.ghi_ky_uc(aid, f"tôi khai hoang xong thửa {pid} — đất của tôi")
+                        w.ghi_ky_uc(aid, f"tôi khai hoang xong thửa {pid} — đất của tôi", doi=True)
             if dung_cong_cu:
                 _hao_mon_cong_cu(w, aid)
             if so_thua_canh > 0 and a is not None:
