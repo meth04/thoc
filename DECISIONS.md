@@ -183,3 +183,14 @@
   mock + run hiện có KHÔNG đổi. Nén hồi ký/dịch intent chưa dùng công cụ.
   NGHIỆM THU: 3 test (purity world_hash, tên-lạ-không-sập, vòng agentic gọi-tool-rồi-quyết);
   90/90 test; ruff sạch. Chạy MCP thật ĐẦY ĐỦ = HUMAN-GATE (tốn nhiều call/agent) — chưa bật.
+- 2026-07-12 (PART 5 Bước 4 — Reflection / bộ nhớ phân tầng, REPORTS.md §5.3): mỗi
+  reflection_moi_n_tick=10, agent TỰ PHẢN TƯ cô đọng ký ức (ky_uc/ky_uc_doi) + đồ thị ân
+  oán (w.quan_he) → Agent.niem_tin ("tin cậy A; đề phòng B"). UY TÍN XÃ HỘI TỰ PHÁT: kẻ
+  bội tín/trộm nhiều người → nhiều nạn nhân độc lập ghi "đề phòng X" (test chứng minh 3+
+  nạn nhân). Niềm tin hiện trong prompt để agent sống nhất quán với trải đời.
+  KHÔNG dùng vector DB (ChromaDB/Faiss như REPORTS gợi ý) — thêm phụ thuộc nặng + bất định;
+  phản tư từ đồ thị quan hệ + ký ức đã đủ và TẤT ĐỊNH. Mock: heuristic (top ân/oán). Real:
+  LLM cô đọng (route nền, lô 8, fallback heuristic). niem_tin KHÔNG vào world_hash (như
+  hoi_ky) → không ảnh hưởng tất định (đã kiểm: mock cùng seed cùng hash 6a495a9474644056).
+  Budget guard cộng thêm lô phản tư. NGHIỆM THU: 3 test reflection (ân oán→niềm tin, tất
+  định, không sụp) + 93/93 test + ruff sạch + mock determinism giữ.

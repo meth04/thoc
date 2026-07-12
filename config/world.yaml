@@ -210,3 +210,4 @@ minds:
   mau_hop_dong_trong_prompt_top_k: 5   # mẫu ĐANG LƯU HÀNH thật, ẩn danh hóa
   chronicle_moi_n_tick: 20
   checkpoint_moi_n_tick: 10
+  reflection_moi_n_tick: 10   # tự phản tư: cô đọng ký ức+ân oán → niềm tin cốt lõi (5.3)

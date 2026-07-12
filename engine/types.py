@@ -61,6 +61,9 @@ class Agent:
     # dấu mốc đời — cưới, sinh con, tang thân nhân, đất đai, dựng nhà, lập pháp nhân,
     # ân oán trộm cắp... KHÔNG bị trôi theo thời gian (con người không quên đám cưới mình)
     ky_uc_doi: list = field(default_factory=list)
+    # niềm tin cốt lõi — TỰ PHẢN TƯ (reflection) mỗi N tick cô đọng ký ức + ân oán thành
+    # "ai đáng tin, ai phải đề phòng" (uy tín xã hội TỰ PHÁT từ trí nhớ — REPORTS.md 5.3)
+    niem_tin: str = ""
     # cư trú: nhà đặt trên thửa nào (làng xóm 2D — hàng xóm theo khoảng cách thật)
     nha_thua: str | None = None
     # tay nghề đồng áng — kinh nghiệm tích qua mỗi vụ (learning by doing)

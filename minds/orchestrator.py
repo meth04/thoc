@@ -151,8 +151,43 @@ class MindMock:
         # --- nén hồi ký mỗi 4 tick (mock nén — heuristic, vẫn log call) ---
         if w.tick % 4 == 0:
             self._nen_hoi_ky(w)
+        # --- tự phản tư mỗi N tick: cô đọng ký ức + ân oán → niềm tin cốt lõi (5.3) ---
+        if w.tick % int(w.cfg.get("minds.reflection_moi_n_tick")) == 0:
+            self._reflection(w)
         self.log.flush()
         return ke_hoach
+
+    def _nguoi_than_va_oan(self, w: World, aid: str, k: int = 3):
+        """Top-k người thân nhất và k người bị oán nhất (từ đồ thị quan hệ) — CÒN SỐNG."""
+        than: list[tuple[float, str]] = []
+        oan: list[tuple[float, str]] = []
+        for (a, b), v in w.quan_he.items():
+            nguoi = b if a == aid else (a if b == aid else None)
+            if nguoi is None or nguoi not in w.agents or not w.agents[nguoi].con_song:
+                continue
+            (than if v > 0 else oan).append((v, nguoi))
+        than.sort(reverse=True)
+        oan.sort()
+        return than[:k], oan[:k]
+
+    def _reflection(self, w: World) -> None:
+        """MOCK: phản tư HEURISTIC (tất định). MindReal override bằng LLM. Uy tín xã hội
+        TỰ PHÁT: kẻ bội tín nhiều người → nhiều agent ghi 'đề phòng X' trong niềm tin."""
+        tt = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+        for aid in sorted(w.agents):
+            a = w.agents[aid]
+            if a.con_song and a.tuoi_nam >= tt:
+                self._reflection_mot_nguoi(w, a)
+
+    def _reflection_mot_nguoi(self, w: World, a) -> None:
+        """Niềm tin cô đọng từ ân/oán mạnh nhất (heuristic tất định — cũng là fallback real)."""
+        than, oan = self._nguoi_than_va_oan(w, a.id)
+        ve = []
+        if than:
+            ve.append("tin cậy " + ", ".join(w.agents[n].ten for _v, n in than))
+        if oan:
+            ve.append("đề phòng " + ", ".join(w.agents[n].ten for _v, n in oan))
+        a.niem_tin = "; ".join(ve) if ve else "chưa có ai để bụng thương hay ghét"
 
     async def _gather_song_song(self, w: World, thinkers: list[str],
                                 triggers: dict[str, list[str]], ctx: dict) -> dict:

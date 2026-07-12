@@ -97,11 +97,11 @@ class MindReal(MindMock):
         # +1 call dịch intent lạ (chỉ khi có người nghĩ) + ceil(người_lớn/8) call nén
         # hồi ký đúng chu kỳ 4 tick (khớp orchestrator `w.tick % 4 == 0`)
         tt = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+        so_nguoi_lon = sum(1 for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt)
         can_nen = 1 if thinkers else 0
-        if w.tick % 4 == 0:
-            so_nguoi_lon = sum(
-                1 for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt
-            )
+        if w.tick % 4 == 0:  # nén hồi ký (lô 8)
+            can_nen += math.ceil(so_nguoi_lon / 8)
+        if w.tick % int(w.cfg.get("minds.reflection_moi_n_tick")) == 0:  # phản tư (lô 8)
             can_nen += math.ceil(so_nguoi_lon / 8)
         if can_nen > 0:
             route = self._route_nen()
@@ -258,6 +258,50 @@ class MindReal(MindMock):
         dat = sum(1 for p in w.parcels.values() if p.chu == a.id)
         a.hoi_ky = (f"Năm {w.tick // 2}: {a.tuoi_nam:.0f} tuổi, {len(a.con)} con, "
                     f"{thoc:.0f}kg thóc, {dat} thửa đất, học vấn E{a.e_bac}.")
+
+    # ---------- tự phản tư bằng LLM (route nền), lô 8 người ----------
+    def _reflection(self, w: World) -> None:
+        """REAL: LLM cô đọng ký ức + ân oán thành 'niềm tin cốt lõi' (≤2 câu); hỏng thì
+        rơi về phản tư heuristic của lớp cha. Uy tín xã hội tự phát từ trí nhớ (5.3)."""
+        route = self._route_nen()
+        tt = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+        nguoi_lon = [a for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt]
+        for i in range(0, len(nguoi_lon), 8):
+            lo = nguoi_lon[i:i + 8]
+            khoi = []
+            for a in lo:
+                than, oan = self._nguoi_than_va_oan(w, a.id)
+                khoi.append(
+                    f"- {a.id} ({a.ten}): dấu mốc đời={a.ky_uc_doi[-4:] or '(không)'}; "
+                    f"chuyện gần đây={a.ky_uc[-4:] or '(không)'}; "
+                    f"thân với={[w.agents[n].ten for _v, n in than] or '(không)'}; "
+                    f"oán/đề phòng={[w.agents[n].ten for _v, n in oan] or '(không)'}"
+                )
+            prompt = (
+                f"Năm {w.tick // 2}. Với TỪNG người dưới đây, viết 'niềm tin cốt lõi' của họ "
+                f"về người đời (≤2 câu, ngôi thứ nhất): ai đáng tin, ai phải đề phòng và VÌ "
+                f"SAO, rút từ ký ức + ân oán của họ.\n" + "\n".join(khoi) +
+                '\nTrả về DUY NHẤT một JSON object: {"<id>": "<niềm tin>", ...}'
+            )
+            req = LLMRequest(prompt=prompt, ctx={}, tier="T1",
+                             batch_ids=[a.id for a in lo])
+            try:
+                resp = self._goi_nen_co_cho(req, route)
+                self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
+                                            time.time())
+                self.so_call += 1
+                self.log.ghi(w.tick, req, resp, fallback=False)
+                du_lieu = sua_va_parse(resp.text)
+                d = du_lieu[0] if du_lieu else {}
+                for a in lo:
+                    if isinstance(d.get(a.id), str) and d[a.id].strip():
+                        a.niem_tin = d[a.id].strip()[:300]
+                    else:
+                        self._reflection_mot_nguoi(w, a)
+            except Exception as e:  # noqa: BLE001 — hỏng thì heuristic, không chết run
+                w.events.ghi(w.tick, "reflection_loi", loi=che_key(str(e))[:200])
+                for a in lo:
+                    self._reflection_mot_nguoi(w, a)
 
 
 def tao_mind_real(w: World, run_dir: Path, cfg, env, quota_db: Path,

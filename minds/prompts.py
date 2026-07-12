@@ -428,6 +428,8 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         dong.append("DẤU MỐC ĐỜI BẠN (không bao giờ quên): " + " | ".join(a.ky_uc_doi))
     if a.ky_uc:
         dong.append("CHUYỆN GẦN ĐÂY: " + " | ".join(a.ky_uc[-7:]))
+    if a.niem_tin:
+        dong.append(f"NIỀM TIN CỐT LÕI CỦA BẠN (đúc từ trải đời): {a.niem_tin}")
     if gia_dinh:
         dong.append("Gia đình: " + "; ".join(gia_dinh) + ".")
     # thân quen & ân oán — trải nghiệm tích lũy của CHÍNH BẠN với từng người còn sống
