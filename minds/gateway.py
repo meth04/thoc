@@ -36,9 +36,11 @@ class LLMCallLog:
 
     def __init__(self, duong_dan: Path | None):
         self._conn = None
+        # kiến trúc 1-to-1 real: log.ghi bị gọi từ nhiều worker thread (fan-out per-agent)
+        # → check_same_thread=False; orchestrator serial hóa bằng khoá riêng.
         if duong_dan is not None:
             duong_dan.parent.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(duong_dan)
+            self._conn = sqlite3.connect(duong_dan, check_same_thread=False)
             self._conn.execute(
                 """CREATE TABLE IF NOT EXISTS llm_calls (
                     call_id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -237,23 +237,24 @@ VI_DU_QUYET_DINH = """[VÍ DỤ ĐỊNH DẠNG một quyết định — hoàn c
 "ly_do":"Canh 2 thửa đủ ăn, thửa xa cho cấy rẽ lấy 4 phần, và đến tuổi phải tính chuyện gia đình."}"""
 
 
-def build_batch_prompt(w: World, ids: list[str], triggers: dict[str, list[str]]) -> str:
-    """Prompt trọn gói cho một batch: luật chơi + tình hình chung + N khối riêng + schema."""
+def build_agent_prompt(w: World, aid: str, triggers: dict[str, list[str]]) -> str:
+    """Prompt 1-to-1 (PART 5.1): CHỈ khối riêng của MỘT agent — bất đối xứng thông tin
+    tuyệt đối (call này không chứa ví/ý định của ai khác). Luật vật lý + tình hình chung
+    dùng chung (nên bọc vào context-cache khi gọi thật để khỏi gửi lặp)."""
     dau = (
-        "Bạn sẽ đóng vai TỪNG NGƯỜI dưới đây trong một làng khép kín (1 tick "
-        "= 6 tháng). Mỗi người chỉ biết những gì làng mình biết, quyết định như CHÍNH HỌ — "
-        "nhất quán với tính cách, ký ức, gia huấn riêng, kể cả khi khác số đông. "
-        "Đơn vị giá trị: kg thóc.\n\n"
+        "Bạn là người dưới đây trong một làng khép kín (1 tick = 6 tháng). Bạn chỉ biết "
+        "những gì cả làng đều biết và những gì của RIÊNG bạn — KHÔNG biết ví tiền hay ý "
+        "định của người khác. Quyết định như CHÍNH BẠN, nhất quán với tính cách, ký ức, "
+        "gia huấn riêng, kể cả khi khác số đông. Đơn vị giá trị: kg thóc.\n\n"
     )
     chung = build_user_chung(w)
-    rieng = "\n\n".join(build_user_rieng(w, aid, triggers.get(aid, [])) for aid in ids)
-    # xáo thứ tự danh mục hành động theo seed×tick (P5 check.md): chống thiên vị
-    # vị trí liệt kê mà vẫn tất định — cùng seed cùng tick → cùng thứ tự
-    g_menu = w.rng.get("menu_xao", w.tick)
+    rieng = build_user_rieng(w, aid, triggers.get(aid, []))
+    # xáo danh mục hành động theo seed×(agent,tick) — chống thiên vị vị trí, vẫn tất định
+    g_menu = w.rng.get(f"menu_xao:{aid}", w.tick)
     muc_xao = [MUC_HANH_DONG[i] for i in g_menu.permutation(len(MUC_HANH_DONG))]
     return f"{dau}{LUAT_VAT_LY}\n\n{chung}\n\n{rieng}\n\n{schema_quyet_dinh(muc_xao)}\n\n" \
            f"{VI_DU_QUYET_DINH}\n" \
-           f"Trả mảng JSON đúng {len(ids)} phần tử, id theo thứ tự: {ids}."
+           f'Trả về DUY NHẤT một mảng JSON đúng 1 phần tử cho chính bạn (id "{aid}").'
 
 
 def _mo_ta_clause(ck, aid: str) -> str:

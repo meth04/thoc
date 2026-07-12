@@ -20,7 +20,7 @@ thoi_gian:
 san_xuat:
   giong_kg_moi_thua: 60
   cong_moi_thua: 60            # 180 công/tick ÷ 60 = tự canh tối đa 3 thửa, khớp thua_toi_da
-  san_luong_goc_kg: 650
+  san_luong_goc_kg: 600
   thua_toi_da_tu_canh: 3
   hieu_suat_thua_2_3: [0.85, 0.70]
   hao_hut_kho_moi_tick: 0.03
@@ -196,7 +196,9 @@ quan_he:
 minds:
   ky_uc_toi_da: 10
   ky_uc_doi_toi_da: 12   # dấu mốc đời không trôi (cưới, sinh, tang, đất, nhà, ân oán)               # ký ức đời người — giữ N biến cố gần nhất
-  batch_toi_da: 8
+  batch_toi_da: 8            # (di sản batch cũ — kiến trúc 1-to-1 không còn gộp agent)
+  concurrency: 24            # PART 5: số call LLM per-agent chạy song song tối đa mỗi tick
+                             # (mock: chỉ giới hạn fan-out; real: nên ≤ tổng RPM các route)
   nghi_dinh_ky_moi_n_tick: 4
   nguong_trigger_gia: 0.30
   hoi_ky_token_toi_da: 250

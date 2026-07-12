@@ -7,6 +7,7 @@ KHÔNG degrade tier (điều luật #7: không đánh tráo trí thông minh).
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 from collections import deque
 from datetime import datetime, timedelta
@@ -25,7 +26,11 @@ class QuotaCounter:
     def __init__(self, duong_dan: Path | None, reset_hour: int = 8):
         self.reset_hour = reset_hour
         self._rpm: dict[tuple[str, str, str], deque] = {}
-        self._conn = sqlite3.connect(duong_dan) if duong_dan else sqlite3.connect(":memory:")
+        # kiến trúc 1-to-1 (PART 5) gọi provider trong thread pool → quota bị đọc/ghi
+        # từ nhiều thread; check_same_thread=False + khoá cho mọi thao tác chia sẻ
+        self._lock = threading.RLock()
+        self._conn = (sqlite3.connect(duong_dan, check_same_thread=False) if duong_dan
+                      else sqlite3.connect(":memory:", check_same_thread=False))
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS quota_counters (
                 provider TEXT, model TEXT, key_hash TEXT, ky TEXT, so_call INTEGER,
@@ -37,19 +42,21 @@ class QuotaCounter:
     # ---------- đọc ----------
     def rpd_da_dung(self, provider: str, model: str, key_hash: str, now: float) -> int:
         ky = _ky_rpd(now, self.reset_hour)
-        row = self._conn.execute(
-            "SELECT so_call FROM quota_counters WHERE provider=? AND model=? AND key_hash=?"
-            " AND ky=?", (provider, model, key_hash, ky)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT so_call FROM quota_counters WHERE provider=? AND model=? AND"
+                " key_hash=? AND ky=?", (provider, model, key_hash, ky)
+            ).fetchone()
         return row[0] if row else 0
 
     def rpm_hien_tai(self, provider: str, model: str, key_hash: str, now: float) -> int:
-        dq = self._rpm.get((provider, model, key_hash))
-        if not dq:
-            return 0
-        while dq and dq[0] <= now - 60.0:
-            dq.popleft()
-        return len(dq)
+        with self._lock:
+            dq = self._rpm.get((provider, model, key_hash))
+            if not dq:
+                return 0
+            while dq and dq[0] <= now - 60.0:
+                dq.popleft()
+            return len(dq)
 
     def cho_phep(self, provider: str, model: str, key_hash: str,
                  rpm: int, rpd: int, now: float) -> bool:
@@ -66,15 +73,16 @@ class QuotaCounter:
 
     # ---------- ghi ----------
     def ghi_call(self, provider: str, model: str, key_hash: str, now: float) -> None:
-        self._rpm.setdefault((provider, model, key_hash), deque()).append(now)
         ky = _ky_rpd(now, self.reset_hour)
-        self._conn.execute(
-            "INSERT INTO quota_counters (provider, model, key_hash, ky, so_call)"
-            " VALUES (?,?,?,?,1) ON CONFLICT (provider, model, key_hash, ky)"
-            " DO UPDATE SET so_call = so_call + 1",
-            (provider, model, key_hash, ky),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._rpm.setdefault((provider, model, key_hash), deque()).append(now)
+            self._conn.execute(
+                "INSERT INTO quota_counters (provider, model, key_hash, ky, so_call)"
+                " VALUES (?,?,?,?,1) ON CONFLICT (provider, model, key_hash, ky)"
+                " DO UPDATE SET so_call = so_call + 1",
+                (provider, model, key_hash, ky),
+            )
+            self._conn.commit()
 
 
 def cho_toi_rpm(quota: QuotaCounter, provider: str, model: str, key_hash: str,

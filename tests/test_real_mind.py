@@ -19,15 +19,17 @@ def lam_env() -> EnvKeys:
 
 
 def _ids_tu_prompt(payload: dict) -> list[str]:
-    """Rút danh sách id được hỏi từ prompt (dòng 'id theo thứ tự: [...]')."""
+    """Rút id được hỏi từ prompt. Kiến trúc 1-to-1: dòng cuối '(id "A0001")';
+    (giữ tương thích dòng batch cũ 'id theo thứ tự: [...]')."""
     if "contents" in payload:  # aistudio
         text = payload["contents"][0]["parts"][0]["text"]
     else:  # ninerouter
         text = payload["messages"][0]["content"]
-    m = re.search(r"id theo thứ tự: \[(.*?)\]", text)
-    if not m:
-        return []
-    return re.findall(r"[AE]\d+", m.group(1))
+    m1 = re.search(r'\(id "([AE]\d+)"\)', text)  # prompt 1-to-1
+    if m1:
+        return [m1.group(1)]
+    m = re.search(r"id theo thứ tự: \[(.*?)\]", text)  # prompt batch cũ
+    return re.findall(r"[AE]\d+", m.group(1)) if m else []
 
 
 def _resp(payload: dict, text: str) -> httpx.Response:

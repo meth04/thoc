@@ -17,7 +17,7 @@ from pathlib import Path
 
 from engine.world import World
 from minds.gateway import LLMRequest, LLMResponse
-from minds.orchestrator import MindMock
+from minds.orchestrator import MindMock, tier_cua
 from minds.providers_real import (
     GatewayReal,
     LoiHetQuota,
@@ -66,16 +66,19 @@ class MindReal(MindMock):
         )
         self.gateway = GatewayReal(cfg, env, self.quota, transport=transport)
         self.provider = GatewayCoPacing(self.gateway, cho_toi_s=cho_toi_s)
+        self._tuan_tu = False  # real: fan-out song song per-agent (bất đối xứng thông tin)
         self.ly_do_dung = ""
         # bộ phiên dịch intent: loại đã hỏi mà LLM cũng bó tay → không hỏi lại (đỡ call)
         self._loai_bo_tay: set[str] = set()
 
     # ---------- budget guard (điều luật #7: không degrade) ----------
-    def _du_ngan_sach(self, w: World, cac_batch: list) -> bool:
+    def _du_ngan_sach(self, w: World, thinkers: list) -> bool:
+        # 1-to-1: MỖI người nghĩ = 1 call (theo tier của họ)
         can: dict[str, int] = {}
-        for tier, _ids in cac_batch:
+        for aid in thinkers:
+            tier = tier_cua(w, aid)
             can[tier] = can.get(tier, 0) + 1
-        # mỗi batch có thể phải retry-parse đúng 1 lần → nhu cầu tối đa ×2 (cấu trúc
+        # mỗi call có thể phải retry-parse đúng 1 lần → nhu cầu tối đa ×2 (cấu trúc
         # pipeline: 1 call chính + 1 call retry, không phải tham số chỉnh được)
         for tier in list(can):
             can[tier] *= 2
@@ -87,7 +90,7 @@ class MindReal(MindMock):
         # +1 call dịch intent lạ (chỉ khi có người nghĩ) + ceil(người_lớn/8) call nén
         # hồi ký đúng chu kỳ 4 tick (khớp orchestrator `w.tick % 4 == 0`)
         tt = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
-        can_nen = 1 if cac_batch else 0
+        can_nen = 1 if thinkers else 0
         if w.tick % 4 == 0:
             so_nguoi_lon = sum(
                 1 for a in w.agents.values() if a.con_song and a.tuoi_nam >= tt

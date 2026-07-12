@@ -1,18 +1,23 @@
-"""Orchestrator minds: trigger → batching → prompt → gateway → repair → validate → intents.
+"""Orchestrator minds: trigger → 1-to-1 gather (async) → apply (sorted) → intents.
 
-Ai có trigger thì "nghĩ" (gọi LLM/mock); còn lại thẻ chính sách chạy thường nhật.
-Fallback (JSON không cứu nổi sau retry): giữ thẻ cũ, không hành động mới.
+Kiến trúc PART 5 (1 agent = 1 LLM call): ai có trigger thì "nghĩ" bằng MỘT call riêng
+(bất đối xứng thông tin — call của A không chứa ví của B). Pha GATHER fan-out song song
+(asyncio), pha APPLY duyệt theo sorted-id nên tất định tuyệt đối bất kể thứ tự hoàn tất
+(điều luật #4: cùng transcript → cùng world-hash). Người không trigger chạy thẻ chính
+sách. Fallback (JSON không cứu nổi sau retry): giữ thẻ cũ, không hành động mới.
 """
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from pathlib import Path
 
 from engine.intents import KeHoach
 from engine.world import World
 from minds.gateway import LLMCallLog, LLMRequest, LLMResponse, MockProvider
 from minds.policy_cards import thi_hanh_the
-from minds.prompts import build_batch_prompt
+from minds.prompts import build_agent_prompt
 from minds.providers_real import LoiHetQuota, che_key
 from minds.repair import parse_batch
 from minds.schemas import TheChinhSach, ap_patch
@@ -32,34 +37,6 @@ def _the_cua(w: World, aid: str) -> TheChinhSach:
     return TheChinhSach(**du_lieu) if du_lieu else TheChinhSach()
 
 
-def _dat_lai_cho(qd, da_nham: set[str], dang_treo: set[tuple[str, str]]) -> None:
-    """Đặt lại chỗ (thửa đã nhắm, mô-típ đang treo) từ một quyết định ĐƯỢC GIỮ.
-
-    Dùng khi batch phải retry: snapshot được khôi phục để id hỏng tái sinh sạch,
-    nhưng phần đặt chỗ của các id parse OK phải được ghi lại (chống thửa ma).
-    """
-    def _mot_hanh_dong_tho(chu: str, d: dict) -> None:
-        loai = d.get("loai")
-        if loai == "phan_bo_cong":
-            for t in d.get("canh_thua") or []:
-                da_nham.add(str(t))
-        elif loai == "khai_hoang" and d.get("thua"):
-            da_nham.add(str(d["thua"]))
-        elif loai == "de_nghi_hop_dong" and isinstance(d.get("hop_dong"), dict):
-            dieu_khoan = d["hop_dong"].get("dieu_khoan") or []
-            motif = "+".join(sorted(str(c.get("loai")) for c in dieu_khoan
-                                    if isinstance(c, dict)))
-            dang_treo.add((chu, motif))
-        elif loai == "quyet_dinh_entity":
-            eid = str(d.get("entity", ""))
-            for con in d.get("hanh_dong_con") or []:
-                if isinstance(con, dict):
-                    _mot_hanh_dong_tho(eid, con)
-
-    for hd in qd.hanh_dong:
-        _mot_hanh_dong_tho(qd.id, hd.model_dump())
-
-
 class MindMock:
     def __init__(self, w: World, fast: bool, run_dir: Path | None, p_malformed: float):
         self.fast = fast
@@ -71,9 +48,15 @@ class MindMock:
         self.so_nghi = 0
         self.het_ngan_sach = False
         self.ly_do_dung = ""
+        # mock: gather TUẦN TỰ theo sorted-id, chia sẻ da_nham (giữ hành vi phân bố thửa
+        # công + kinh tế sống + tất định như kiến trúc cũ; mock tức thì nên không cần
+        # song song). real override = False: fan-out song song, da_nham rỗng mỗi agent.
+        self._tuan_tu = True
+        # khoá serial hóa log/bộ đếm khi real fan-out per-agent trong thread pool
+        self._lock = threading.Lock()
 
-    def _du_ngan_sach(self, w: World, cac_batch: list) -> bool:
-        """Mock luôn đủ; MindReal override bằng budget guard thật."""
+    def _du_ngan_sach(self, w: World, thinkers: list[str]) -> bool:
+        """Mock luôn đủ; MindReal override bằng budget guard thật (per-agent)."""
         return True
 
     def _dich_intent_la(self, w: World, thung: list, ke_hoach: dict) -> None:
@@ -82,103 +65,65 @@ class MindMock:
             w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
 
     def __call__(self, w: World) -> dict[str, KeHoach]:
-        from minds.rulebot import _BoiCanhTick
+        from minds.rulebot import _BoiCanhTick, bo_sung_ke_hoach_entity
 
         self.provider.w = w  # sau resume, w là object mới
         bc = _BoiCanhTick(w)
-        da_nham: set[str] = set()
         cau_hon_den: dict[str, list[str]] = {}
         for tu, den, _t in w.cau_hon_cho:
             cau_hon_den.setdefault(den, []).append(tu)
-        ctx = {"bc": bc, "da_nham": da_nham, "cau_hon_den": cau_hon_den}
+        ctx = {"bc": bc, "cau_hon_den": cau_hon_den}
 
         triggers = quet_trigger(w)
         ke_hoach: dict[str, KeHoach] = {}
         thung_intent_la: list = []  # (aid, hành động thô, lý do) — bộ dịch intent xử lý sau
+        # một da_nham cho CẢ tick: người nghĩ (mock) → người-thẻ → entity đều tránh
+        # nhắm trùng thửa công (kinh tế sống). real: người nghĩ chạy song song không
+        # dùng nó (engine trọng tài apply-time), nhưng người-thẻ/entity tuần tự vẫn dùng.
+        da_nham: set[str] = set()
 
-        # --- người nghĩ: batch theo (tier, làng), ≤8, xáo trộn seeded ---
-        theo_nhom: dict[tuple[str, int], list[str]] = {}
-        for aid in sorted(triggers):
-            a = w.agents.get(aid)
-            if a is None or not a.con_song:
-                continue
-            theo_nhom.setdefault((tier_cua(w, aid), a.lang), []).append(aid)
-        batch_max = int(w.cfg.get("minds.batch_toi_da"))
-        g_xao = w.rng.get("batch_xao", w.tick)
-        cac_batch: list[tuple[str, list[str]]] = []
-        for (tier, _lang), ids in sorted(theo_nhom.items()):
-            ids = list(ids)
-            g_xao.shuffle(ids)
-            for i in range(0, len(ids), batch_max):
-                cac_batch.append((tier, ids[i:i + batch_max]))
+        # người nghĩ = có trigger + còn sống, DUYỆT THEO SORTED ID (nền tảng tất định)
+        thinkers = [
+            aid for aid in sorted(triggers)
+            if (a := w.agents.get(aid)) is not None and a.con_song
+        ]
 
-        # hook ngân sách (real: budget guard; mock: luôn đủ)
-        if not self._du_ngan_sach(w, cac_batch):
+        # hook ngân sách (real: budget guard per-agent; mock: luôn đủ)
+        if thinkers and not self._du_ngan_sach(w, thinkers):
             self.het_ngan_sach = True
-            for aid in sorted(triggers):
-                if w.chu_the_hoat_dong(aid) and aid not in ke_hoach:
-                    ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
-            cac_batch = []
+            for aid in thinkers:
+                self.so_fallback += 1
+                ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
+            thinkers = []
 
-        for tier, ids in cac_batch:
-            if self.het_ngan_sach:
-                # quota/route đã hỏng giữa tick → batch còn lại rơi thẳng về thẻ cũ
-                for aid in ids:
-                    self.so_fallback += 1
-                    ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
-                continue
-            self.so_nghi += len(ids)
-            prompt = build_batch_prompt(w, ids, triggers)
-            # sự cố đã vào prompt tick này → xóa SAU khi build (builder chỉ nên đọc;
-            # idempotent nếu builder cũ còn tự xóa)
-            for aid in ids:
+        if thinkers:
+            self.so_nghi += len(thinkers)
+            # PHA GATHER: mock chạy ĐỒNG BỘ (CPU thuần — asyncio/thread chỉ tổ tốn); real
+            # override _gather_song_song bằng asyncio fan-out (I/O). Cả hai trả {aid: QĐ|None}.
+            if self._tuan_tu:
+                ket: dict[str, object] = {}
+                for aid in thinkers:  # sorted, chia sẻ da_nham → phân bố thửa, kinh tế sống
+                    ket[aid] = self._nghi_dong_bo(w, aid, triggers,
+                                                  {**ctx, "da_nham": da_nham})
+            else:
+                ket = asyncio.run(self._gather_song_song(w, thinkers, triggers, ctx))
+            # sự cố đã vào prompt tick này → xóa sau khi gather (builder chỉ đọc)
+            for aid in thinkers:
                 a = w.agents.get(aid)
                 if a is not None:
                     a.su_co = []
-            req = LLMRequest(prompt=prompt, ctx=ctx, tier=tier, batch_ids=ids)
-            # snapshot đặt chỗ TRƯỚC batch — nếu phải retry, id hỏng được tái sinh
-            # trên trạng thái sạch (không để lại thửa ma / mô-típ treo ma)
-            snap_nham = set(da_nham)
-            snap_treo = set(bc.dang_treo)
-            try:
-                resp = self.provider.goi(req, attempt=0)
-            except LoiHetQuota as e:
-                self._ghi_call_loi(w, req, e)
-                self._dung_em_batch(w, ids, str(e), ke_hoach, bc, da_nham)
-                continue
-            self.so_call += 1
-            ok, hong = parse_batch(resp.text, ids)
-            self.log.ghi(w.tick, req, resp, fallback=False)
-            if hong:
-                # khôi phục snapshot rồi đặt lại chỗ của các id parse OK
-                da_nham.clear()
-                da_nham.update(snap_nham)
-                bc.dang_treo.clear()
-                bc.dang_treo.update(snap_treo)
-                for qd in ok.values():
-                    _dat_lai_cho(qd, da_nham, bc.dang_treo)
-                # retry 1 lần kèm lỗi validator (mock: sinh lại với attempt=1)
-                req2 = LLMRequest(prompt=prompt + "\n[LỖI JSON — trả lại đúng schema]",
-                                  ctx=ctx, tier=tier, batch_ids=hong)
-                try:
-                    resp2 = self.provider.goi(req2, attempt=1)
-                except LoiHetQuota as e:
-                    self._ghi_call_loi(w, req2, e)
-                    self._dung_em_batch(w, hong, str(e), ke_hoach, bc, da_nham)
-                else:
-                    resp2.retries = max(resp2.retries, 1)
-                    self.so_call += 1
-                    ok2, hong2 = parse_batch(resp2.text, hong)
-                    ok.update(ok2)
-                    self.log.ghi(w.tick, req2, resp2, fallback=bool(hong2))
-                    for aid in hong2:  # fallback: giữ thẻ cũ, không hành động mới
-                        self.so_fallback += 1
-                        ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
-            for aid, qd in ok.items():
+            # PHA APPLY: duyệt SORTED ID — thứ tự ghi Ledger tất định (điều luật #4).
+            # xung đột thửa công (nhiều agent cùng nhắm) do engine dedup apply-time
+            # (production.da_canh_tick_nay theo sorted id) — không cần da_nham ở mind.
+            for aid in sorted(ket):
+                qd = ket[aid]
+                if qd is None:  # fallback: giữ thẻ cũ, không hành động mới
+                    self.so_fallback += 1
+                    ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, set())
+                    continue
                 kh = quyet_dinh_thanh_ke_hoach(w, qd, thung_intent_la)
                 the_hien_tai = _the_cua(w, aid)
                 # không kèm patch thẻ → ý định sinh con GIỮ theo thẻ hiện tại
-                # (không reset về mặc định 0.5 chỉ vì agent nghĩ)
                 kh.y_dinh_sinh_con = the_hien_tai.y_dinh_sinh_con
                 if qd.the_chinh_sach is not None:
                     try:
@@ -193,7 +138,7 @@ class MindMock:
         if thung_intent_la:
             self._dich_intent_la(w, thung_intent_la, ke_hoach)
 
-        # --- người không nghĩ: thẻ chính sách ---
+        # --- người không nghĩ: thẻ chính sách (tuần tự sorted, chia sẻ da_nham) ---
         for aid in sorted(w.agents):
             a = w.agents[aid]
             if not a.con_song or aid in ke_hoach:
@@ -201,8 +146,6 @@ class MindMock:
             ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
 
         # --- entity: việc thường nhật chạy MỖI tick (thẻ của pháp nhân) ---
-        from minds.rulebot import bo_sung_ke_hoach_entity
-
         bo_sung_ke_hoach_entity(w, ke_hoach, bc, da_nham)
 
         # --- nén hồi ký mỗi 4 tick (mock nén — heuristic, vẫn log call) ---
@@ -211,15 +154,69 @@ class MindMock:
         self.log.flush()
         return ke_hoach
 
-    def _dung_em_batch(self, w: World, ids: list[str], ly_do: str,
-                       ke_hoach: dict[str, KeHoach], bc, da_nham: set[str]) -> None:
-        """Provider cạn quota / hỏng dai dẳng giữa tick: batch rơi về thẻ cũ,
-        đánh dấu dừng êm để run.py checkpoint (điều luật #7 — không degrade, không cố)."""
+    async def _gather_song_song(self, w: World, thinkers: list[str],
+                                triggers: dict[str, list[str]], ctx: dict) -> dict:
+        """REAL: fan-out SONG SONG per-agent (I/O-bound). Mỗi agent da_nham RỖNG (bất
+        đối xứng thông tin — LLM tự thấy đất công còn trống trong prompt; xung đột thửa
+        do engine trọng tài apply-time). Kết quả APPLY theo sorted-id ở caller → thứ tự
+        hoàn tất của coroutine KHÔNG ảnh hưởng world-hash (điều luật #4)."""
+        sem = asyncio.Semaphore(int(w.cfg.get("minds.concurrency")))
+
+        async def mot(aid: str):
+            async with sem:
+                # provider.goi đồng bộ (HTTP) → to_thread để fan-out thật sự song song
+                return aid, await asyncio.to_thread(
+                    self._nghi_dong_bo, w, aid, triggers, {**ctx, "da_nham": set()})
+
+        return dict(await asyncio.gather(*(mot(aid) for aid in thinkers)))
+
+    def _nghi_dong_bo(self, w: World, aid: str,
+                      triggers: dict[str, list[str]], ctx: dict):
+        """Một agent = một call (đồng bộ). Parse + retry 1 lần; trả QuyetDinh hoặc None.
+        Dùng trực tiếp cho mock (CPU) và trong thread pool cho real (HTTP)."""
+        # mock: PersonaBot quyết định từ ctx, KHÔNG đọc prompt → khỏi dựng prompt vật lý
+        # đắt tiền (chỉ để log tok_in giả). real: dựng prompt thật để LLM đọc + log đúng.
+        prompt = (f"[mock 1-to-1] id={aid} tick={w.tick}" if self._tuan_tu
+                  else build_agent_prompt(w, aid, triggers))
+        tier = tier_cua(w, aid)
+        req_ctx = {**ctx, "aid": aid}  # da_nham đã nằm trong ctx (chia sẻ/rỗng tùy chế độ)
+        req = LLMRequest(prompt=prompt, ctx=req_ctx, tier=tier, batch_ids=[aid])
+        try:
+            resp = self.provider.goi(req, attempt=0)  # NGOÀI khoá — I/O chạy song song
+        except LoiHetQuota as e:
+            with self._lock:
+                self._ghi_call_loi(w, req, e)
+                self._dung_em(str(e))
+            return None
+        ok, hong = parse_batch(resp.text, [aid])
+        with self._lock:
+            self.so_call += 1
+            self.log.ghi(w.tick, req, resp, fallback=False)
+        if not hong:
+            return ok[aid]
+        # retry 1 lần kèm nhắc lỗi (mock: sinh lại với attempt=1)
+        req2 = LLMRequest(prompt=prompt + "\n[LỖI JSON — trả lại đúng schema]",
+                          ctx=req_ctx, tier=tier, batch_ids=[aid])
+        try:
+            resp2 = self.provider.goi(req2, attempt=1)
+        except LoiHetQuota as e:
+            with self._lock:
+                self._ghi_call_loi(w, req2, e)
+                self._dung_em(str(e))
+            return None
+        resp2.retries = max(resp2.retries, 1)
+        ok2, hong2 = parse_batch(resp2.text, [aid])
+        with self._lock:
+            self.so_call += 1
+            self.log.ghi(w.tick, req2, resp2, fallback=bool(hong2))
+        return ok2.get(aid)  # None → fallback thẻ cũ ở pha apply
+
+    def _dung_em(self, ly_do: str) -> None:
+        """Provider cạn quota / hỏng dai dẳng giữa tick: đánh dấu dừng êm để run.py
+        checkpoint (điều luật #7 — không degrade, không cố). Agent gặp lỗi rơi về
+        thẻ cũ ở pha apply (QuyetDinh None)."""
         self.het_ngan_sach = True
         self.ly_do_dung = ly_do
-        for aid in ids:
-            self.so_fallback += 1
-            ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
 
     def _ghi_call_loi(self, w: World, req: LLMRequest, e: Exception) -> None:
         """Call thất bại hẳn (hết quota / lỗi HTTP dai dẳng) cũng phải có vết trong

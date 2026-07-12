@@ -139,3 +139,23 @@
      prompt hiện "DẤU MỐC ĐỜI BẠN" và "CHUYỆN GẦN ĐÂY" riêng.
   Sanity mock 100 năm: dân 391↑, chết đói giảm còn 54% tử vong, 118 nhà dựng bằng hợp tác,
   2.423 hợp đồng, cá cân bằng bền vững. 87/87 test, gate S+P 100%.
+- 2026-07-12 (PART 5 Bước 1 — tái cấu trúc 1-to-1, xem REPORTS.md §5.1): đập bỏ batch-JSON,
+  mỗi agent = MỘT call riêng (bất đối xứng thông tin: call của A không chứa ví của B).
+  KIẾN TRÚC: pha GATHER (thu ý định) tách khỏi pha APPLY (ghi Ledger). Apply luôn duyệt
+  sorted-id → thứ tự ghi sổ tất định bất kể thứ tự hoàn tất của call (điều luật #4 giữ qua
+  replay, không qua LLM). mind_fn vẫn trả dict[aid→KeHoach]; hợp đồng với engine KHÔNG đổi.
+  - MOCK: gather ĐỒNG BỘ tuần tự sorted-id, chia sẻ da_nham (phân bố thửa công → kinh tế
+    sống). PersonaBot dùng ctx nên bỏ dựng prompt vật lý đắt tiền (chỉ log tok giả).
+  - REAL: gather SONG SONG (asyncio.gather + Semaphore=minds.concurrency), mỗi agent da_nham
+    rỗng — LLM tự thấy đất công trong prompt, engine trọng tài xung đột thửa apply-time
+    (production.da_canh_tick_nay). Framework: asyncio THUẦN (không AutoGen — giữ Ledger lộ
+    thiên, tất định; REPORTS.md 5.5 bị bác có chủ đích).
+  - An toàn luồng: QuotaCounter + LLMCallLog dùng check_same_thread=False + khoá; bộ đếm
+    so_call/log ghi dưới khoá, provider.goi (I/O) NGOÀI khoá để chạy song song thật.
+  - Bài học (regression đã sửa): da_nham rỗng mỗi agent làm 50 agent mock cùng nhắm 1 thửa
+    → chỉ id nhỏ nhất canh được, còn lại chết đói tick 20. Engine dedup chống trùng cấp
+    (bảo toàn) nhưng KHÔNG phân bố — mock phải chia sẻ da_nham để kinh tế sống.
+  CỔNG NGHIỆM THU (mock 600 tick seed 42, ×2): cùng world-hash f2cbddb2439452de; audit xanh
+  600/600 tick; fallback 0%; dân 182→259→179 (sống khỏe); 49.355 call 1-to-1 (batch_size=1);
+  87/87 test; ruff sạch. Chi phí: ~82 người-nghĩ/tick × 600 = ~49k call (real sẽ nghẽn RPM —
+  Bước 2 lo caching + budget per-agent).
