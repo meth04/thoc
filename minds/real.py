@@ -74,6 +74,9 @@ class MindReal(MindMock):
         self.gateway = GatewayReal(cfg, env, self.quota, transport=transport)
         self.provider = GatewayCoPacing(self.gateway, cho_toi_s=cho_toi_s)
         self._tuan_tu = False  # real: fan-out song song per-agent (bất đối xứng thông tin)
+        # trần đồng thời TỰ CO GIÃN theo số key (nhiều key → chạy song song nhiều hơn),
+        # chặn trên bởi minds.concurrency
+        self.concurrency = self.gateway.concurrency_de_xuat(int(cfg.get("minds.concurrency")))
         self.ly_do_dung = ""
         # bộ phiên dịch intent: loại đã hỏi mà LLM cũng bó tay → không hỏi lại (đỡ call)
         self._loai_bo_tay: set[str] = set()

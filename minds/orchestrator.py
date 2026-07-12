@@ -54,6 +54,8 @@ class MindMock:
         self._tuan_tu = True
         # khoá serial hóa log/bộ đếm khi real fan-out per-agent trong thread pool
         self._lock = threading.Lock()
+        # trần đồng thời (real tự co giãn theo số key ở MindReal.__init__)
+        self.concurrency = int(w.cfg.get("minds.concurrency"))
 
     def _du_ngan_sach(self, w: World, thinkers: list[str]) -> bool:
         """Mock luôn đủ; MindReal override bằng budget guard thật (per-agent)."""
@@ -195,7 +197,7 @@ class MindMock:
         đối xứng thông tin — LLM tự thấy đất công còn trống trong prompt; xung đột thửa
         do engine trọng tài apply-time). Kết quả APPLY theo sorted-id ở caller → thứ tự
         hoàn tất của coroutine KHÔNG ảnh hưởng world-hash (điều luật #4)."""
-        sem = asyncio.Semaphore(int(w.cfg.get("minds.concurrency")))
+        sem = asyncio.Semaphore(self.concurrency)
 
         async def mot(aid: str):
             async with sem:

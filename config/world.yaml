@@ -197,8 +197,9 @@ minds:
   ky_uc_toi_da: 10
   ky_uc_doi_toi_da: 12   # dấu mốc đời không trôi (cưới, sinh, tang, đất, nhà, ân oán)               # ký ức đời người — giữ N biến cố gần nhất
   batch_toi_da: 8            # (di sản batch cũ — kiến trúc 1-to-1 không còn gộp agent)
-  concurrency: 24            # PART 5: số call LLM per-agent chạy song song tối đa mỗi tick
-                             # (mock: chỉ giới hạn fan-out; real: nên ≤ tổng RPM các route)
+  concurrency: 48            # PART 5: TRẦN số call LLM song song/tick. Real TỰ CO GIÃN
+                             # theo số key (2×số_key+4, chặn bởi trần này) — nhiều key thì
+                             # chạy song song nhiều hơn; 2 key→8, 20 key→44, 30 key→48.
   dung_cong_cu_the_gioi: false  # PART 5 MCP: LLM tự hỏi thế giới (vòng agentic nhiều lượt) —
                                 # CHỈ real+aistudio, TỐN nhiều call/agent → mặc định TẮT
   cong_cu_max_luot: 4        # trần số lượt gọi công cụ mỗi agent (chống bùng nổ call)

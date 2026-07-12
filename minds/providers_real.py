@@ -254,6 +254,13 @@ class GatewayReal:
         return self.quota.con_lai_rpd(route.provider, route.model,
                                       self._key_hashes(route.provider), route.rpd, now)
 
+    def concurrency_de_xuat(self, cap: int) -> int:
+        """Số call LLM song song NÊN chạy mỗi tick, TỰ CO GIÃN theo số key: mỗi key
+        aistudio gánh được ~vài call/phút → càng nhiều key càng chạy song song được.
+        Công thức: 2×số_key + dự phòng, chặn trên bởi cap (chống cạn socket/thread)."""
+        so_key = max(1, self.pool_aistudio.so_key())
+        return max(1, min(cap, so_key * 2 + 4))
+
     # ---------- gọi ----------
     #: lỗi phản hồi provider bắt được khi gọi route — gồm cả body JSON hỏng
     #: (ValueError từ r.json()), thiếu choices (IndexError), cấu trúc lạ (TypeError)
@@ -325,15 +332,9 @@ class GatewayReal:
                         loi_cuoi = e
                         so_attempt_hong += 1
                 continue
-            key = self.pool_aistudio.lay_key(now)
+            key = self._chon_key_aistudio(route, now)
             if key is None:
-                loi_cuoi = LoiRateLimit("aistudio-cooldown")
-                so_attempt_hong += 1
-                continue
-            kh = key_hash(key)
-            if not self.quota.cho_phep(route.provider, route.model, kh,
-                                       route.rpm, route.rpd, now):
-                loi_cuoi = LoiRateLimit(kh)
+                loi_cuoi = LoiRateLimit("aistudio-het-slot")
                 so_attempt_hong += 1
                 continue
             for _ in range(self.retry_toi_da + 1):
@@ -355,18 +356,30 @@ class GatewayReal:
         loi.so_attempt_hong = so_attempt_hong
         raise loi
 
+    def _chon_key_aistudio(self, route: Route, now: float) -> str | None:
+        """Chọn key aistudio RẢNH NHẤT: bỏ key cạn RPM/RPD, ưu tiên nhiều headroom RPM
+        (tie-break: còn nhiều RPD). Với 20-30 key, phân tải đều thay vì xoay vòng mù."""
+        def diem(key: str) -> float | None:
+            kh = key_hash(key)
+            if self.quota.rpd_da_dung(route.provider, route.model, kh, now) >= route.rpd:
+                return None  # cạn RPD hôm nay
+            dung_rpm = self.quota.rpm_hien_tai(route.provider, route.model, kh, now)
+            if dung_rpm >= route.rpm:
+                return None  # đầy RPM phút này
+            headroom_rpm = route.rpm - dung_rpm
+            con_rpd = route.rpd - self.quota.rpd_da_dung(route.provider, route.model, kh, now)
+            return headroom_rpm + con_rpd / (route.rpd + 1.0)  # RPM chính, RPD phụ
+
+        return self.pool_aistudio.lay_key_tot_nhat(now, diem)
+
     def _goi_route(self, req: LLMRequest, route: Route, tier_cfg: dict) -> LLMResponse:
         now = time.time()
         temperature = float(tier_cfg.get("temperature", 0.9))
         max_tokens = int(tier_cfg.get("max_output_tokens", 2000))
         if route.provider == "aistudio":
-            key = self.pool_aistudio.lay_key(now)
-            if key is None:
-                raise LoiRateLimit("aistudio-cooldown")
-            kh = key_hash(key)
-            if not self.quota.cho_phep(route.provider, route.model, kh,
-                                       route.rpm, route.rpd, now):
-                raise LoiRateLimit(kh)
+            key = self._chon_key_aistudio(route, now)
+            if key is None:  # mọi key cạn RPM/RPD hoặc đang cooldown
+                raise LoiRateLimit("aistudio-het-slot")
             return self.aistudio.goi(req, route.model, temperature, max_tokens, key=key)
         kh = key_hash(self._env.nine_key)
         if not self.quota.cho_phep(route.provider, route.model, kh,

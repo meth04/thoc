@@ -207,3 +207,18 @@
   NGHIỆM THU: 4 test P2P (giao tick sau + hiện prompt, sống 1 tick, không gửi người chết/mình,
   tất định+bảo toàn) + roundtrip phủ nhan_tin; 97/97 test; ruff sạch; mock cùng seed cùng hash
   1b9edf2a3beeaede; 44 tin P2P trong mock 80 tick. ⇒ TOÀN BỘ PART 5 (5.1–5.4) HOÀN TẤT.
+- 2026-07-12 (tối ưu gọi model đa-key — chuẩn bị cho 20-30 key): kiến trúc 1-to-1 làm
+  ~50-80 call/tick, RPM mỗi key thấp (4-20) → số KEY là đòn bẩy thông lượng chính. Ba cải tiến:
+  1. CHỌN KEY THEO TẢI (thay xoay vòng mù): KeyPool.lay_key_tot_nhat(now, diem_fn) +
+     GatewayReal._chon_key_aistudio — bỏ key cạn RPM/RPD hoặc đang cooldown, ưu tiên key
+     nhiều headroom RPM (tie-break: còn nhiều RPD). Hết lỗi "xoay trúng key cạn trong khi
+     key khác rảnh" + hết retry lãng phí. Gộp chọn-key với quota (trước đây tách rời).
+  2. AN TOÀN LUỒNG: KeyPool thêm threading.Lock cho mọi thao tác (lay_key/bao_429/bao_ok) —
+     kiến trúc 1-to-1 gọi key từ nhiều worker thread, trước đây _i xoay vòng bị race.
+  3. CONCURRENCY TỰ CO GIÃN: GatewayReal.concurrency_de_xuat = min(trần, 2×số_key+4). Nhiều
+     key → chạy song song nhiều hơn (2 key→8, 20→44, 30→48). minds.concurrency 24→48 (thành
+     TRẦN, không phải số cố định). MindReal đặt self.concurrency từ số key thật; mock giữ trần.
+  Over-subscription hiếm (2 worker cùng chọn 1 key) tự lành bằng 429→cooldown→retry key khác.
+  NGHIỆM THU: 6 test (chọn rảnh nhất, bỏ key cạn/cooldown, gateway tránh key đã dùng,
+  concurrency co giãn 8/44/48, an toàn luồng 8 thread×500 lần) + 103/103 test + ruff sạch +
+  smoke thật 8/8 route OK với selector mới.

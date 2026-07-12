@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -68,34 +70,64 @@ class _TrangThaiKey:
 
 
 class KeyPool:
-    """Xoay vòng key; 429 → cooldown lũy tiến (60s × 2^n); hết key khả dụng → None."""
+    """Bể key AN TOÀN LUỒNG (kiến trúc 1-to-1 gọi từ nhiều thread). 429 → cooldown lũy
+    tiến (60s × 2^n). Với NHIỀU key (20-30), chọn key theo TẢI (lay_key_tot_nhat) thay
+    vì xoay vòng mù — key rảnh nhất được ưu tiên, key cạn RPM/RPD bị bỏ qua."""
 
     def __init__(self, keys: list[str], cooldown_goc_s: float = 60.0):
         self._keys = [_TrangThaiKey(k) for k in keys]
         self._i = 0
         self._cooldown_goc = cooldown_goc_s
+        self._lock = threading.Lock()
+
+    def so_key(self) -> int:
+        return len(self._keys)
 
     def lay_key(self, now: float) -> str | None:
-        n = len(self._keys)
-        for _ in range(n):
-            ts = self._keys[self._i % n]
-            self._i += 1
-            if ts.cooldown_den <= now:
-                return ts.key
-        return None
+        """Xoay vòng (chỉ tránh cooldown) — cho lối gọi đơn giản/nền một key."""
+        with self._lock:
+            n = len(self._keys)
+            for _ in range(n):
+                ts = self._keys[self._i % n]
+                self._i += 1
+                if ts.cooldown_den <= now:
+                    return ts.key
+            return None
+
+    def lay_key_tot_nhat(self, now: float,
+                         diem_fn: Callable[[str], float | None]) -> str | None:
+        """Chọn key KHẢ DỤNG (không cooldown) có ĐIỂM cao nhất. diem_fn(key) trả điểm
+        (cao = rảnh hơn, nên chọn) hoặc None (key này không dùng được, vd cạn RPM/RPD).
+        Hết key dùng được → None. Tie-break theo key_hash cho ổn định."""
+        with self._lock:
+            ung_vien: list[tuple[float, str, str]] = []
+            for ts in self._keys:
+                if ts.cooldown_den > now:
+                    continue
+                diem = diem_fn(ts.key)
+                if diem is None:
+                    continue
+                ung_vien.append((diem, key_hash(ts.key), ts.key))
+            if not ung_vien:
+                return None
+            ung_vien.sort(key=lambda x: (-x[0], x[1]))
+            return ung_vien[0][2]
 
     def bao_429(self, key: str, now: float) -> None:
-        for ts in self._keys:
-            if ts.key == key:
-                ts.so_lan_429 += 1
-                ts.cooldown_den = now + self._cooldown_goc * (2 ** (ts.so_lan_429 - 1))
-                return
+        with self._lock:
+            for ts in self._keys:
+                if ts.key == key:
+                    ts.so_lan_429 += 1
+                    ts.cooldown_den = now + self._cooldown_goc * (2 ** (ts.so_lan_429 - 1))
+                    return
 
     def bao_ok(self, key: str) -> None:
-        for ts in self._keys:
-            if ts.key == key:
-                ts.so_lan_429 = 0
-                return
+        with self._lock:
+            for ts in self._keys:
+                if ts.key == key:
+                    ts.so_lan_429 = 0
+                    return
 
     def con_kha_dung(self, now: float) -> int:
-        return sum(1 for ts in self._keys if ts.cooldown_den <= now)
+        with self._lock:
+            return sum(1 for ts in self._keys if ts.cooldown_den <= now)
