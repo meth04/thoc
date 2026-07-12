@@ -41,7 +41,7 @@ def phan_tich(sqlite_path: Path, bang_gia: dict | None = None) -> dict[str, Any]
             "luot_cong_cu": 0, "chi_phi_usd": 0.0}
     theo_tier: dict[str, dict] = {}
     theo_model: dict[str, dict] = {}
-    theo_key: dict[str, int] = {}
+    theo_key: dict[str, dict[str, int]] = {}  # provider → {key_hash: call} (tách nhà cung cấp)
     latency: list[int] = []
     for r in rows:
         ti, to = int(r["tok_in"] or 0), int(r["tok_out"] or 0)
@@ -64,7 +64,8 @@ def phan_tich(sqlite_path: Path, bang_gia: dict | None = None) -> dict[str, Any]
             d["chi_phi_usd"] += chi_phi
             d["fallback"] += int(r["fallback"] or 0)
         if r["key_hash"]:
-            theo_key[r["key_hash"]] = theo_key.get(r["key_hash"], 0) + 1
+            pk = theo_key.setdefault(r["provider"] or "?", {})
+            pk[r["key_hash"]] = pk.get(r["key_hash"], 0) + 1
 
     latency.sort()
     def pct(p: float) -> int:
@@ -82,10 +83,15 @@ def phan_tich(sqlite_path: Path, bang_gia: dict | None = None) -> dict[str, Any]
                       for k, v in sorted(theo_tier.items())},
         "theo_model": {k: {**v, "chi_phi_usd": round(v["chi_phi_usd"], 4)}
                        for k, v in sorted(theo_model.items())},
-        "phan_tai_key": {  # phân phối call theo key — chứng minh least-loaded trải đều
-            "so_key_dung": len(theo_key),
-            "call_moi_key": dict(sorted(theo_key.items(), key=lambda kv: -kv[1])),
-            "lech_max_min": (max(theo_key.values()) - min(theo_key.values())) if theo_key else 0,
+        # phân phối call theo key, TÁCH nhà cung cấp (aistudio nhiều key vs 9router 1 key):
+        # lệch max-min CHỈ tính trong pool nhiều-key mới có nghĩa (chứng minh least-loaded)
+        "phan_tai_key": {
+            prov: {
+                "so_key": len(keys),
+                "call_moi_key": dict(sorted(keys.items(), key=lambda kv: -kv[1])),
+                "lech_max_min": (max(keys.values()) - min(keys.values())) if keys else 0,
+            }
+            for prov, keys in sorted(theo_key.items())
         },
     }
 
@@ -103,8 +109,10 @@ def viet_md(kq: dict, run_name: str) -> str:
     d.append(f"- **Latency (ms):** tb {lm['trung_binh']} · p50 {lm['p50']} · "
              f"p90 {lm['p90']} · p99 {lm['p99']} · max {lm['max']}")
     pk = kq["phan_tai_key"]
-    d.append(f"- **Phân tải key:** dùng {pk['so_key_dung']} key · lệch nhiều-ít "
-             f"{pk['lech_max_min']} call (thấp = trải đều tốt)")
+    tom = " · ".join(f"{prov} {v['so_key']} key (lệch {v['lech_max_min']})"
+                     for prov, v in pk.items())
+    d.append(f"- **Phân tải key** (tách nhà cung cấp): {tom} — lệch thấp trong pool nhiều-key "
+             f"= least-loaded trải đều")
     d += ["", "## Theo tier", "", "| tier | call | tok vào | tok ra | $ | fallback |",
           "|---|---|---|---|---|---|"]
     for k, v in kq["theo_tier"].items():
@@ -115,9 +123,10 @@ def viet_md(kq: dict, run_name: str) -> str:
     for k, v in kq["theo_model"].items():
         d.append(f"| {k} | {v['call']:,} | {v['tok_in']:,} | {v['tok_out']:,} | "
                  f"${v['chi_phi_usd']:.4f} |")
-    d += ["", "## Phân tải key (call/key — least-loaded)", ""]
-    for kh, n in pk["call_moi_key"].items():
-        d.append(f"- `{kh}`: {n:,} call")
+    d += ["", "## Phân tải key (call/key — least-loaded, tách nhà cung cấp)", ""]
+    for prov, v in pk.items():
+        d.append(f"**{prov}** ({v['so_key']} key, lệch max-min {v['lech_max_min']}):")
+        d.append("  " + " · ".join(f"`{kh}`={n}" for kh, n in v["call_moi_key"].items()))
     return "\n".join(d) + "\n"
 
 
