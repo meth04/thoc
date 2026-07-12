@@ -46,6 +46,11 @@ class MindMock:
         self.so_call = 0
         self.so_fallback = 0
         self.so_nghi = 0
+        # telemetry tích lũy + theo tick (metrics.jsonl đọc stats_tick sau mỗi tick)
+        self.tok_in = 0
+        self.tok_out = 0
+        self.so_luot_cong_cu = 0  # tổng lượt gọi công cụ MCP
+        self.stats_tick: dict = {}
         self.het_ngan_sach = False
         self.ly_do_dung = ""
         # mock: gather TUẦN TỰ theo sorted-id, chia sẻ da_nham (giữ hành vi phân bố thửa
@@ -66,10 +71,26 @@ class MindMock:
         for aid, d, ly_do in thung:
             w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
 
+    def _ghi_log(self, w: World, req: LLMRequest, resp: LLMResponse, fallback: bool) -> None:
+        """Ghi llm_calls + gom telemetry (token/latency/lượt công cụ) theo tick. Gọi dưới
+        self._lock ở nhánh real fan-out; nhánh nền/mock đơn luồng nên an toàn."""
+        self.log.ghi(w.tick, req, resp, fallback)
+        self.tok_in += resp.tok_in
+        self.tok_out += resp.tok_out
+        self.so_luot_cong_cu += max(0, resp.retries)  # với vòng agentic = số lượt công cụ
+        st = self.stats_tick
+        st["call"] = st.get("call", 0) + 1
+        st["tok_in"] = st.get("tok_in", 0) + resp.tok_in
+        st["tok_out"] = st.get("tok_out", 0) + resp.tok_out
+        st["latency_ms"] = st.get("latency_ms", 0) + int(resp.latency_s * 1000)
+        if fallback:
+            st["fallback"] = st.get("fallback", 0) + 1
+
     def __call__(self, w: World) -> dict[str, KeHoach]:
         from minds.rulebot import _BoiCanhTick, bo_sung_ke_hoach_entity
 
         self.provider.w = w  # sau resume, w là object mới
+        self.stats_tick = {}  # reset telemetry của tick này
         bc = _BoiCanhTick(w)
         cau_hon_den: dict[str, list[str]] = {}
         for tu, den, _t in w.cau_hon_cho:
@@ -235,7 +256,7 @@ class MindMock:
         ok, hong = parse_batch(resp.text, [aid])
         with self._lock:
             self.so_call += 1
-            self.log.ghi(w.tick, req, resp, fallback=False)
+            self._ghi_log(w, req, resp, False)
         if not hong:
             return ok[aid]
         # retry 1 lần kèm nhắc lỗi (mock: sinh lại với attempt=1)
@@ -252,7 +273,7 @@ class MindMock:
         ok2, hong2 = parse_batch(resp2.text, [aid])
         with self._lock:
             self.so_call += 1
-            self.log.ghi(w.tick, req2, resp2, fallback=bool(hong2))
+            self._ghi_log(w, req2, resp2, bool(hong2))
         return ok2.get(aid)  # None → fallback thẻ cũ ở pha apply
 
     def _dung_em(self, ly_do: str) -> None:
@@ -269,7 +290,7 @@ class MindMock:
             text=f"[LOI] {che_key(str(e))[:500]}", provider="loi", model="",
             retries=int(getattr(e, "so_attempt_hong", 0)),
         )
-        self.log.ghi(w.tick, req, resp_loi, fallback=True)
+        self._ghi_log(w, req, resp_loi, True)
 
     def _nen_hoi_ky(self, w: World) -> None:
         for aid in sorted(w.agents):

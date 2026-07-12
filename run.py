@@ -151,6 +151,11 @@ def main() -> int:
     t0 = time.time()
     while w.tick < tong_tick and not ngat["flag"]:
         m = chay_mot_tick(w, mind_fn, tong_thua)
+        # telemetry LLM theo tick vào metrics.jsonl (m là chính dict đã lưu lịch sử)
+        st = getattr(mind_fn, "stats_tick", None)
+        if st:
+            m["llm"] = {k: st.get(k, 0) for k in
+                        ("call", "tok_in", "tok_out", "fallback", "latency_ms")}
         if getattr(mind_fn, "het_ngan_sach", False):
             print(f"[budget] hết ngân sách: {getattr(mind_fn, 'ly_do_dung', '')} "
                   f"— checkpoint và dừng êm (không degrade).")
@@ -188,9 +193,18 @@ def main() -> int:
         meta["so_fallback"] = mind_fn.so_fallback
         meta["fallback_rate"] = round(mind_fn.fallback_rate, 4)
         meta["het_ngan_sach"] = bool(getattr(mind_fn, "het_ngan_sach", False))
+        meta["tok_in"] = int(getattr(mind_fn, "tok_in", 0))
+        meta["tok_out"] = int(getattr(mind_fn, "tok_out", 0))
+        meta["luot_cong_cu"] = int(getattr(mind_fn, "so_luot_cong_cu", 0))
+        meta["concurrency"] = int(getattr(mind_fn, "concurrency", 0))
         mind_fn.log.dong()
+        # telemetry LLM chi tiết từ llm_calls.sqlite → reports/telemetry.{md,json}
+        from tools.telemetry import sinh_bao_cao
+        tele = sinh_bao_cao(run_dir, cfg.get("models.gia_token"))
+        meta["chi_phi_usd_uoc_tinh"] = tele.get("chi_phi_usd", 0.0)
         print(f"[{args.mode}] call={meta['so_call']} nghĩ={meta['so_luot_nghi']} "
-              f"fallback={meta['so_fallback']} ({meta['fallback_rate']:.2%})")
+              f"fallback={meta['so_fallback']} ({meta['fallback_rate']:.2%}) | "
+              f"token {meta['tok_in'] + meta['tok_out']:,} ~${tele.get('chi_phi_usd', 0):.4f}")
     (run_dir / "run_meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )

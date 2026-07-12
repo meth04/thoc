@@ -50,3 +50,12 @@ mock:
   p_malformed_mac_dinh: 0.05
   p_malformed_test: 0.15
   gia_lap_latency: {mean_s: 1.2, std_s: 0.3}   # tắt bằng --fast
+
+# Giá token XẤP XỈ (USD / 1 triệu token) — CHỈ để ước lượng chi phí trong telemetry,
+# cập nhật theo bảng giá thật khi cần. Khớp theo chuỗi con trong tên model.
+gia_token:
+  mac_dinh: {vao: 0.10, ra: 0.40}
+  "flash-lite":        {vao: 0.10, ra: 0.40}
+  "2.5-flash":         {vao: 0.30, ra: 2.50}
+  "2.5-pro":           {vao: 1.25, ra: 10.00}
+  "3.1-flash-lite":    {vao: 0.10, ra: 0.40}

@@ -153,7 +153,7 @@ class MindReal(MindMock):
                 self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
                                             time.time())
                 self.so_call += 1
-                self.log.ghi(w.tick, req, resp, fallback=False)
+                self._ghi_log(w, req, resp, False)
                 du_lieu = sua_va_parse(resp.text)
                 d = du_lieu[0] if du_lieu else {}
                 gioi_han = int(w.cfg.get("minds.hoi_ky_token_toi_da")) * 4
@@ -217,7 +217,7 @@ class MindReal(MindMock):
             self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
                                         time.time())
             self.so_call += 1
-            self.log.ghi(w.tick, req, resp, fallback=False)
+            self._ghi_log(w, req, resp, False)
             ket_qua = {int(x.get("stt", -1)): x.get("hanh_dong", [])
                        for x in sua_va_parse(resp.text) if isinstance(x, dict)}
         except Exception as e:  # noqa: BLE001 — dịch hỏng thì bỏ như cũ, không chết run
@@ -293,7 +293,7 @@ class MindReal(MindMock):
                 self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
                                             time.time())
                 self.so_call += 1
-                self.log.ghi(w.tick, req, resp, fallback=False)
+                self._ghi_log(w, req, resp, False)
                 du_lieu = sua_va_parse(resp.text)
                 d = du_lieu[0] if du_lieu else {}
                 for a in lo:
