@@ -123,8 +123,10 @@ A 50-year real-LLM run (Gemini, 1347 calls, 0% fallback, ~$1.03) produced ≈0 a
 contracting population (50→21) — resembling the simple baselines, not the contract-aware heuristic. A
 matched "mock" heuristic (PersonaBot) instead produced 271 contracts and a growing population
 (50→203). **The mock is not a proxy for LLM behavior**, and the "emergent institutions" seen under the
-mock do not reproduce under the real LLM at this seed. (n=1 per mode; `[PENDING_COMPUTE]` for the
-multi-model ≥30-seed version.)
+mock do not reproduce under the real LLM at this seed. A second real run on the benchmark scenario
+(`real50_agr`, partial: 46/100 ticks, stopped gracefully by the budget guard on an upstream outage)
+independently shows the same pattern — 2 active contracts, 0 firms, 12% literacy — versus rulebot's
+337 and mock's 271. (n=1–2 per mode; `[PENDING_COMPUTE]` for the multi-model ≥30-seed version.)
 
 ### 6.4 Robustness / fragility
 A 3-seed spatial on/off ablation shows the macro effect of an added spatial-ferry economy is within
@@ -136,10 +138,13 @@ emergence is fragile, motivating many-seed reporting over single-seed narratives
 One-command non-network verification (`tools/verify_local`); per-run manifest with config/scenario
 hashes, seed, git revision, and (for LLM) prompt-template/model/temperature hashes; `verify_research_
 run` replays + audits any run; real/mock runs replay from a lossless key-masked transcript. All
-baselines reproduce with zero network. **Concrete demonstration:** a full 50-year mock run
-(`mock50_agr`, 4267 LLM calls, 0% fallback) replays *from its transcript* to the identical world-hash
-`0135fa05…` with zero network and zero missed calls; a matched 50-year real-LLM run captures the same
-transcript for `--from-transcript` replay. Artifact: engine + scenario package + benchmark + seeds +
+baselines reproduce with zero network. **Concrete demonstration (mock AND real).** A full 50-year mock run (`mock50_agr`, 4267 LLM calls,
+0% fallback) replays *from its transcript* to the identical world-hash `0135fa05…` with zero network
+and zero missed calls. More importantly, a **real** Gemini run (`real50_agr`, 649 calls including 3
+repaired/fallback responses) replays *from its transcript* to the identical world-hash `a2e06edd…`
+with zero network — i.e. **a real LLM run is bit-reproducible from an audited transcript**, including
+the repair/fallback path. To our knowledge this closes a reproducibility gap common to LLM-ABM work
+(where real runs cannot be re-derived). Artifact: engine + scenario package + benchmark + seeds +
 protocol; 299 tests pass under a network-blocking guard.
 
 ## 8. Limitations (must state)

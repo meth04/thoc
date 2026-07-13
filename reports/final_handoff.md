@@ -96,7 +96,11 @@ Hướng: bài phương pháp LLM-ABM (không phải kinh tế thực chứng). 
   E1_decision_maker_results.md`).
 - **Bản thảo**: `reports/paper_draft.md` (v0.1) + `reports/publication_roadmap.md` +
   `reports/design_reevaluation.md`. Claim tier: mechanism_benchmark + methodology (KHÔNG empirical).
-- Suite **299 passed**, ruff sạch. Pilot: `mock50_agr` (transcript-replay TRÙNG) + `real50_agr`
-  (đang chạy nền, transcript-backed).
+- Suite **299 passed**, ruff sạch. Pilot: `mock50_agr` (transcript-replay TRÙNG hash `0135fa05`).
+- **`real50_agr`** (real LLM benchmark scenario, transcript-backed): dừng ÊM ở tick 46 (budget guard
+  do server T0 disconnect dai dẳng — không degrade), 649 call, fallback 0.46%, ~$0.47. Kết quả: 2 hợp
+  đồng, 0 entity, biết chữ 12% (real LLM tối thiểu định chế — nhất quán real50). **Real transcript-
+  replay TRÙNG hash `a2e06edd`** (kể cả đường repair/fallback) → run LLM THẬT tái lập bit-for-bit từ
+  transcript, không mạng. Đây là cổng reproducibility cho real mà LLM-ABM thường thiếu.
 - **PENDING_COMPUTE (external)**: ensemble ≥30 seed × ≥2 model real + paired CI; ablation đăng ký;
   sensitivity Morris/Sobol; related-work + figures. Đây là điều kiện để lên "top-tier" thật.
