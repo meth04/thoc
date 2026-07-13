@@ -39,11 +39,19 @@ def _the_cua(w: World, aid: str) -> TheChinhSach:
 
 
 class MindMock:
-    def __init__(self, w: World, fast: bool, run_dir: Path | None, p_malformed: float):
+    def __init__(self, w: World, fast: bool, run_dir: Path | None, p_malformed: float,
+                 transcript_path: Path | None = None):
         self.fast = fast
         self.p_malformed = p_malformed
         self.provider = MockProvider(w, p_malformed, fast)
         self.log = LLMCallLog(run_dir / "llm_calls.sqlite" if run_dir else None)
+        # transcript.jsonl append-only (P1 reproducibility): ghi mọi call → replay không
+        # mạng. None = tắt (giữ hành vi cũ). Lấy lười để tránh phụ thuộc vòng import.
+        self.transcript = None
+        if transcript_path is not None:
+            from minds.transcript import TranscriptWriter
+
+            self.transcript = TranscriptWriter(transcript_path)
         self.so_call = 0
         self.so_fallback = 0
         self.so_nghi = 0
@@ -76,6 +84,15 @@ class MindMock:
         """Ghi llm_calls + gom telemetry (token/latency/lượt công cụ) theo tick. Gọi dưới
         self._lock ở nhánh real fan-out; nhánh nền/mock đơn luồng nên an toàn."""
         self.log.ghi(w.tick, req, resp, fallback)
+        # transcript lossless (P1): raw ĐẦY ĐỦ (llm_calls cắt 4000 ký tự nên không dùng
+        # replay được). Bỏ qua call LỖI (provider "loi") — chúng là điểm dừng, không có
+        # response để replay; miss transcript lúc replay sẽ tự tái hiện dừng-êm.
+        if self.transcript is not None and resp.provider != "loi":
+            self.transcript.ghi(
+                w.tick, req.tier, resp.provider, resp.model,
+                w.cfg.get(f"models.tiers.{req.tier}.temperature", None),
+                req.prompt, resp.text, resp.tok_in, resp.tok_out,
+            )
         self.tok_in += resp.tok_in
         self.tok_out += resp.tok_out
         self.so_luot_cong_cu += max(0, resp.retries)  # với vòng agentic = số lượt công cụ
@@ -157,6 +174,13 @@ class MindMock:
                     except Exception as e:  # noqa: BLE001 — thẻ hỏng thì giữ thẻ cũ
                         w.ghi_unrecognized(aid, "the_chinh_sach", f"patch hỏng: {e}")
                 ke_hoach[aid] = kh
+                # mock (_tuan_tu) chia sẻ da_nham giữa người nghĩ để người-thẻ/entity không
+                # nhắm trùng thửa công. Lúc GATHER, PersonaBot đã nạp da_nham; nhưng
+                # replay-from-transcript KHÔNG chạy PersonaBot nên tái dựng phần đã nhắm từ
+                # chính kế hoạch — idempotent với run gốc (canh_thua đã nằm sẵn trong tập).
+                # real (_tuan_tu=False): thinker dùng da_nham RỖNG riêng → KHÔNG đụng ở đây.
+                if self._tuan_tu:
+                    da_nham.update(kh.canh_thua)
 
         # --- bộ phiên dịch intent lạ (real: 1 call LLM; mock: log như cũ) ---
         if thung_intent_la:
@@ -184,6 +208,8 @@ class MindMock:
         if w.tick % int(w.cfg.get("minds.reflection_moi_n_tick")) == 0:
             self._reflection(w)
         self.log.flush()
+        if self.transcript is not None:
+            self.transcript.flush()
         return ke_hoach
 
     def _nguoi_than_va_oan(self, w: World, aid: str, k: int = 3):
@@ -318,7 +344,8 @@ class MindMock:
 
 
 def tao_mind_mock(w: World, fast: bool = False, run_dir: Path | None = None,
-                  p_malformed: float | None = None) -> MindMock:
+                  p_malformed: float | None = None,
+                  transcript_path: Path | None = None) -> MindMock:
     if p_malformed is None:
         p_malformed = float(w.cfg.get("models.mock.p_malformed_mac_dinh"))
-    return MindMock(w, fast, run_dir, p_malformed)
+    return MindMock(w, fast, run_dir, p_malformed, transcript_path=transcript_path)

@@ -82,3 +82,21 @@ rồi hiệu chuẩn + kiểm định ngoài mẫu. Đây là điều kiện DUY
 
 ## Không commit
 Working tree bẩn (thay đổi người dùng + phiên này). KHÔNG stage/commit/reset. Người dùng tự duyệt.
+
+## Publication phase (2026-07-13): hạ tầng bài báo + thí nghiệm + pilot
+Hướng: bài phương pháp LLM-ABM (không phải kinh tế thực chứng). Đã code + chạy (không mạng cho phần local):
+- **P3 micro-task benchmark** (`tools/microtasks.py`, 10 test): 4 task ground-truth (constraint/
+  contract/no-sell/shock). E2: mọi baseline 0% vi phạm (engine enforce feasibility); action-diversity
+  phân biệt (rulebot 2.14 > subsistence 0.99); chỉ adaptive phản ứng sốc.
+- **P1 transcript-replay** (`minds/transcript.py`, `replay.py --from-transcript`, 6 test): mock/real
+  ghi `transcript.jsonl`; replay-từ-transcript TRÙNG hash (mock50_agr 4267 call → hash `0135fa05`).
+  Manifest thêm prompt/model/temperature hash.
+- **E1 decision-maker ensemble** (4 policy × 3 seed): rulebot 337 hợp đồng vs feasible_random/
+  subsistence/adaptive **0 hợp đồng** — "định chế tự phát" là hàm của decision-maker (`reports/
+  E1_decision_maker_results.md`).
+- **Bản thảo**: `reports/paper_draft.md` (v0.1) + `reports/publication_roadmap.md` +
+  `reports/design_reevaluation.md`. Claim tier: mechanism_benchmark + methodology (KHÔNG empirical).
+- Suite **299 passed**, ruff sạch. Pilot: `mock50_agr` (transcript-replay TRÙNG) + `real50_agr`
+  (đang chạy nền, transcript-backed).
+- **PENDING_COMPUTE (external)**: ensemble ≥30 seed × ≥2 model real + paired CI; ablation đăng ký;
+  sensitivity Morris/Sobol; related-work + figures. Đây là điều kiện để lên "top-tier" thật.

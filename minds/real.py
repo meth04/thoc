@@ -63,9 +63,11 @@ class GatewayCoPacing:
 
 
 class MindReal(MindMock):
-    def __init__(self, w: World, run_dir: Path, cfg, env, quota_db: Path,
-                 transport=None, cho_toi_s: float = 180.0):
-        super().__init__(w, fast=True, run_dir=run_dir, p_malformed=0.0)
+    def __init__(self, w: World, run_dir: Path | None, cfg, env, quota_db: Path | None,
+                 transport=None, cho_toi_s: float = 180.0,
+                 transcript_path: Path | None = None):
+        super().__init__(w, fast=True, run_dir=run_dir, p_malformed=0.0,
+                         transcript_path=transcript_path)
         self.cfg = cfg
         self.env = env
         self.quota = QuotaCounter(
@@ -308,5 +310,6 @@ class MindReal(MindMock):
 
 
 def tao_mind_real(w: World, run_dir: Path, cfg, env, quota_db: Path,
-                  transport=None) -> MindReal:
-    return MindReal(w, run_dir, cfg, env, quota_db, transport=transport)
+                  transport=None, transcript_path: Path | None = None) -> MindReal:
+    return MindReal(w, run_dir, cfg, env, quota_db, transport=transport,
+                    transcript_path=transcript_path)

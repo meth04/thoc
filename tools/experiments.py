@@ -80,8 +80,15 @@ def scenario_overlay(name: str) -> Path | None:
 def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
                    config_digest: str, config_overlays: list[Path],
                    scenario: str | None, treatments: list[str] | None = None,
-                   policy: dict | None = None) -> dict[str, Any]:
-    """Tạo metadata đủ để phân biệt hai run có cùng seed nhưng khác giả định."""
+                   policy: dict | None = None, prompt_template_hash: str | None = None,
+                   model_snapshot: list[str] | None = None,
+                   temperature: Any = None) -> dict[str, Any]:
+    """Tạo metadata đủ để phân biệt hai run có cùng seed nhưng khác giả định.
+
+    ``prompt_template_hash`` (sha256 của minds/prompts.py), ``model_snapshot`` (danh sách
+    provider/model dùng) và ``temperature`` biến prompt/model từ hộp đen thành *treatment
+    có version* (P1 reproducibility) — kwarg optional, không phá chữ ký cũ.
+    """
     scope: dict[str, Any] | None = None
     scenario_files: dict[str, str] = {}
     if scenario is not None:
@@ -115,6 +122,9 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
             "policy": policy,
             "scenario_scope": scope,
             "scenario_files_sha256": scenario_files,
+            "prompt_template_hash": prompt_template_hash,
+            "model_snapshot": list(model_snapshot) if model_snapshot is not None else None,
+            "temperature": temperature,
             "git_revision": git_revision(),
             "python": sys.version,
         },

@@ -13,6 +13,7 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from engine.config import load_config
 from engine.tick import chay_mot_tick
@@ -31,8 +32,10 @@ def lay_mind_fn(mode: str, w: World, args: argparse.Namespace):
         from minds.orchestrator import tao_mind_mock
 
         run_dir = DATA_DIR / (args.run_name or f"mock_{args.seed}")
+        # transcript mock chỉ bật khi --transcript (dùng để test replay-from-transcript)
+        tp = run_dir / "transcript.jsonl" if args.transcript else None
         return tao_mind_mock(w, fast=args.fast, run_dir=run_dir,
-                             p_malformed=args.p_malformed)
+                             p_malformed=args.p_malformed, transcript_path=tp)
     if mode == "real":
         from minds.keypool import nap_env
         from minds.real import tao_mind_real
@@ -46,9 +49,36 @@ def lay_mind_fn(mode: str, w: World, args: argparse.Namespace):
             raise SystemExit("PENDING KEYS — chưa có key thật trong .env.")
         run_dir = DATA_DIR / (args.run_name or f"real_{args.seed}")
         run_dir.mkdir(parents=True, exist_ok=True)
+        # real LUÔN ghi transcript (cổng reproducibility: replay real không mạng)
         return tao_mind_real(w, run_dir, w.cfg, env,
-                             quota_db=DATA_DIR / "quota_counters.sqlite")
+                             quota_db=DATA_DIR / "quota_counters.sqlite",
+                             transcript_path=run_dir / "transcript.jsonl")
     raise SystemExit(f"Mode không hỗ trợ: {mode}")
+
+
+def _repro_llm_meta(cfg, mode: str):
+    """(prompt_template_hash, model_snapshot, temperature) cho manifest (P1)."""
+    from tools.experiments import sha256_file
+
+    prompts_py = Path(__file__).resolve().parent / "minds" / "prompts.py"
+    ph = sha256_file(prompts_py) if prompts_py.exists() else None
+    if mode == "mock":
+        return ph, ["mock/personabot"], {"mock": None}
+    models: list[str] = []
+    temps: dict[str, Any] = {}
+    for tier in ("T0", "T1", "T2", "T3", "T4"):
+        for r in cfg.get(f"models.tiers.{tier}.routes") or []:
+            m = f"{r['provider']}/{r['model']}"
+            if m not in models:
+                models.append(m)
+        temps[tier] = cfg.get(f"models.tiers.{tier}.temperature", None)
+    for nen in ("nen_hoi_ky", "chronicle"):
+        c = cfg.get(f"models.{nen}") or {}
+        if c:
+            m = f"{c['provider']}/{c['model']}"
+            if m not in models:
+                models.append(m)
+    return ph, models, temps
 
 
 def chay_smoke(args) -> int:
@@ -110,6 +140,8 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--run-name", default=None)
     ap.add_argument("--fast", action="store_true", help="tắt giả lập latency của mock")
+    ap.add_argument("--transcript", action="store_true",
+                    help="mock: ghi transcript.jsonl để replay-from-transcript (real luôn ghi)")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--i-am-sure", action="store_true")
     ap.add_argument("--smoke", action="store_true")
@@ -152,11 +184,15 @@ def main() -> int:
 
         pol = tao_policy(args.policy)
         policy_meta = {"name": pol.name, "version": pol.version, "params": dict(pol.params)}
+    prompt_template_hash = model_snapshot = temperature = None
+    if args.mode in ("mock", "real"):
+        prompt_template_hash, model_snapshot, temperature = _repro_llm_meta(cfg, args.mode)
     manifest = build_manifest(
         run_name=run_name, mode=args.mode, seed=args.seed, ticks_requested=tong_tick,
         config_digest=cfg.digest(), config_overlays=overlays, scenario=args.scenario,
         treatments=["permute_personas"] if args.permute_personas else [],
-        policy=policy_meta,
+        policy=policy_meta, prompt_template_hash=prompt_template_hash,
+        model_snapshot=model_snapshot, temperature=temperature,
     )
     ck_moi_nhat = ck_dir / "checkpoint_moi_nhat.json"
     if args.resume and ck_moi_nhat.exists():
@@ -254,6 +290,8 @@ def main() -> int:
         meta["luot_cong_cu_phien"] = int(getattr(mind_fn, "so_luot_cong_cu", 0))
         meta["concurrency"] = int(getattr(mind_fn, "concurrency", 0))
         mind_fn.log.dong()
+        if getattr(mind_fn, "transcript", None) is not None:
+            mind_fn.transcript.dong()
         # telemetry LLM chi tiết từ llm_calls.sqlite → reports/telemetry.{md,json}
         from tools.telemetry import sinh_bao_cao
         tele = sinh_bao_cao(run_dir, cfg.get("models.gia_token"))
