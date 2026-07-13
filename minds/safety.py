@@ -9,7 +9,7 @@ thiểu và chưa hề có ai trong hộ dự định canh.
 
 from __future__ import annotations
 
-from engine.economy import household_food_need, household_grain, households
+from engine.economy import household_food_equivalent, household_food_need, households
 from engine.intents import KeHoach
 from engine.world import World
 
@@ -30,7 +30,7 @@ def ap_dung_san_an_toi_thieu(w: World, ke_hoach: dict[str, KeHoach], bc,
     # Hộ được chuẩn hóa ở engine.economy để vợ/chồng không bị xét hai lần.
     for members in households(w):
         need = household_food_need(w, members)
-        if household_grain(w, members) >= ty_le_du_tru * need:
+        if household_food_equivalent(w, members) >= ty_le_du_tru * need:
             continue
         plans = [ke_hoach.get(aid) for aid in members]
         if any(plan is not None and plan.canh_thua for plan in plans):
@@ -59,6 +59,6 @@ def ap_dung_san_an_toi_thieu(w: World, ke_hoach: dict[str, KeHoach], bc,
         da_nham.update(parcels)
         da_bao_ve += 1
         w.events.ghi(w.tick, "san_an_toi_thieu", ho=members[0], nguoi_canh=farmer,
-                     thua=parcels[0], du_tru=round(household_grain(w, members), 1),
+                      thua=parcels[0], du_tru=round(household_food_equivalent(w, members), 1),
                      nhu_cau=round(need, 1))
     return da_bao_ve

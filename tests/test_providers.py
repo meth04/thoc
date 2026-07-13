@@ -125,6 +125,25 @@ def test_d_budget_thieu_dung_em_khong_degrade():
     assert du2  # cần ít thì vẫn đi tiếp — không degrade, không chết oan
 
 
+def test_strict_treatment_dung_mot_route_cho_moi_tier():
+    """Research treatment không được lẫn model/provider theo học vấn hay failover."""
+    cfg = load_config()
+    cfg.raw()["minds"]["nghiem_thuc"] = {
+        "bat": True,
+        "provider": "aistudio",
+        "model": "gemini-3.1-flash-lite",
+        "temperature": 0.2,
+        "max_output_tokens": 321,
+    }
+    gw = GatewayReal(cfg, lam_env(1), QuotaCounter(None),
+                     transport=fake_transport(lambda _r: resp_aistudio("[]")))
+    routes = [gw.routes_cua_tier(t)[0] for t in ("T0", "T1", "T2", "T3", "T4")]
+    assert {(r.provider, r.model) for r in routes} == {
+        ("aistudio", "gemini-3.1-flash-lite")
+    }
+    assert gw.goi(req("T4")).model == "gemini-3.1-flash-lite"
+
+
 def test_e_t1_can_key_tran_sang_9router():
     """(e) T1 cạn route aistudio → tự tràn sang 9router, log đúng provider."""
     import time

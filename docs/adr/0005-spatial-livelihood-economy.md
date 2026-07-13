@@ -1,6 +1,6 @@
 # ADR 0005 — Không gian kinh tế, sinh kế đa dạng, tài nguyên tái tạo (T13)
 
-- Status: **Proposed** (2026-07-12)
+- Status: **Implemented core + test-enforced** (2026-07-13; original design 2026-07-12)
 - Context: `docs/MODEL_CHARTER.md` §3 (5 lớp — Lớp-1 vật lý, Lớp-2 kế toán sổ kép, Lớp-3 định
   chế bật/tắt, Lớp-4 hành vi chỉ-trả-intent, Lớp-5 quan sát chỉ-đọc), §4 (định nghĩa tự
   phát), §5 (cổng định chế minh bạch + anti-teleology); `docs/adr/0001` §A (invariant), §B
@@ -8,9 +8,10 @@
   scenario-flag default OFF); `docs/adr/0002` (BehaviorPolicy chỉ trả intent); `docs/adr/0003`
   (household/market/land, homestead, rent clause, price/rent tách); `docs/adr/0004` (credit
   claim/commodity money/fiscal, cổng §5, migration không phá hash); `TASKS.md` §7 T13.
-- Deciders: research-planner + agrarian-economist + model-architect (design). Implementation &
-  independent test/QA sign-off PENDING (xem Handoff).
-- Scope guard: ADR này **KHÔNG** implement engine (T13 gạch 1 BẮT BUỘC design-before-code). Nó
+- Deciders: research-planner + agrarian-economist + model-architect (design). Core implementation
+  (two-bank/ferry/clearing, winter crops, wild-chicken pool, care labor, metrics) and local QA are
+  complete; empirical calibration remains PENDING.
+- Scope guard: Bản thiết kế này đã được triển khai ở engine; nó
   chốt topology/ownership/state/lifecycle/serialization/event-ledger schema, thứ tự tick,
   failure/rollback, cổng scenario, migration, test matrix và phân định **IMPLEMENTED vs NEW**.
   Mọi số nêu ở đây là `design_assumption` (charter §2); không mục nào là bằng chứng thực chứng.
@@ -21,10 +22,9 @@
    một cờ scenario `khong_gian.bat` (mặc định OFF) + sub-flag. OFF ⇒ mọi code-path T13 no-op ⇒
    `preindustrial_closed_v1`, mọi run cũ, và `agrarian_transition_v1` gốc (không bật overlay)
    giữ NGUYÊN hành vi + world-hash + config-digest (§7, §8).
-2. **Ledger-based, không đổi hash-struct.** Ưu tiên đưa state mới vào ledger (`so_du`, đã hash)
-   hoặc vào field World **ngoài** hash-struct (theo tiền lệ `ca_ton`/`poverty_streak`). Layout
-   tuple trong `world_hash()` (`world.py:309-360`) KHÔNG đổi; nội dung mới chỉ xuất hiện trong
-   container sẵn có (so_du_s, parcels_s.loai) khi overlay ON (§6).
+2. **Ledger-based + behavioral hash đầy đủ.** Asset flow đi qua ledger; mọi state có thể đổi
+   tick/prompt sau (kể cả pool commons) vào `World.behavioral_state()`/`world_hash`. Chỉ event,
+   metric journal và cache lười xác định từ seed/config/tick được ngoài hash.
 3. **Mọi flow có counterpart + FlowRegistry.** Mọi mint/burn qua `DongSinhHuy`/`Transaction` với
    `luong` đã `dang_ky_flows` (`world.py:415`); mọi chuyển tài sản là `ledger.chuyen` cân. Không
    food-mint/xu-mint sau tick 0; không teleport người/hàng.
@@ -243,32 +243,32 @@ gà rừng theo.
 
 ## 8. Calendar — QUYẾT ĐỊNH (T13 gate 7)
 
-**QUYẾT ĐỊNH: GIỮ 2 tick/năm. KHÔNG chuyển sang 3 mùa/tick.** Thêm **vụ đông** như một LỰA CHỌN
-canh trong mùa khô (tick chẵn), scenario-gated.
+> **SUPERSEDED (2026-07-13).** Quyết định giữ 2 tick/năm ở bản ADR đầu không đáp ứng yêu cầu
+> nghĩa đen “hai vụ lúa và một vụ đông”. Nó được giữ trong `DECISIONS.md` như lịch sử thiết kế;
+> calendar dưới đây là contract hiện hành của riêng overlay `spatial_v1`.
 
-- **Ánh xạ (least-risk):** tick lẻ (mùa mưa) = **vụ lúa** (như hiện tại); tick chẵn (mùa khô) =
-  **vụ đông** (ngô HOẶC khoai), hiện KHÔNG canh được ⇒ đây là cây trồng MỚI cho mùa khô. Mỗi năm
-  2 vụ canh (lúa mưa + đông khô). "Một thửa không gieo hai cây cùng mùa" thỏa hiển nhiên (một cây/
-  tick/thửa đã cưỡng chế bởi `da_canh_tick_nay`, `production.py:168`).
-- **Mỗi cây tối giản:** {season (lúa=mưa, đông=khô), công lao động, output, risk (hệ số thời tiết
-  riêng), storage-value (`quy_doi_dinh_duong`, hao kho), tác-động-đất}. Ngô/khoai = tài sản riêng
-  (`ngo`/`khoai`) ăn được, trữ được, chịu thoái hóa đất ở mức tối giản. KHÔNG thêm mô phỏng hạt
-  giống/nước/dinh dưỡng chi tiết.
-- **Trade-off ghi rõ:**
-  - *Đã chọn (giữ 2 tick/năm):* KHÔNG đụng ĐƠN VỊ THỜI GIAN ⇒ age/consumption/contract-duration/
-    hazard/weather/reporting GIỮ NGUYÊN nghĩa ⇒ **không nhân/chia ngầm**, không phá replay/hash
-    của mọi run cũ. Chi phí: benchmark biểu diễn "1 vụ lúa mưa + 1 vụ đông khô = 2 vụ/năm", KHÔNG
-    phải nghĩa đen "2 vụ lúa + 1 vụ đông = 3 canh/năm". Ghi nhận là **giản lược có chủ ý** (scope).
-  - *KHÔNG chọn (3 mùa/tick):* đúng nghĩa đen 3 canh/năm nhưng phải **chuyển đổi CÓ CHỦ Ý TOÀN BỘ**
-    `tuoi_tick`↔năm, `nguoi_lon_kg_tick`/`tre_em_kg_tick`, mọi `thoi_han`/`moi_n_tick` hợp đồng,
-    `tu_vong_gompertz`/`sinh_san` (hazard/năm), `thoi_tiet` (rút/năm), `tong_tick`, và mọi report
-    quy-năm. Rủi ro phá replay/hash MỌI run + sai lệch ngầm nếu bỏ sót một tham số ⇒ **BÁC** ở
-    phiên này. Nếu tương lai cần đúng nghĩa đen, làm ADR riêng + migration versioned + bộ test
-    chuyển-đổi đầy đủ.
-- **Hash:** vụ đông là action canh MỚI ở tick chẵn ⇒ đổi hash **khi ON**. OFF ⇒ tick chẵn không
-  canh ⇒ hash legacy bất biến. Asset `ngo`/`khoai` chỉ hiện khi ON. Flow `ngo/gat`(nguon),
-  `ngo/an`(sink), `ngo/hao_kho`(sink) (+ khoai) đăng ký vô điều kiện (không dùng ⇒ không tích lũy
-  ⇒ không đổi hash, tiền lệ fiscal `world.py:459-465`).
+**QUYẾT ĐỊNH HIỆN HÀNH: `spatial_v1` dùng 3 mùa 4 tháng/năm.** `thoi_gian.lich_mua` là
+`[lua_1, lua_2, dong]`: hai tick đầu đều canh lúa, tick thứ ba chỉ cho ngô **hoặc** khoai.
+Một thửa chỉ nhận một cây trong một tick; không có mô hình hạt giống/nước/dinh dưỡng vi mô.
+
+- **Đơn vị thời gian có chủ ý:** `World.tick_moi_nam()` suy từ `thang_moi_tick`; calendar có
+  nhãn bắt buộc phải đủ đúng số mùa. `tuoi_tick` vẫn lưu theo nửa-năm nên mỗi mùa 4 tháng tăng
+  `2/3`; `tuoi_nam`, trưởng thành và mọi consumer tuổi giữ cùng nghĩa. Thời tiết/dịch được rút
+  một lần cho cả ba mùa; relationship decay chạy cuối năm; report/metric/manifest ghi calendar
+  thực chạy thay vì mặc định `tick//2`.
+- **Flow theo thời gian:** overlay quy đổi 6→4 tháng cho khẩu phần, ngày công, hao kho, sức khỏe,
+  sinh sản theo tick, cá/gà/chicken feed và hao thịt. Gompertz được engine đổi từ hazard năm bằng
+  `1-(1-q_nam)^(1/tick_moi_nam)`, không nhân xác suất chết theo số mùa. T0 bật endowment đúng một
+  năm food-equivalent (người lớn: 60×3=180kg) — stock thật, không trợ cấp sau đó.
+- **Hợp đồng:** grammar đã định nghĩa `thoi_han`/`moi_n_tick` theo tick, nên không được âm thầm
+  nhân mọi hợp đồng. Các parameter có ngữ nghĩa năm trong rulebot/overlay (ví dụ tô năm, gợi ý
+  childcare) được quy đổi tường minh; intent/LLM vẫn thấy đơn vị tick trong schema.
+- **Legacy/replay:** khi không có `lich_mua`, code path giữ chính xác calendar 2-tick và index
+  năm cũ; overlay 3 mùa có config digest/world-hash riêng. Regression test kiểm calendar
+  `lua_1,lua_2,dong`, weather chung năm, tuổi +1 sau 3 tick và legacy 2-tick không đổi.
+- **Hash/flows cây trồng:** vụ đông tạo asset riêng `ngo`/`khoai`, ăn được và chịu hao kho;
+  tất cả nguồn/sink đăng ký FlowRegistry. Tắt overlay ⇒ không có action/asset stock mới ⇒ replay
+  legacy bất biến.
 
 ---
 

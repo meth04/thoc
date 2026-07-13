@@ -52,6 +52,10 @@ class KeHoach:
     qua_song: tuple | None = None  # khách xin qua: (den_bo, tai_san_tra, phi_chap_nhan)
     # khai hoang (ADR 0005 §4.1): vỡ rừng/đồi CÔNG thành ruộng (tốn công, homestead qua canh)
     khai_hoang: list[str] = field(default_factory=list)  # thửa rừng/đồi công muốn vỡ hoang
+    # vụ đông (scenario-gated): [(thửa, "ngo"|"khoai")], chỉ canh mùa khô
+    canh_vu_dong: list[tuple[str, str]] = field(default_factory=list)
+    # chăm trẻ: id trẻ mà người này tự nguyện chăm trong tick (kin hoặc có gop_cong trả công)
+    cham_tre_cho: list[str] = field(default_factory=list)
     # chăn nuôi
     bat_ga_cong: float = 0.0  # công dành đi bắt gà rừng về nuôi
     giet_ga: int = 0  # giết bao nhiêu con lấy thịt

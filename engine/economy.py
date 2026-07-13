@@ -37,8 +37,27 @@ def household_food_need(w: World, members: list[str]) -> float:
     )
 
 
+def food_equivalence(w: World) -> dict[str, float]:
+    """Kg-thóc-equivalent trên một đơn vị thực phẩm đang được scenario cho phép."""
+    values = {"thoc": 1.0}
+    for crop, spec in w.cfg.get("khong_gian.vu_dong.cay", {}).items():
+        if isinstance(spec, dict) and "quy_doi_dinh_duong" in spec:
+            values[str(crop)] = float(spec["quy_doi_dinh_duong"])
+    return values
+
+
 def household_grain(w: World, members: list[str]) -> float:
+    """Kho thóc riêng (legacy-compatible); dùng food_equivalent cho an ninh thực phẩm."""
     return sum(w.ledger.so_du(aid, "thoc") for aid in members)
+
+
+def household_food_equivalent(w: World, members: list[str]) -> float:
+    """Tồn kho lương thực quy thóc, gồm lúa và cây vụ đông nếu scenario bật."""
+    return sum(
+        w.ledger.so_du(aid, asset) * factor
+        for aid in members
+        for asset, factor in food_equivalence(w).items()
+    )
 
 
 def household_snapshot(w: World) -> list[dict[str, float | str]]:
@@ -47,12 +66,14 @@ def household_snapshot(w: World) -> list[dict[str, float | str]]:
     for members in households(w):
         need = household_food_need(w, members)
         grain = household_grain(w, members)
+        food_equiv = household_food_equivalent(w, members)
         rows.append({
             "head": members[0],
             "members": float(len(members)),
             "grain": grain,
+            "food_equivalent": food_equiv,
             "food_need": need,
-            "food_security": grain / need if need else 0.0,
+            "food_security": food_equiv / need if need else 0.0,
         })
     return rows
 

@@ -158,7 +158,7 @@ def tinh_metrics(w: World) -> dict[str, Any]:
     dat_metric = land_price_productivity(w, int(w.cfg.get("quan_sat.cua_so_dat_tick")))
     m = {
         "tick": w.tick,
-        "nam": w.tick // 2,
+        "nam": w.nam(),
         "dan_so": len(song),
         "nguoi_lon": len(nguoi_lon),
         "tong_thoc": round(sum(thoc), 1),

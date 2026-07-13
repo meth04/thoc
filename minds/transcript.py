@@ -52,8 +52,16 @@ class TranscriptWriter:
         self._n = 0
 
     def ghi(self, tick: int, tier: str, provider: str, model: str, temperature,
-            prompt: str, response_raw: str, tok_in: int, tok_out: int) -> None:
+            prompt: str, response_raw: str, tok_in: int, tok_out: int,
+            *, error_type: str | None = None, error_message: str | None = None) -> None:
+        """Ghi cả response thành công lẫn lỗi terminal.
+
+        Một lỗi provider là một nhánh điều khiển có tác dụng lên run (fallback/dừng êm),
+        không phải ``missing data``. Ghi nó vào transcript để replay tái hiện đúng nhánh
+        thay vì cố ý tạo một miss giả ở lần chạy sau.
+        """
         self._n += 1
+        is_error = error_type is not None or provider == "loi"
         self._f.write(json.dumps({
             "call_id": self._n,
             "tick": int(tick),
@@ -64,6 +72,9 @@ class TranscriptWriter:
             "prompt_hash": bam_prompt(prompt),  # băm prompt GỐC (khớp lúc replay)
             "request": che_key(prompt),         # lưu bản đã che để người đọc/kiểm tra
             "response_raw": che_key(response_raw or ""),
+            "outcome": "error" if is_error else "response",
+            "error_type": error_type,
+            "error_message": che_key(error_message or "") if is_error else "",
             "tok_in": int(tok_in),
             "tok_out": int(tok_out),
         }, ensure_ascii=False) + "\n")
@@ -129,6 +140,10 @@ class TranscriptProvider:
             d = self.reader.lay(req.prompt)
         except KeyError:
             raise LoiHetQuota("transcript thiếu response cho prompt") from None
+        if d.get("outcome") == "error" or d.get("provider") == "loi":
+            message = str(d.get("error_message") or d.get("response_raw")
+                          or "provider error recorded in transcript")
+            raise LoiHetQuota(message)
         return LLMResponse(
             text=d.get("response_raw", ""), provider=d.get("provider", "transcript"),
             model=d.get("model", ""), tok_in=int(d.get("tok_in", 0)),

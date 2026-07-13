@@ -28,12 +28,16 @@ MindFn = Callable[[World], dict[str, KeHoach]]
 def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     w.tick += 1
 
-    # 1. bat_dau: tuổi +1 tick; thời tiết năm được rút (lazy)
+    # 1. bat_dau: tuổi tiến đúng một khoảng lịch; ``tuoi_tick`` được lưu theo nửa-năm
+    # để legacy 2-tick/năm không đổi, còn calendar 3 mùa/năm tăng 2/3 mỗi mùa.
+    buoc_tuoi = 2.0 / w.tick_moi_nam()
+    if buoc_tuoi.is_integer():
+        buoc_tuoi = int(buoc_tuoi)
     for a in w.agents.values():
         if a.con_song:
-            a.tuoi_tick += 1
+            a.tuoi_tick += buoc_tuoi
     loai_tt, _ = w.thoi_tiet(w.tick)
-    if w.mua_mua():
+    if w.dau_nam():
         w.events.ghi(w.tick, "thoi_tiet", kieu=loai_tt)
 
     # 2+3. trigger + quyết định
@@ -118,11 +122,20 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     # 5. san_xuat: sinh công → góp công theo hợp đồng → canh/khai thác/chế tác/xây → R&D
     w.kl_hd_tick = 0.0  # tích lũy giá trị chuyển giao qua hợp đồng trong tick (quy thóc)
     w.gat_tick.clear()
+    w.canh_tick.clear()
+    w.thu_hoach_cay_tick = []
     w.cong_dung_tick = {}
     w.kl_thanh_toan_tick = {}
     w.settlement_fail_tick = 0  # reset đếm thất bại thanh toán mỗi tick (observation, T07)
     w.ben_kia_tick = set()  # reset ai-qua-sông (ADR 0005) — ferry bên dưới nạp lại
+    w.cong_cham_tre_theo_cap = {}
+    w.cham_tre_tick = {}
     production.sinh_cong(w)
+    # Chăm trẻ là trade-off công thật: người chăm dùng công của chính mình trước mọi sản
+    # xuất; worker có hợp đồng gop_cong được credit đúng phần công đã chăm thay cha/mẹ.
+    from engine import care
+
+    care.buoc_cham_tre(w, ke_hoach)
     contracts.gop_cong_dau_san_xuat(w)
     # chi công (fiscal.bat): trưởng làng chi treasury xây thủy lợi TRƯỚC canh tác (trưởng đã
     # có công; treasury từ các tick trước) — thủy lợi xây tick này giúp ngay vụ tick này.
@@ -140,6 +153,7 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     from engine import xa_hoi
 
     cn_mod.tai_sinh_ca(w)  # đàn cá sông hồi trước, người đánh sau (trong 6 tháng đó)
+    cn_mod.tai_sinh_ga_rung(w)
     cn_mod.truong_thanh_ga(w)  # gà con của tick trước nay đủ 6 tháng nuôi
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
@@ -198,6 +212,11 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     w.rao_vat = rao_ca
     kl_cho = market.phien_cho(w, lenh_tick)
     market.phien_dat(w, w.niem_yet_dat, tra_gia)
+    # Giá chỉ do chợ tạo. Sau phiên, mỗi agent cập nhật reservation value của chính mình
+    # từ giao dịch vừa quan sát để tick sau không lặp mãi prior ban đầu.
+    from engine.pricing import cap_nhat_gia_ky_vong
+
+    cap_nhat_gia_ky_vong(w)
 
     # 7. thi_hanh_hop_dong: clause định kỳ, đáo hạn, vi phạm, cưỡng chế
     contracts.thi_hanh_hop_dong_tick(w, chet_tick=w.chet_tick_truoc)

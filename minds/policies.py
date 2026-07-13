@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 
 from engine.intents import KeHoach
 from engine.market import Lenh
+from engine.pricing import gia_ky_vong
 from engine.spatial import _hai_bo_bat
 from engine.world import World
 from minds.rulebot import (
@@ -234,8 +235,6 @@ class AdaptivePolicy:
         ngay_cong = float(w.cfg.get("nhu_cau.ngay_cong_moi_tick"))
         du_tru = self._du_tru_muc_tieu(w, an_nguoi_lon)
         p_t = self._gia_thoc(w)
-        gia_go = w.gia_gan_nhat("go") or 12.0
-        gia_thoc_go = w.gia_gan_nhat("thoc/go") or (1.0 / gia_go)
         bc = _BoiCanhTick(w)
         da_nham: set[str] = set()
         ke_hoach: dict[str, KeHoach] = {}
@@ -246,6 +245,7 @@ class AdaptivePolicy:
             kh = KeHoach(id=aid)
             if a.truong_thanh(tt):
                 thoc = w.ledger.so_du(aid, "thoc")
+                gia_thoc_go = gia_ky_vong(w, aid, "thoc", "go")
                 no_du = thoc >= du_tru
                 if w.mua_mua():
                     # nền tự cung: canh tối đa thửa khả thi, chừa một tick lương ăn

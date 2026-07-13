@@ -147,7 +147,9 @@ def _quet_tick(w: World) -> tuple[list[tuple], dict[str, float], float, float, f
 _SPATIAL_KEYS = (
     "river_crossing_volume", "ferry_fare_median", "ferry_payment_asset_share",
     "ben_kia_population", "land_use_by_bank", "far_bank_cleared",
-    "occupation_entropy", "resource_stock_ca",
+    "occupation_entropy", "resource_stock_ca", "resource_stock_ga_rung",
+    "crop_mix", "childcare_burden", "childcare_paid_labor",
+    "work_order_vacancy", "work_order_fill_rate", "work_order_wage",
 )
 
 
@@ -239,6 +241,64 @@ def _spatial_metrics(w: World) -> dict[str, Any]:
     ca_ton = getattr(w, "ca_ton", None)
     resource_stock_ca = round(float(ca_ton), 6) if ca_ton is not None else None
 
+    # Gà rừng dùng chung pool logistic khi sub-flag bật; nếu tắt, không giả vờ có dữ liệu.
+    ga_ton = getattr(w, "ga_rung_ton", None)
+    resource_stock_ga_rung = (
+        round(float(ga_ton), 6)
+        if bool(w.cfg.get("khong_gian.ga_rung.bat", False)) and ga_ton is not None else None
+    )
+
+    # Mùa/crop: share theo số thửa canh trong tick, không quy đổi giá để không chèn giá giả.
+    crop_counts: dict[str, int] = {}
+    for _pid in w.gat_tick:
+        crop_counts["thoc"] = crop_counts.get("thoc", 0) + 1
+    for item in getattr(w, "thu_hoach_cay_tick", []):
+        crop = str(item.get("cay", ""))
+        if crop:
+            crop_counts[crop] = crop_counts.get(crop, 0) + 1
+    crop_total = sum(crop_counts.values())
+    crop_mix = (
+        {crop: round(n / crop_total, 6) for crop, n in sorted(crop_counts.items())}
+        if crop_total else None
+    )
+
+    care = getattr(w, "cham_tre_tick", {})
+    care_provided = float(care.get("provided", 0.0))
+    total_labor = sum(float(v) for v in getattr(w, "cong_dung_tick", {}).values())
+    childcare_burden = (
+        round(care_provided / total_labor, 6)
+        if bool(w.cfg.get("khong_gian.cham_tre.bat", False)) and total_labor > EPSILON else None
+    )
+    childcare_paid_labor = (
+        round(float(care.get("paid", 0.0)), 6)
+        if bool(w.cfg.get("khong_gian.cham_tre.bat", False)) else None
+    )
+
+    # Work order = grammar chung gop_cong + payment. Không có class engine riêng; metric
+    # chỉ nhóm các proposal/hợp đồng có clause lao động để báo vacancy/fill/wage.
+    open_orders = [
+        dn for dn in w.bang_rao.values()
+        if any(c.loai == "gop_cong" for c in dn.hd.dieu_khoan)
+    ]
+    active_orders = [
+        hd for hd in w.hop_dong.values()
+        if hd.trang_thai == "hieu_luc" and any(c.loai == "gop_cong" for c in hd.dieu_khoan)
+    ]
+    wages: list[float] = []
+    for hd in active_orders:
+        labor = sum(c.so_cong_moi_tick for c in hd.dieu_khoan if c.loai == "gop_cong")
+        payments = sum(
+            c.so_luong / c.moi_n_tick
+            for c in hd.dieu_khoan
+            if c.loai == "chuyen_giao_dinh_ky" and c.tai_san == "thoc"
+        )
+        if labor > EPSILON and payments > EPSILON:
+            wages.append(payments / labor)
+    all_orders = len(open_orders) + len(active_orders)
+    work_order_vacancy = len(open_orders)
+    work_order_fill_rate = round(len(active_orders) / all_orders, 6) if all_orders else None
+    work_order_wage = round(float(median(wages)), 6) if wages else None
+
     return {
         "river_crossing_volume": river_crossing_volume,
         "ferry_fare_median": ferry_fare_median,
@@ -248,6 +308,13 @@ def _spatial_metrics(w: World) -> dict[str, Any]:
         "far_bank_cleared": far_bank_cleared,
         "occupation_entropy": occupation_entropy,
         "resource_stock_ca": resource_stock_ca,
+        "resource_stock_ga_rung": resource_stock_ga_rung,
+        "crop_mix": crop_mix,
+        "childcare_burden": childcare_burden,
+        "childcare_paid_labor": childcare_paid_labor,
+        "work_order_vacancy": work_order_vacancy,
+        "work_order_fill_rate": work_order_fill_rate,
+        "work_order_wage": work_order_wage,
     }
 
 

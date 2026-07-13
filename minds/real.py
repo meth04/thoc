@@ -120,6 +120,10 @@ class MindReal(MindMock):
 
     def _route_nen(self) -> Route:
         """Route việc nền (nén hồi ký + dịch intent) — đọc từ models.nen_hoi_ky."""
+        if getattr(self.gateway, "strict_treatment", False):
+            # Thí nghiệm treatment phải giữ cùng provider/model cho cả call nền; nếu không
+            # reflection/memory có thể vô tình dùng một "bộ não" khác với quyết định chính.
+            return self.gateway.routes_cua_tier("T0")[0]
         nen_cfg = self.cfg.get("models.nen_hoi_ky")
         q = self.cfg.raw()["quotas"][nen_cfg["provider"]]["models"].get(nen_cfg["model"], {})
         return Route(nen_cfg["provider"], nen_cfg["model"],
@@ -143,7 +147,7 @@ class MindReal(MindMock):
                     f"Biến cố gần đây: {a.ky_uc[-4:] or '(không)'}"
                 )
             prompt = (
-                f"Năm {w.tick // 2}. Nén hồi ký cho từng người dưới đây thành ≤2 câu "
+                f"Năm {w.nam()}. Nén hồi ký cho từng người dưới đây thành ≤2 câu "
                 f"tiếng Việt (ngôi thứ nhất, giữ chi tiết đắt giá nhất của hồi ký cũ "
                 f"+ hiện trạng).\n" + "\n".join(khoi) +
                 '\nTrả về DUY NHẤT một JSON object: {"<id>": "<hồi ký mới>", ...}'
@@ -246,7 +250,11 @@ class MindReal(MindMock):
         Tham số sampling đọc từ models.nen_hoi_ky (CLAUDE.md §5 — không hardcode)."""
         from minds.providers_real import LoiRateLimit
 
-        nen_cfg = self.cfg.get("models.nen_hoi_ky")
+        nen_cfg = (
+            getattr(self.gateway, "strict_treatment_cfg", {})
+            if getattr(self.gateway, "strict_treatment", False)
+            else self.cfg.get("models.nen_hoi_ky")
+        )
         cau_hinh = {"temperature": float(nen_cfg["temperature"]),
                     "max_output_tokens": int(nen_cfg["max_output_tokens"])}
         han = time.time() + 30.0
@@ -261,7 +269,7 @@ class MindReal(MindMock):
     def _nen_heuristic(self, w: World, a) -> None:
         thoc = w.ledger.so_du(a.id, "thoc")
         dat = sum(1 for p in w.parcels.values() if p.chu == a.id)
-        a.hoi_ky = (f"Năm {w.tick // 2}: {a.tuoi_nam:.0f} tuổi, {len(a.con)} con, "
+        a.hoi_ky = (f"Năm {w.nam()}: {a.tuoi_nam:.0f} tuổi, {len(a.con)} con, "
                     f"{thoc:.0f}kg thóc, {dat} thửa đất, học vấn E{a.e_bac}.")
 
     # ---------- tự phản tư bằng LLM (route nền), lô 8 người ----------
@@ -283,7 +291,7 @@ class MindReal(MindMock):
                     f"oán/đề phòng={[w.agents[n].ten for _v, n in oan] or '(không)'}"
                 )
             prompt = (
-                f"Năm {w.tick // 2}. Với TỪNG người dưới đây, viết 'niềm tin cốt lõi' của họ "
+                f"Năm {w.nam()}. Với TỪNG người dưới đây, viết 'niềm tin cốt lõi' của họ "
                 f"về người đời (≤2 câu, ngôi thứ nhất): ai đáng tin, ai phải đề phòng và VÌ "
                 f"SAO, rút từ ký ức + ân oán của họ.\n" + "\n".join(khoi) +
                 '\nTrả về DUY NHẤT một JSON object: {"<id>": "<niềm tin>", ...}'

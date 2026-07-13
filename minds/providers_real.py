@@ -296,6 +296,16 @@ class GatewayReal:
         self.ninerouter = NineRouterProvider(env.nine_key, env.nine_base or "http://localhost",
                                              transport=transport)
         self._env = env
+        self.strict_treatment_cfg = dict(cfg.get("minds.nghiem_thuc", {}))
+        self.strict_treatment = bool(self.strict_treatment_cfg.get("bat", False))
+        if self.strict_treatment:
+            provider = str(self.strict_treatment_cfg.get("provider", ""))
+            model = str(self.strict_treatment_cfg.get("model", ""))
+            if not provider or not model:
+                raise ValueError(
+                    "minds.nghiem_thuc bật nhưng thiếu provider/model — không được âm thầm "
+                    "rơi về route tier"
+                )
         # GIỮ CHỖ NGUYÊN TỬ khi chọn key (chống thundering-herd lúc fan-out song song):
         # đếm call ĐANG BAY mỗi key; chọn key thì +1, xong (thành/bại) thì -1. Worker sau
         # thấy key đã đầy slot → chọn key khác → trải đều 15-30 key thay vì dội 1 key.
@@ -304,6 +314,15 @@ class GatewayReal:
 
     # ---------- cấu hình route ----------
     def routes_cua_tier(self, tier: str) -> list[Route]:
+        if self.strict_treatment:
+            provider = str(self.strict_treatment_cfg["provider"])
+            model = str(self.strict_treatment_cfg["model"])
+            q = self.cfg.raw()["quotas"].get(provider, {}).get("models", {}).get(model)
+            if not isinstance(q, dict):
+                raise ValueError(
+                    f"route treatment không có quota khai báo: {provider}/{model}"
+                )
+            return [Route(provider, model, int(q.get("rpm", 5)), int(q.get("rpd", 100)))]
         routes = []
         for r in self.cfg.get(f"models.tiers.{tier}.routes"):
             q = self.cfg.raw()["quotas"][r["provider"]]["models"].get(r["model"], {})
@@ -377,8 +396,9 @@ class GatewayReal:
         from minds.world_tools import KHAI_BAO_CONG_CU, thuc_thi
 
         tier_cfg = self.cfg.get(f"models.tiers.{req.tier}")
-        temperature = float(tier_cfg.get("temperature", 0.9))
-        max_tokens = int(tier_cfg.get("max_output_tokens", 2000))
+        sample_cfg = self.strict_treatment_cfg if self.strict_treatment else tier_cfg
+        temperature = float(sample_cfg.get("temperature", tier_cfg.get("temperature", 0.9)))
+        max_tokens = int(sample_cfg.get("max_output_tokens", tier_cfg.get("max_output_tokens", 2000)))
         max_luot = int(self.cfg.get("minds.cong_cu_max_luot"))
         loi_cuoi: Exception | None = None
         so_attempt_hong = 0
@@ -471,8 +491,9 @@ class GatewayReal:
 
     def _goi_route(self, req: LLMRequest, route: Route, tier_cfg: dict) -> LLMResponse:
         now = time.time()
-        temperature = float(tier_cfg.get("temperature", 0.9))
-        max_tokens = int(tier_cfg.get("max_output_tokens", 2000))
+        sample_cfg = self.strict_treatment_cfg if self.strict_treatment else tier_cfg
+        temperature = float(sample_cfg.get("temperature", tier_cfg.get("temperature", 0.9)))
+        max_tokens = int(sample_cfg.get("max_output_tokens", tier_cfg.get("max_output_tokens", 2000)))
         if route.provider == "aistudio":
             key = self._chon_key_aistudio(route, now)
             if key is None:  # mọi key cạn RPM/RPD/cooldown → TRÀN route sau (đừng retry)
@@ -492,6 +513,14 @@ def budget_guard(gw: GatewayReal, can_theo_tier: dict[str, int]) -> tuple[bool, 
     """Trước bước 3: ước lượng call cần; thiếu → (False, lý do) để checkpoint + dừng êm."""
     safety = float(gw.cfg.get("quotas.chung.safety_margin"))
     now = time.time()
+    if gw.strict_treatment:
+        route = gw.routes_cua_tier("T0")[0]
+        can = sum(int(v) for v in can_theo_tier.values())
+        con = gw.con_lai(route, now)
+        if con * safety < can:
+            return False, (f"treatment {route.provider}/{route.model}: cần {can} call, "
+                           f"còn {con} (×{safety})")
+        return True, ""
     for tier, can in sorted(can_theo_tier.items()):
         if can <= 0:
             continue

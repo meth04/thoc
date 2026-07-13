@@ -41,10 +41,12 @@ def test_manifest_ghi_scope_hash_va_config_digest():
         run_name="test", mode="rulebot", seed=7, ticks_requested=12,
         config_digest="abc", config_overlays=[Path(overlay)],
         scenario="preindustrial_closed_v1",
+        calendar={"months_per_tick": 6.0, "ticks_per_year": 2, "seasons": None},
     )
     assert manifest["run"]["seed"] == 7
     assert manifest["reproducibility"]["config_sha256"] == "abc"
     assert manifest["reproducibility"]["scenario_scope"]["name"] == "preindustrial_closed_v1"
+    assert manifest["reproducibility"]["calendar"]["ticks_per_year"] == 2
     assert "scenarios/preindustrial_closed_v1/scope.yaml" in \
         manifest["reproducibility"]["scenario_files_sha256"]
 

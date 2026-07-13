@@ -456,7 +456,12 @@ def gop_cong_dau_san_xuat(w) -> None:
             cq = getattr(w, "chinh_quyen", None)
             if cq is not None and tu in cq.dinh_cong_tick:
                 continue
-            if not _chuyen_an_toan(w, tu, den, "cong", ck.so_cong_moi_tick,
+            # Khi scenario chăm trẻ bật, worker có thể dùng một phần công *đúng cho con
+            # của bên thuê*. Credit này được engine/care ghi trước đó; không được chuyển
+            # hai lần cùng một ngày công, nhưng payment clause của hợp đồng vẫn thi hành.
+            credit = float(getattr(w, "cong_cham_tre_theo_cap", {}).get((tu, den), 0.0))
+            cong_phai_giao = max(0.0, ck.so_cong_moi_tick - credit)
+            if not _chuyen_an_toan(w, tu, den, "cong", cong_phai_giao,
                                    f"góp công {hd.id}", hd_id=hd.id):
                 phat_vi_pham(w, hd, tu)
                 dot_vi_the(w, hd)

@@ -234,6 +234,11 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     continue  # đất người khác, không có quyền sử dụng
                 if pid in da_canh_tick_nay:
                     continue
+                from engine.spatial import co_the_o_bo
+
+                if not co_the_o_bo(w, aid, p.bo):
+                    _ghi_su_co(w, aid, f"canh {pid} bất thành: chưa qua sông tới thửa")
+                    continue
                 # máy nhân năng suất công → cùng một thửa tốn ít công hơn
                 cong_can = float(sx["cong_moi_thua"]) / he_so_may(w, aid)
                 giong = float(sx["giong_kg_moi_thua"])
@@ -243,6 +248,7 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     continue  # thiếu công/giống → thửa này bỏ, KHÔNG mất gì
                 ghi_cong_dung(w, "nong", cong_can)
                 da_canh_tick_nay[pid] = aid
+                w.canh_tick.add(pid)
                 hs = hieu_suat[min(so_thua_canh, len(hieu_suat) - 1)]
                 so_thua_canh += 1
                 dung_cong_cu = dung_cong_cu or w.ledger.so_du(aid, "cong_cu") >= 1.0
@@ -284,6 +290,65 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             if so_thua_canh > 0 and a is not None:
                 tn = w.cfg.raw()["tay_nghe"]
                 a.tay_nghe = min(float(tn["tran"]), a.tay_nghe + float(tn["tang_moi_vu"]))
+
+        # 1b) Vụ đông: mỗi thửa ruộng chỉ một cây khô (ngô HOẶC khoai). Giữ calendar 2
+        # tick/năm; không thêm hạt giống/nước/dinh dưỡng chi tiết, nhưng output là tài sản
+        # riêng và công/fertility/weather vẫn là ràng buộc vật lý thật.
+        if not mua_mua and kh.canh_vu_dong:
+            from engine.spatial import _vu_dong_bat, co_the_o_bo
+
+            if _vu_dong_bat(w):
+                cay_cfg = w.cfg.get("khong_gian.vu_dong.cay")
+                dung_cong_cu = False
+                so_thua_canh = 0
+                for pid, cay in sorted(kh.canh_vu_dong):
+                    p = w.parcels.get(pid)
+                    spec = cay_cfg.get(cay)
+                    if p is None or p.loai != "ruong" or not isinstance(spec, dict):
+                        continue
+                    if p.chu is not None and p.chu != aid and pid not in qsd_map.get(aid, set()):
+                        continue
+                    if pid in da_canh_tick_nay or not co_the_o_bo(w, aid, p.bo):
+                        continue
+                    cong_can = float(spec["cong"]) / he_so_may(w, aid)
+                    if not _lam_nguyen_tu(w, aid, f"canh {cay} {pid}",
+                                           [("cong", cong_can, "dung")], []):
+                        _ghi_su_co(w, aid, f"canh {cay} {pid} không thành: thiếu công")
+                        continue
+                    ghi_cong_dung(w, "nong", cong_can)
+                    da_canh_tick_nay[pid] = aid
+                    w.canh_tick.add(pid)
+                    san_luong = (
+                        float(spec["san_luong_kg"])
+                        * p.mau_mo
+                        * he_so_tt
+                        * _tool_mult(w, aid)
+                        * _health_mult(health)
+                        * _he_so_nong(w, aid)
+                        * (a.tay_nghe if a is not None else 1.0)
+                    )
+                    w.ledger.sinh(aid, cay, san_luong, "gat", f"gặt {cay} {pid}", w.tick)
+                    dd = w.cfg.raw()["dat_dai"]
+                    goc = p.mau_mo_goc if p.mau_mo_goc > 0 else p.mau_mo
+                    p.mau_mo = max(
+                        goc * float(dd["san_ty_le_mau_mo"]),
+                        p.mau_mo * (1.0 - float(dd["thoai_hoa_moi_vu"])),
+                    )
+                    dung_cong_cu = dung_cong_cu or w.ledger.so_du(aid, "cong_cu") >= 1.0
+                    so_thua_canh += 1
+                    quy_doi = float(spec["quy_doi_dinh_duong"])
+                    w.ghi_thu_nhap(aid, "nong", san_luong * quy_doi)
+                    w.thu_hoach_cay_tick.append({
+                        "thua": pid, "ai": aid, "cay": cay, "kg": round(san_luong, 6),
+                    })
+                    w.events.ghi(w.tick, "gat_cay", id=aid, thua=pid, cay=cay,
+                                 kg=round(san_luong, 1))
+                if dung_cong_cu:
+                    _hao_mon_cong_cu(w, aid)
+                if so_thua_canh > 0 and a is not None:
+                    tn = w.cfg.raw()["tay_nghe"]
+                    a.tay_nghe = min(float(tn["tran"]),
+                                      a.tay_nghe + float(tn["tang_moi_vu"]))
 
         # 2) Khai thác gỗ/quặng
         kt = sx["khai_thac"]
@@ -421,6 +486,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 p.homestead_ai, p.homestead_dem = None, 0
         for pid, aid in da_canh_tick_nay.items():
             w.parcels[pid].nguoi_canh = aid
+    else:
+        for pid, aid in da_canh_tick_nay.items():
+            w.parcels[pid].nguoi_canh = aid
 
 
 def boc_hoi_cong(w: World) -> None:
@@ -435,7 +503,7 @@ def phuc_hoi_dat(w: World) -> None:
     dd = w.cfg.raw()["dat_dai"]
     hoi = float(dd["phuc_hoi_moi_tick_bo_hoang"])
     for p in w.parcels.values():
-        if p.loai != "ruong" or p.id in w.gat_tick:
+        if p.loai != "ruong" or p.id in w.canh_tick:
             continue
         goc = p.mau_mo_goc if p.mau_mo_goc > 0 else p.mau_mo
         if p.mau_mo < goc:

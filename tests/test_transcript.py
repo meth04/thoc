@@ -7,7 +7,12 @@ prompt_hash tất định, che key, manifest có 3 field mới.
 
 from __future__ import annotations
 
+import pytest
+
+from minds.gateway import LLMRequest
+from minds.providers_real import LoiHetQuota
 from minds.transcript import (
+    TranscriptProvider,
     TranscriptReader,
     TranscriptWriter,
     bam_prompt,
@@ -35,6 +40,24 @@ def test_transcript_khong_lo_key(tmp_path):
     assert "SECRET123abc" not in txt
     assert "TOKENxyz789" not in txt
     assert "key=***" in txt and "Bearer ***" in txt
+
+
+def test_transcript_ghi_va_replay_loi_provider_khong_tao_miss(tmp_path):
+    """Lỗi terminal là outcome có thể replay, không phải một transcript miss giả."""
+    path = tmp_path / "transcript.jsonl"
+    writer = TranscriptWriter(path)
+    writer.ghi(
+        3, "T1", "loi", "", 0.9, "prompt có quota", "[LOI] hết quota", 0, 0,
+        error_type="LoiHetQuota", error_message="hết quota",
+    )
+    writer.dong()
+
+    reader = TranscriptReader(path)
+    provider = TranscriptProvider(reader)
+    with pytest.raises(LoiHetQuota, match="hết quota"):
+        provider.goi(LLMRequest(prompt="prompt có quota", ctx={}, tier="T1", batch_ids=["A0001"]))
+    assert reader.misses == 0
+    assert reader.con_lai() == 0
 
 
 # ---------- manifest có 3 field mới (không phá chữ ký cũ) ----------

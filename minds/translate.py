@@ -49,6 +49,10 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
     if kh.nghien_cuu:
         lv, cong, thoc = kh.nghien_cuu
         hd_list.append({"loai": "nghien_cuu", "linh_vuc": lv, "cong": cong, "thoc": thoc})
+    for thua, cay in kh.canh_vu_dong:
+        hd_list.append({"loai": "canh_vu_dong", "thua": thua, "cay": cay})
+    for tre in kh.cham_tre_cho:
+        hd_list.append({"loai": "cham_tre", "tre": tre})
     if kh.lap_phap_nhan:
         hd_list.append({"loai": "lap_phap_nhan", **kh.lap_phap_nhan})
     for eid, kh_con in kh.quyet_dinh_entity:
@@ -59,6 +63,8 @@ def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
         hd_list.append({"loai": "viet_di_chuc", **kh.viet_di_chuc})
     if kh.di_cu:
         hd_list.append({"loai": "di_cu"})
+    for thua in kh.khai_hoang:
+        hd_list.append({"loai": "khai_hoang", "thua": thua})
     if kh.bat_ga_cong or kh.giet_ga:
         hd_list.append({"loai": "chan_nuoi", "bat_ga_cong": kh.bat_ga_cong,
                         "giet_ga": kh.giet_ga})
@@ -201,8 +207,17 @@ def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> N
         kh.day_cho = day_cho
     elif loai == "khai_hoang":
         thua = str(d.get("thua", ""))
-        if thua and thua not in kh.canh_thua:
-            kh.canh_thua.append(thua)
+        if thua and thua not in kh.khai_hoang:
+            kh.khai_hoang.append(thua)
+    elif loai == "canh_vu_dong":
+        thua = str(d.get("thua", ""))
+        cay = str(d.get("cay", ""))
+        if thua and cay and (thua, cay) not in kh.canh_vu_dong:
+            kh.canh_vu_dong.append((thua, cay))
+    elif loai == "cham_tre":
+        tre = str(d.get("tre", ""))
+        if tre and tre not in kh.cham_tre_cho:
+            kh.cham_tre_cho.append(tre)
     elif loai == "xay":
         mon = d.get("mon", d.get("nha", "nha"))
         sl = int(d.get("so_luong", 1))

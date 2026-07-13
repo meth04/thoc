@@ -610,6 +610,10 @@ asset + qua_song + fare-thóc-trước-tiền + capacity + hao mòn, sông chặ
 sạch, OFF=legacy hash chứng minh trực tiếp. Thuê đất/work-order/cá/nhà-thuê-thợ = tái dùng cơ chế
 sẵn có (audit xác nhận). Trial `spatial50` + ensemble 3-seed on/off: cơ chế exercise thật (đò/chuyến)
 nhưng far-bank clearing KHÔNG hình thành + tác động vĩ mô trong nhiễu seed (mechanism_result trung
-thực). **HOÃN có chủ đích (ADR spec, không bịa)**: vụ đông (E), gà rừng commons (F), chăm trẻ (G).
+thực). **MỞ RỘNG 2026-07-13 — E/F/G ĐÃ CÀI:** `spatial_v1` dùng calendar ba mùa 4 tháng
+`lua_1 → lua_2 → dong` (hai vụ lúa + một vụ đông ngô/khoai); age, khẩu phần, lao động, annual
+hazard, weather, reporting/manifest quy đổi tường minh và legacy 2-tick giữ nguyên. Gà rừng có
+stock/K/logistic regeneration/CPUE; chăm trẻ đốt công thật + credit qua `gop_cong`; endowment t0
+bật đúng một năm food-equivalent. Regression: `tests/test_livelihood_extensions.py`.
 Đánh giá + lộ trình xuất bản: `reports/design_reevaluation.md`. Review độc lập: reality-auditor
 (`docs/reviews/T13-*`) + `docs/reviews/T13-plan.md`.

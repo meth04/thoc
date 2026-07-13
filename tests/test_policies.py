@@ -256,7 +256,7 @@ def test_khong_gian_ON_dong_thuyen_kha_thi() -> None:
     a = w.agents[aid]
     a.persona.lieu_linh, a.persona.cham_chi = 8, 7
     w.ledger.sinh(aid, "go", 12.0, "khai_thac", "fixture gỗ", 0)
-    w.tick = 1  # sau chay_mot_tick → tick 2 (mùa khô), planning thấy gỗ còn nguyên
+    w.tick = 2  # sau chay_mot_tick → tick 3 (mùa đông của calendar 3-mùa)
     wrap, box = _capture(quyet_dinh_tat_ca)
     chay_mot_tick(w, wrap, len(w.parcels))
     assert box[aid].dong_thuyen > 0, "agent tiên phong đủ gỗ phải phát dong_thuyen mùa khô"

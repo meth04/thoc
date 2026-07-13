@@ -82,7 +82,7 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
                    scenario: str | None, treatments: list[str] | None = None,
                    policy: dict | None = None, prompt_template_hash: str | None = None,
                    model_snapshot: list[str] | None = None,
-                   temperature: Any = None) -> dict[str, Any]:
+                   temperature: Any = None, calendar: dict[str, Any] | None = None) -> dict[str, Any]:
     """Tạo metadata đủ để phân biệt hai run có cùng seed nhưng khác giả định.
 
     ``prompt_template_hash`` (sha256 của minds/prompts.py), ``model_snapshot`` (danh sách
@@ -125,6 +125,9 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
             "prompt_template_hash": prompt_template_hash,
             "model_snapshot": list(model_snapshot) if model_snapshot is not None else None,
             "temperature": temperature,
+            # Calendar thực chạy tách khỏi mô tả scope chung: scenario có thể có overlay
+            # seasonal variant nên một tên scenario không đủ để suy ra tick/năm.
+            "calendar": calendar,
             "git_revision": git_revision(),
             "python": sys.version,
         },

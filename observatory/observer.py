@@ -243,7 +243,7 @@ def quet_milestones(w: World, nhan: dict[str, list[str]]) -> None:
     if w.san_tri_thuc_tier >= 1:
         ghi("san_tri_thuc_tang", san=w.san_tri_thuc_tier)
     if nhan.get("cong_nghiep_hoa"):
-        ghi("cong_nghiep_hoa", nam=w.tick // 2)
+        ghi("cong_nghiep_hoa", nam=w.nam())
     for ts, ls in w.gia_lich_su.items():
         if ts.startswith("co_phan:") and ls:
             ghi("co_phan_doi_chu_dau", tai_san=ts)
@@ -288,7 +288,7 @@ def buoc_observatory(w: World) -> dict:
 
 def viet_chronicle(w: World, delta_metrics: dict) -> str:
     """Sử ký ≤120 từ (mock viết) từ milestones mới + biến động chính."""
-    nam = w.tick // 2
+    nam = w.nam()
     moi = [m for m in w.milestones if m["tick"] > w.tick - 20]
     phan_mo_dau = f"Năm {nam}: làng có {delta_metrics.get('dan_so', '?')} nhân khẩu."
     if moi:

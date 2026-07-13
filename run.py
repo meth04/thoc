@@ -156,12 +156,11 @@ def main() -> int:
                     help="treatment phản chứng: hoán đổi persona giữa agent, giữ nguyên bản đồ/tài sản")
     ap.add_argument("--policy", default="rulebot",
                     help="tên BehaviorPolicy Lớp-4 (mode rulebot): rulebot | feasible_random | "
-                         "subsistence (ADR 0002)")
+                         "subsistence | adaptive (ADR 0002)")
     args = ap.parse_args()
 
     if args.smoke:
         return chay_smoke(args)
-    tong_tick = args.ticks if args.ticks is not None else (args.years or 300) * 2
     run_name = args.run_name or f"{args.mode}_{args.seed}"
     run_dir = DATA_DIR / run_name
     ck_dir = run_dir / "checkpoints"
@@ -175,6 +174,10 @@ def main() -> int:
         if scenario_params is not None:
             overlays.insert(0, scenario_params.resolve())
     cfg = load_config(overlays=overlays)
+    tick_moi_nam = int(round(12.0 / float(cfg.get("thoi_gian.thang_moi_tick"))))
+    if tick_moi_nam < 1 or abs(tick_moi_nam * float(cfg.get("thoi_gian.thang_moi_tick")) - 12.0) > 1e-9:
+        raise SystemExit("thoi_gian.thang_moi_tick phải chia tròn 12")
+    tong_tick = args.ticks if args.ticks is not None else (args.years or 300) * tick_moi_nam
     from tools.experiments import build_manifest, update_manifest_outcome, write_manifest
 
     # policy Lớp-4 chỉ áp cho mode rulebot; mock/real dùng LLM làm hành vi (ghi None).
@@ -193,6 +196,11 @@ def main() -> int:
         treatments=["permute_personas"] if args.permute_personas else [],
         policy=policy_meta, prompt_template_hash=prompt_template_hash,
         model_snapshot=model_snapshot, temperature=temperature,
+        calendar={
+            "months_per_tick": float(cfg.get("thoi_gian.thang_moi_tick")),
+            "ticks_per_year": tick_moi_nam,
+            "seasons": cfg.raw().get("thoi_gian", {}).get("lich_mua"),
+        },
     )
     ck_moi_nhat = ck_dir / "checkpoint_moi_nhat.json"
     if args.resume and ck_moi_nhat.exists():
@@ -211,8 +219,8 @@ def main() -> int:
             # phải có provenance cho phần quỹ đạo còn lại.
             write_manifest(run_dir, manifest)
         meta = json.loads(ck_moi_nhat.read_text(encoding="utf-8"))
-        w = World.nap_checkpoint(ck_dir / f"checkpoint_{meta['tick']:04d}.pkl", events_path)
-        w.cfg = cfg
+        w = World.nap_checkpoint(ck_dir / f"checkpoint_{meta['tick']:04d}.pkl", events_path,
+                                 cfg=cfg)
         print(f"[resume] từ tick {w.tick} (hash {meta['world_hash'][:12]})")
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -329,7 +337,7 @@ def viet_session_report(run_dir: Path, w, meta: dict) -> None:
     dong = [
         f"# Phiên {n} — run `{meta['run_name']}` (mode {meta['mode']}, seed {meta['seed']})",
         "",
-        f"- Tick cuối: {meta['tick_cuoi']} (năm {meta['tick_cuoi'] // 2}); "
+        f"- Tick cuối: {meta['tick_cuoi']} (năm {w.nam()}); "
         f"thời gian chạy {meta['thoi_gian_s']}s; world-hash `{meta['world_hash'][:16]}`",
         f"- Dân số {m.get('dan_so', '?')} · biết chữ {m.get('ty_le_biet_chu', 0):.0%} · "
         f"gini đất {m.get('gini_dat', '?')} · tri thức {m.get('tri_thuc', 0)}",

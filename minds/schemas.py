@@ -15,7 +15,7 @@ LOAI_HANH_DONG = {
     "de_nghi_hop_dong", "tra_loi_hop_dong", "don_phuong_pha_vo", "bao_huy",
     "lap_phap_nhan",
     "quyet_dinh_entity", "niem_yet", "dat_lenh", "tra_gia_dat", "phan_bo_cong",
-    "khai_hoang", "xay", "nghien_cuu", "buon_chuyen", "cau_hon", "tra_loi_cau_hon",
+    "khai_hoang", "canh_vu_dong", "cham_tre", "xay", "nghien_cuu", "buon_chuyen", "cau_hon", "tra_loi_cau_hon",
     "viet_di_chuc", "di_cu", "yeu_cau_hoan_tra", "chan_nuoi", "bieu",
     "danh_ca", "mo_tiec", "trom", "nhan_tin",
     # chính trị (bầu cử, lập pháp, nghiệp đoàn, đình công, bạo động, vận động)

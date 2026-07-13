@@ -26,6 +26,24 @@ def _hai_bo_bat(x: Any) -> bool:
     return _khong_gian_bat(x) and bool(cfg.get("khong_gian.hai_bo", False))
 
 
+def _vu_dong_bat(x: Any) -> bool:
+    """Cờ vụ khô ngô/khoai; tắt độc lập để làm ablation calendar."""
+    cfg = getattr(x, "cfg", x)
+    return _khong_gian_bat(x) and bool(cfg.get("khong_gian.vu_dong.bat", False))
+
+
+def _ga_rung_bat(x: Any) -> bool:
+    """Cờ pool gà rừng tái tạo; tắt giữ semantics bắt gà legacy."""
+    cfg = getattr(x, "cfg", x)
+    return _khong_gian_bat(x) and bool(cfg.get("khong_gian.ga_rung.bat", False))
+
+
+def _cham_tre_bat(x: Any) -> bool:
+    """Cờ time-cost chăm trẻ; tắt không trừ công của run legacy."""
+    cfg = getattr(x, "cfg", x)
+    return _khong_gian_bat(x) and bool(cfg.get("khong_gian.cham_tre.bat", False))
+
+
 def cung_bo(a: Parcel, b: Parcel) -> bool:
     """Hai thửa CÙNG bờ? Bờ ``None`` (chưa phân bờ / ô sông) coi như không rào ⇒ True.
 

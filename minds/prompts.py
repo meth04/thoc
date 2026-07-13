@@ -72,7 +72,7 @@ def build_system(w: World, aid: str, schema_str: str) -> str:
     a = w.agents[aid]
     return (
         f"Bạn là {a.ten}, {a.tuoi_nam:.0f} tuổi, làng {w.villages[a.lang].ten}, "
-        f"năm {w.tick // 2}. Tính cách (1-9): {a.persona.as_dict()}. "
+        f"năm {w.nam()}. Tính cách (1-9): {a.persona.as_dict()}. "
         f"Gia huấn: \"{a.gia_huan or '(chưa có)'}\". Hồi ký: {a.hoi_ky or '(trống)'}. "
         f"Thế giới bạn biết: {mo_ta_the_gioi(w)} Bạn chỉ biết những gì làng bạn biết. "
         f"Hãy quyết định như CHÍNH BẠN, nhất quán với tính cách và ký ức riêng, kể cả khi "
@@ -99,17 +99,34 @@ def build_user_chung(w: World) -> str:
                "sông gần cạn cá — đánh cả buổi được vài con")
     dat_cong_con = sum(1 for p in w.parcels.values() if p.loai == "ruong" and p.chu is None)
     dan_song = sum(1 for a in w.agents.values() if a.con_song)
+    mua_hien = w.mua()
+    ten_mua = {
+        "lua": "mưa / lúa",
+        "lua_1": "lúa vụ 1",
+        "lua_2": "lúa vụ 2",
+        "dong": "đông",
+        "kho": "khô",
+    }.get(mua_hien, mua_hien)
+    vu_dong = ""
+    if bool(w.cfg.get("khong_gian.vu_dong.bat", False)) and mua_hien == "dong":
+        crops = w.cfg.get("khong_gian.vu_dong.cay", {})
+        chi_tiet = ", ".join(
+            f"{name} ({float(spec['cong']):.0f} công → ~{float(spec['san_luong_kg']):.0f}kg)"
+            for name, spec in sorted(crops.items())
+        )
+        vu_dong = f" Vụ đông đang mở: bạn có thể trồng {chi_tiet} trên ruộng hợp lệ."
     return (
-        f"[TÌNH HÌNH CHUNG] Mùa {'mưa' if w.mua_mua() else 'khô'}, thời tiết {loai_tt} "
+        f"[TÌNH HÌNH CHUNG] Mùa {ten_mua}, thời tiết {loai_tt} "
         f"(hệ số {he_so}). Làng có {dan_song} nhân khẩu; đất công chưa ai khai hoang "
         f"còn {dat_cong_con} thửa; {ta_song}. "
-        f"Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. "
+        f"Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. {vu_dong}"
         f"Bảng rao có {so_rao} đề nghị.{_tinh_hinh_viec_lang(w)} "
         f"[CÁC DẠNG THỎA THUẬN ĐANG LƯU HÀNH] {mau if mau else '(chưa từng có thỏa thuận nào)'} "
         f"[BẠN CÓ THỂ] đề nghị/trả lời hợp đồng (văn phạm 9 điều khoản: chuyen_giao_dinh_ky, "
         f"chuyen_giao_mot_lan, quyen_su_dung, gop_cong, chia_san_luong, chia_loi_nhuan, "
         f"dieu_kien_su_kien, hoan_tra_theo_yeu_cau, khi_pha_vo), lap_phap_nhan, dat_lenh "
-        f"mua/bán mọi tài sản, niem_yet/tra_gia_dat, phan_bo_cong, khai_hoang, xay, "
+        f"mua/bán mọi tài sản, niem_yet/tra_gia_dat, phan_bo_cong, khai_hoang, canh_vu_dong, "
+        f"cham_tre, xay, "
         f"nghien_cuu, buon_chuyen, cau_hon, viet_di_chuc, di_cu, ung_cu, bo_phieu."
     )
 
@@ -153,6 +170,10 @@ MUC_HANH_DONG: list[str] = [
     '- {"loai":"phan_bo_cong","canh_thua":["P15_04"],"khai_go_cong":60,"khai_quang_cong":0,\n'
     '   "hoc":true,"day_cho":["A0012"]}   (canh thửa mình/thửa công/thửa có quyền dùng)',
     '- {"loai":"xay","mon":"nha"|"che_tac"|"may"|"xu"|"<mã hàng mới>","so_luong":1}',
+    '- {"loai":"canh_vu_dong","thua":"P15_04","cay":"ngo"|"khoai"}  (chỉ khi mùa khô '
+    'và scenario cho phép; mỗi thửa một cây)',
+    '- {"loai":"cham_tre","tre":"A0012"}  (tự nguyện dùng công trông một trẻ; có thể là '
+    'người thân hoặc người đã nhận hợp đồng góp công của cha/mẹ)',
     '- {"loai":"de_nghi_hop_dong","den":"A0031"|null,"hop_dong":{"cac_ben":["<id bạn>","?"],\n'
     '   "hinh_thuc":"mieng"|"van_ban","thoi_han":8,"the_chap":["thua:P15_04"],"dieu_khoan":[...]}}\n'
     '  ("?" = bên chưa biết, người nhận lời sẽ thế chỗ; bạn PHẢI là một bên; văn bản cần E1)',
@@ -221,9 +242,10 @@ LUAT_VAT_LY = """[LUẬT VẬT LÝ — không ai thoát được]
 - Mỗi tick = 6 tháng. Người lớn PHẢI ăn 90kg thóc/tick (trẻ em 45kg) — thiếu ăn là mất
   sức khỏe, sức khỏe cạn là CHẾT. Không ai phát chẩn cho bạn.
 - Kho thóc hao 3%/tick (mọt, chuột). Mỗi tick bạn có 180 ngày công (theo sức khỏe).
-- MÙA MƯA (tick lẻ): gieo + gặt cùng tick. Mỗi thửa cần 60kg thóc giống + 60 công,
+- MÙA MƯA (tick lẻ): gieo + gặt lúa cùng tick. Mỗi thửa cần 60kg thóc giống + 60 công,
   thu ~650kg × màu mỡ. Tự canh tối đa 3 thửa (thửa 2-3 kém dần). MÙA KHÔ (tick chẵn):
-  không trồng được gì — dành cho khai thác gỗ/quặng, chế tác, xây, học, hôn sự.
+  nếu scenario mở vụ đông thì có thể trồng ngô HOẶC khoai (công/sản lượng ghi trong tình hình
+  mùa); nếu không, dành cho khai thác gỗ/quặng, chế tác, xây, học, hôn sự.
 - Canh CÙNG MỘT thửa đất công 2 mùa mưa liên tiếp → thửa đó thành CỦA BẠN (khai hoang).
 - Nhà = 8 gỗ + 240 CÔNG (không nhà → mất sức mùa mưa). Một người chỉ có 180 công/tick
   — KHÔNG AI tự dựng nổi nhà một mình trong một mùa: cần người góp công (vợ/chồng,
@@ -501,6 +523,11 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"Hồi ký: {a.hoi_ky or '(trống)'} | Gia huấn: \"{a.gia_huan or '(chưa có)'}\"",
         f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat_hien or 'không có'}.",
     ]
+    if a.gia_ky_vong:
+        gia_rieng = ", ".join(
+            f"{ts}≈{gia:.1f} thóc" for ts, gia in sorted(a.gia_ky_vong.items())
+        )
+        dong.append("ƯỚC GIÁ RIÊNG (kinh nghiệm của bạn, không phải giá bắt buộc): " + gia_rieng)
     if a.tay_nghe > 1.02:
         dong.append(f"Kinh nghiệm đồng áng: năng suất +{(a.tay_nghe - 1) * 100:.0f}% "
                     f"(tay nghề tích qua từng vụ).")
@@ -561,22 +588,26 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     # cảnh báo đói: dự trữ hộ so với miệng ăn
     ho = w.ho_cua(aid)
     nc = w.cfg.raw()["nhu_cau"]
+    from engine.economy import household_food_equivalent
+
     thoc_ho = sum(w.ledger.so_du(m, "thoc") for m in ho)
+    food_ho = household_food_equivalent(w, ho)
     nhu_cau = sum(
         nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(16) else nc["tre_em_kg_tick"]
         for m in ho
     )
-    if nhu_cau > 0 and thoc_ho < nhu_cau * 2:
-        so_tick = thoc_ho / nhu_cau
+    if nhu_cau > 0 and food_ho < nhu_cau * 2:
+        so_tick = food_ho / nhu_cau
         dong.append(
             f"⚠ NGUY CƠ ĐÓI: nhà bạn {len(ho)} miệng ăn cần {nhu_cau:.0f}kg thóc/tick, "
-            f"kho cả nhà chỉ còn {thoc_ho:.0f}kg — đủ ăn ~{so_tick:.1f} tick nữa."
+            f"kho lương thực quy thóc còn {food_ho:.0f}kg (trong đó thóc {thoc_ho:.0f}kg) "
+            f"— đủ ăn ~{so_tick:.1f} tick nữa."
         )
     # hàng xóm quanh nhà — biết ƯỚC LƯỢNG tài sản của nhau (nhiễu ±30%, không biết
     # chính xác; thóc trong kho chỉ đoán mờ qua nếp sống)
     hang_xom = w.hang_xom_cua(aid)
     if hang_xom:
-        nam_nay = w.tick // 2
+        nam_nay = w.nam()
         mo_ta_hx = []
         for hx in hang_xom:
             b = w.agents[hx]

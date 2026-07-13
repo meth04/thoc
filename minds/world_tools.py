@@ -85,7 +85,7 @@ KHAI_BAO_CONG_CU: list[dict[str, Any]] = [
 
 def _xem_thoi_tiet(w: World, aid: str, args: dict) -> dict:
     loai, he_so = w.thoi_tiet(w.tick)
-    return {"mua": "mưa" if w.mua_mua() else "khô", "thoi_tiet": loai, "he_so_nang_suat": he_so}
+    return {"mua": w.mua(), "thoi_tiet": loai, "he_so_nang_suat": he_so}
 
 
 def _gia_cho(w: World, aid: str, args: dict) -> dict:
@@ -122,7 +122,7 @@ def _nghe_ve(w: World, aid: str, args: dict) -> dict:
     b = w.agents.get(nguoi)
     if b is None or not b.con_song:
         return {"nguoi": nguoi, "biet": "không rõ người này"}
-    g = w.rng.get(f"nghe_ve:{aid}:{nguoi}", w.tick // 2)  # ổn định trong năm
+    g = w.rng.get(f"nghe_ve:{aid}:{nguoi}", w.nam())  # ổn định trong năm
     thoc = w.ledger.so_du(nguoi, "thoc")
     ruong = sum(1 for p in w.parcels.values() if p.chu == nguoi)
     ga = w.ledger.so_du(nguoi, "ga") + w.ledger.so_du(nguoi, "ga_con")

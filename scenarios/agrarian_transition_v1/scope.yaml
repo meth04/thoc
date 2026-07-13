@@ -9,8 +9,10 @@ unit_of_analysis: >-
   Hộ gia đình là chủ thể kinh tế (tiêu dùng, tồn kho, canh tác, nợ, rủi ro); cá nhân là
   đơn vị nhân khẩu (tuổi, giới, kỹ năng, hôn nhân, thừa kế, lao động).
 period: >-
-  Horizon do pre-analysis protocol khóa trước (T10); một tick = 6 tháng, hai mùa mưa/khô
-  luân phiên trong một năm. Chưa neo vào niên đại lịch sử thật.
+  Horizon do pre-analysis protocol khóa trước (T10). Core scenario dùng một tick = 6 tháng,
+  hai mùa mưa/khô luân phiên trong một năm; biến thể có provenance riêng `spatial_v1.yaml`
+  dùng ba mùa 4 tháng (lúa_1, lúa_2, đông) và manifest phải ghi calendar thực chạy. Chưa neo
+  vào niên đại lịch sử thật.
 boundaries:
   geography: bản đồ nội sinh; một hoặc nhiều làng có thể hình thành từ di cư nội bộ
   trade: chỉ thương mại nội bộ cộng đồng; CHƯA có thị trường/giá ngoại vùng

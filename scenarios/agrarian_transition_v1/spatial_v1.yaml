@@ -4,9 +4,71 @@
 #
 # Cổng scenario (ADR §11.2): mọi cơ chế không-gian đọc `khong_gian.bat` + sub-flag, mặc định
 # TẮT (không có key trong base world.yaml). Bật overlay này = một THÍ NGHIỆM KHÁC (world-hash
-# và config-digest khác base — đúng chủ đích). Phase A CHỈ tiêu thụ `khong_gian.bat`/`.hai_bo`
-# (topology hai bờ + Parcel.bo); các tham số còn lại là KHAI BÁO TRƯỚC cho Phase C–G, engine
-# hiện chưa đọc nên không đổi hành vi Phase A.
+# và config-digest khác base — đúng chủ đích). Tất cả nhánh dưới (đò, khai hoang, vụ đông,
+# commons gà rừng, chăm trẻ) đã được engine đọc; có thể tắt từng sub-flag để ablation.
+
+# Calendar của BIẾN THỂ spatial: ba mùa 4 tháng, hai vụ lúa rồi một vụ đông. Những flow
+# khai báo "mỗi tick" dưới đây đã được đổi theo 4/6 so với baseline 6 tháng để không làm
+# tăng ngầm khẩu phần, lao động, hao kho hay hazard thường niên. Base scenario/legacy không
+# nạp overlay nên vẫn chính xác là 2 tick/năm.
+thoi_gian:
+  thang_moi_tick: 4
+  lich_mua: [lua_1, lua_2, dong]
+
+nhu_cau:
+  nguoi_lon_kg_tick: 60
+  tre_em_kg_tick: 30
+  ngay_cong_moi_tick: 120
+
+san_xuat:
+  giong_kg_moi_thua: 40
+  cong_moi_thua: 40
+  san_luong_goc_kg: 300
+  hao_hut_kho_moi_tick: 0.0201
+  homestead_tick_lien_tiep: 4
+  recipe:
+    thuyen: {cong: 80, go: 6, hao_mon_moi_tick_dung: 0.0336}
+
+dat_dai:
+  thoai_hoa_moi_vu: 0.01
+
+lao_dong_theo_tuoi:
+  hao_suc_gia_moi_tick: 1.0
+
+suc_khoe:
+  hoi_khi_an_du: 6.667
+  mat_toi_da_khi_doi: 16.667
+  mat_khi_vo_gia_cu_mua_mua: 5.0
+
+nhan_khau:
+  sinh_san:
+    p_goc: 0.1027
+    hoi_y_dinh_moi_n_tick: 30
+
+danh_ca:
+  tai_sinh_moi_tick: 0.1026
+  ca_hao_moi_tick: 0.1026
+
+chan_nuoi:
+  ga_an_thoc_moi_tick: 1.333333
+  ga_con_an_thoc_moi_tick: 0.666667
+  ga_sinh_san_moi_tick: 0.1026
+  ga_chet_gia_moi_tick: 0.0336
+  thit_hao_moi_tick: 0.1382
+
+thuong_mai:
+  cua_so_gia_tick: 6
+
+quan_sat:
+  cua_so_tick: 6
+  cua_so_dat_tick: 12
+  snapshot_moi_n_tick: 15
+
+minds:
+  nghi_dinh_ky_moi_n_tick: 6
+  reflection_moi_n_tick: 15
+  chronicle_moi_n_tick: 30
+  checkpoint_moi_n_tick: 15
 
 khong_gian:
   bat: true            # cờ tổng: bật lớp không gian T13
@@ -15,41 +77,44 @@ khong_gian:
   # --- Phase C: đò là DỊCH VỤ (thuyền + rao phí + qua_song) ---
   do:
     khach_toi_da_moi_tick: 4      # capacity mỗi chuyến
-    hao_mon_moi_tick_dung: 0.05   # duy trì phương tiện mỗi tick vận hành
+    hao_mon_moi_tick_dung: 0.0336 # duy trì phương tiện mỗi mùa 4 tháng vận hành
 
   # --- Phase D: khai hoang rừng/đồi bờ hoang → ruộng (đổi loai; homestead qua canh) ---
   khai_hoang:
     bat: true                     # Phase D BẬT khi overlay ON; đặt false để tắt riêng nhánh này
-    cong_moi_thua: 120            # > 60 công tự-canh: khai hoang tốn gấp đôi dựng vụ
+    cong_moi_thua: 80             # > 40 công tự-canh: khai hoang tốn gấp đôi dựng vụ
     mau_mo_khai_hoang: 0.7        # độ màu đất mới vỡ (thấp hơn ruộng ven sông)
 
-  # --- Phase E: vụ đông (ngô/khoai) mùa khô — GIỮ 2 tick/năm ---
+  # --- Phase E: vụ đông (ngô/khoai) SAU HAI VỤ LÚA, tick thứ ba của năm ---
   vu_dong:
-    bat: false                    # sub-flag riêng, mặc định TẮT ngay cả khi khong_gian bật
-    cay: {ngo: {cong: 60, san_luong_kg: 420, quy_doi_dinh_duong: 0.9},
-          khoai: {cong: 45, san_luong_kg: 500, quy_doi_dinh_duong: 0.7}}
+    bat: true
+    cay: {ngo: {cong: 40, san_luong_kg: 280, quy_doi_dinh_duong: 0.9},
+          khoai: {cong: 30, san_luong_kg: 333, quy_doi_dinh_duong: 0.7}}
 
   # --- Phase F: gà rừng có STOCK/K/regen (chuẩn hóa theo cá) ---
   ga_rung:
-    bat: false
+    bat: true
     suc_chua_moi_o: 8             # K = Σ ô rừng × sức chứa; giảm khi khai hoang bớt rừng
-    tai_sinh_moi_tick: 0.20       # logistic r·S·(1−S/K)
+    tai_sinh_moi_tick: 0.1382     # logistic r·S·(1−S/K), quy đổi 6→4 tháng
     ty_le_ton_ban_dau: 0.8
     cong_moi_con: 30              # ở mật độ đầy; thưa thì cùng công bắt được ít hơn
     nguong_mat_do_canh_bao: 0.3
 
   # --- Phase G: chăm trẻ có trả công / thân tộc (INVASIVE lõi công) ---
   cham_tre:
-    bat: false
+    bat: true
     tuoi_can_cham: 6              # trẻ < tuổi này cần công chăm mỗi tick
-    cong_cham_moi_tre: 30
+    cong_cham_moi_tre: 20
+    gia_cong_goi_y: 3.0           # neo proposal của rulebot; giá trả thật vẫn do hợp đồng/chợ
+    thoi_han_goi_y_tick: 6
 
   # --- Endowment: tồn kho t0 = một năm khẩu phần food-equivalent theo tuổi (thay 200 kg) ---
   endowment:
-    bat: false                    # sub-flag riêng, mặc định TẮT (giữ 200 kg phẳng legacy)
+    bat: true                     # mỗi người khởi đầu đúng một năm khẩu phần thật (180kg adult)
     food_equiv_theo_tuoi: true    # người lớn=nguoi_lon_kg_tick×tick/năm; trẻ=tre_em_kg_tick×…
 
-# --- Phase B/C: recipe phương tiện đò (thuyền) — tổ hợp tài sản, không class định chế ---
-san_xuat:
-  recipe:
-    thuyen: {cong: 120, go: 6, hao_mon_moi_tick_dung: 0.05}
+hanh_vi:
+  gia_ky_vong:
+    tai_san:
+      ngo:   {trung_vi: 0.9, he_so_phan_tan: 0.20}
+      khoai: {trung_vi: 0.7, he_so_phan_tan: 0.20}

@@ -102,7 +102,7 @@ def dung_do_thi(w: Any, include_dead: bool) -> dict[str, Any]:
          "loai": sorted(loai)}
         for (x, y), loai in sorted(loai_cap.items())
     ]
-    return {"tick": w.tick, "nam": w.tick // 2, "nodes": nodes, "edges": edges}
+    return {"tick": w.tick, "nam": w.nam(), "nodes": nodes, "edges": edges}
 
 
 def _gml_key(kid: str, kfor: str, ktype: str) -> str:

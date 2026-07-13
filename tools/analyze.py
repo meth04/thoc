@@ -158,9 +158,10 @@ def analyze_run(run: str, output_dir: Path) -> Path:
         if mt[i].sum() == 0:
             continue
         lines.append(f"| **{gc}** | " + " | ".join(str(int(x)) for x in mt[i]) + " |")
+    nam_theo_tick = {int(m["tick"]): m.get("nam", "?") for m in metrics}
     lines += ["", "## Milestones", ""]
     for ms in milestones:
-        lines.append(f"- Năm {ms['tick'] // 2}: {ms['ten']}")
+        lines.append(f"- Năm {nam_theo_tick.get(int(ms['tick']), '?')}: {ms['ten']}")
     lines += ["", "## Sử ký (chronicle)", ""]
     for ch in chronicles[-10:]:
         lines.append(f"> {ch['van']}")

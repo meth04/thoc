@@ -29,6 +29,14 @@ conda run -n thoc-env python run.py --mode rulebot --ticks 20 --seed 41 \
 conda run -n thoc-env python -m tools.verify_research_run agr_rb_s41
 conda run -n thoc-env python -m tools.replay agr_rb_s41 --verify
 
+# Biến thể sinh kế không gian: hai bờ sông, đò, khai hoang, gà rừng hữu hạn,
+# calendar 3 mùa (2 vụ lúa + vụ đông ngô/khoai) và time-cost chăm trẻ
+# (vẫn hoàn toàn không gọi LLM thật):
+conda run -n thoc-env python run.py --mode rulebot --ticks 20 --seed 41 \
+    --scenario agrarian_transition_v1 \
+    --config-overlay scenarios/agrarian_transition_v1/spatial_v1.yaml \
+    --run-name agr_spatial_s41
+
 # 5. Ensemble phản chứng paired-seed (smoke; full 30-seed = PENDING_COMPUTE):
 conda run -n thoc-env python -m tools.counterfactual \
     --scenario agrarian_transition_v1 --seeds 41 42 43 --ticks 60 --mode rulebot --prefix agr_cf

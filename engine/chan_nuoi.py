@@ -71,25 +71,61 @@ def buoc_chan_nuoi(w: World) -> None:
 
 
 def bat_ga(w: World, aid: str, so_cong: float) -> None:
-    """Bắt gà rừng con về nuôi — cần ô rừng trong làng, tốn công."""
+    """Bắt gà rừng con về nuôi.
+
+    Legacy scenario (pool tắt) giữ hành vi cũ. Khi ``khong_gian.ga_rung`` bật, gà là
+    commons tái tạo: CPUE giảm theo mật độ, không ai bắt quá stock và người ở bờ dân cư
+    chỉ săn được habitat bờ hoang sau khi qua sông.
+    """
+    from engine.spatial import _ga_rung_bat, co_the_o_bo
+
     cn = w.cfg.raw()["chan_nuoi"]
-    if not any(p.loai == "rung" for p in w.parcels.values()):
+    dung_pool = _ga_rung_bat(w)
+    rung_toi_duoc = [
+        p for p in w.parcels.values()
+        if p.loai == "rung" and (not dung_pool or co_the_o_bo(w, aid, p.bo))
+    ]
+    if not rung_toi_duoc:
         return
     cong_co = min(so_cong, w.ledger.so_du(aid, "cong"))
-    so_con = int(cong_co // float(cn["bat_ga_cong_moi_con"]))
-    if so_con <= 0:
+    if cong_co <= 0:
+        return
+    if dung_pool:
+        from engine.world import _ga_rung_suc_chua
+
+        pool_cfg = w.cfg.get("khong_gian.ga_rung")
+        suc_chua = _ga_rung_suc_chua(w)
+        ton = max(0.0, float(getattr(w, "ga_rung_ton", 0.0) or 0.0))
+        if suc_chua <= 0 or ton <= 1e-9:
+            return
+        dinh_muc = float(pool_cfg["cong_moi_con"])
+        mat_do = min(1.0, ton / suc_chua)
+        so_con = min((cong_co / dinh_muc) * mat_do, ton)
+        cong_dung = cong_co
+    else:
+        dinh_muc = float(cn["bat_ga_cong_moi_con"])
+        so_con = float(int(cong_co // dinh_muc))
+        cong_dung = so_con * dinh_muc
+        mat_do = None
+    if so_con <= 1e-9:
         return
     try:
-        w.ledger.huy(aid, "cong", so_con * float(cn["bat_ga_cong_moi_con"]), "dung",
-                     "bắt gà rừng", w.tick)
+        w.ledger.huy(aid, "cong", cong_dung, "dung",
+                      "bắt gà rừng", w.tick)
     except LoiSoKep:
         return
     from engine.production import ghi_cong_dung
 
-    ghi_cong_dung(w, "phi_nong", so_con * float(cn["bat_ga_cong_moi_con"]))
+    ghi_cong_dung(w, "phi_nong", cong_dung)
     # bắt được GÀ CON — phải nuôi 1 tick (6 tháng) mới thành gà đẻ/thịt đầy
-    w.ledger.sinh(aid, "ga_con", float(so_con), "bat_rung", "bắt gà rừng", w.tick)
-    w.events.ghi(w.tick, "bat_ga", id=aid, so_con=so_con)
+    w.ledger.sinh(aid, "ga_con", so_con, "bat_rung", "bắt gà rừng", w.tick)
+    if dung_pool:
+        w.ga_rung_ton = max(0.0, ton - so_con)
+    payload = {"id": aid, "so_con": round(so_con, 4)}
+    if mat_do is not None:
+        payload["mat_do"] = round(mat_do, 4)
+        payload["con_lai"] = round(float(w.ga_rung_ton), 4)
+    w.events.ghi(w.tick, "bat_ga", **payload)
 
 
 def giet_ga(w: World, aid: str, so_con: int) -> None:
@@ -152,6 +188,24 @@ def tai_sinh_ca(w: World) -> None:
     r = float(w.cfg.get("danh_ca.tai_sinh_moi_tick"))
     s = float(getattr(w, "ca_ton", suc_chua))
     w.ca_ton = min(suc_chua, s + r * s * (1.0 - s / suc_chua))
+
+
+def tai_sinh_ga_rung(w: World) -> None:
+    """Hồi phục logistic của commons gà rừng (chỉ scenario-gated)."""
+    from engine.spatial import _ga_rung_bat
+    from engine.world import _ga_rung_suc_chua
+
+    if not _ga_rung_bat(w):
+        return
+    suc_chua = _ga_rung_suc_chua(w)
+    if suc_chua <= 0:
+        w.ga_rung_ton = 0.0
+        return
+    cfg = w.cfg.get("khong_gian.ga_rung")
+    ton = float(getattr(w, "ga_rung_ton", suc_chua * float(cfg["ty_le_ton_ban_dau"])))
+    ton = min(max(0.0, ton), suc_chua)
+    r = float(cfg["tai_sinh_moi_tick"])
+    w.ga_rung_ton = min(suc_chua, ton + r * ton * (1.0 - ton / suc_chua))
 
 
 def danh_ca(w: World, aid: str, so_cong: float) -> None:

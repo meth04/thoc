@@ -30,7 +30,10 @@ class Agent:
     id: str
     ten: str
     gioi_tinh: str  # "nam" | "nu"
-    tuoi_tick: int  # tuổi tính bằng tick (6 tháng); tuổi năm = tuoi_tick / 2
+    # Tuổi nội bộ tính theo *nửa-năm* lịch sử. Với calendar 2 tick/năm, mỗi tick tăng 1;
+    # với scenario 3 mùa/năm, mỗi tick tăng 2/3. Nhờ vậy property ``tuoi_nam`` giữ đúng
+    # nghĩa mà không buộc mọi consumer phải ngầm giả định tick=6 tháng.
+    tuoi_tick: float
     persona: Persona
     lang: int = 0
     health: float = 100.0
@@ -68,6 +71,9 @@ class Agent:
     nha_thua: str | None = None
     # tay nghề đồng áng — kinh nghiệm tích qua mỗi vụ (learning by doing)
     tay_nghe: float = 1.0
+    # reservation-value priors (thóc/đơn vị): seeded theo agent, cập nhật bằng giá chợ thật.
+    # Đây là state hành vi, không phải giá engine; vắng giao dịch thì agent vẫn có thể rao giá.
+    gia_ky_vong: dict[str, float] = field(default_factory=dict)
     # trẻ mồ côi được thân nhân/hàng xóm cưu mang (ăn chung nồi cơm hộ người nuôi)
     giam_ho: str | None = None
     con_nuoi: list = field(default_factory=list)

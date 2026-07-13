@@ -15,15 +15,18 @@ def hao_hut_kho(w: World) -> None:
         for bp in w.blueprints.values()
         if bp.hang_moi and bp.hieu_ung == "luu_kho"
     }
+    from engine.economy import food_equivalence
+
+    food_assets = food_equivalence(w)
     for (chu_the, ts), v in list(w.ledger._so_du.items()):
-        if ts == "thoc" and v > 0:
+        if ts in food_assets and v > 0:
             giam = duoc_ap_dung(w, chu_the, "luu_kho")
             for ma, do_lon in hieu_ung_hang.items():
                 if w.ledger.so_du(chu_the, ma) >= 1.0:
                     giam += do_lon
             san = float(w.cfg.get("tieu_dung.san_hao_kho"))
             ty_le = ty_le_goc * max(san, 1.0 - giam)
-            w.ledger.huy(chu_the, "thoc", v * ty_le, "hao_kho", "hao hụt kho", w.tick)
+            w.ledger.huy(chu_the, ts, v * ty_le, "hao_kho", f"hao hụt kho {ts}", w.tick)
 
 
 def an_va_suc_khoe(w: World) -> None:
@@ -31,6 +34,9 @@ def an_va_suc_khoe(w: World) -> None:
     sk = w.cfg.raw()["suc_khoe"]
     td = w.cfg.raw()["tieu_dung"]
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    from engine.economy import food_equivalence
+
+    food_assets = food_equivalence(w)
 
     # Ăn theo hộ: gom nhu cầu, ăn từ kho các thành viên (chủ hộ trước).
     # Dedup bằng da_xu_ly tại thành viên ĐẦU TIÊN gặp theo thứ tự sorted —
@@ -48,19 +54,23 @@ def an_va_suc_khoe(w: World) -> None:
             for m in ho
         }
         tong_nhu_cau = sum(nhu_cau_tung_nguoi.values())
-        ton_kho = {m: w.ledger.so_du(m, "thoc") for m in ho}
-        tong_ton = sum(ton_kho.values())
-        an_duoc = min(tong_nhu_cau, tong_ton)
-        # trừ kho: người nhiều thóc trước
-        con_phai_tru = an_duoc
-        for m in sorted(ho, key=lambda x: -ton_kho[x]):
-            tru = min(ton_kho[m], con_phai_tru)
-            if tru > 0:
-                w.ledger.huy(m, "thoc", tru, "an", "ăn", w.tick)
-                con_phai_tru -= tru
-        # thiếu thóc → ăn THỊT rồi CÁ (đậm dinh dưỡng hơn thóc, nhưng mau hỏng)
-        if an_duoc < tong_nhu_cau - 1e-9:
-            thieu = tong_nhu_cau - an_duoc
+        # Ăn lúa trước rồi ngô/khoai; mỗi thứ có quy đổi dinh dưỡng công khai. Cây vụ
+        # đông không bị tự đổi thành thóc, chỉ trực tiếp nuôi hộ khi còn trong kho.
+        thieu = tong_nhu_cau
+        for ts, quy_doi in food_assets.items():
+            if thieu <= 1e-9:
+                break
+            ton_kho = {m: w.ledger.so_du(m, ts) for m in ho}
+            for m in sorted(ho, key=lambda x: -ton_kho[x]):
+                if thieu <= 1e-9:
+                    break
+                tru = min(ton_kho[m], thieu / quy_doi)
+                if tru > 0:
+                    w.ledger.huy(m, ts, tru, "an", f"ăn {ts}", w.tick)
+                    thieu -= tru * quy_doi
+        an_duoc = tong_nhu_cau - max(0.0, thieu)
+        # thiếu lương thực thực vật → ăn THỊT rồi CÁ (đậm dinh dưỡng hơn thóc, mau hỏng)
+        if thieu > 1e-9:
             for ts, quy_doi in (
                 ("thit", float(w.cfg.raw()["chan_nuoi"]["thit_quy_doi_dinh_duong"])),
                 ("ca", float(w.cfg.raw()["danh_ca"]["ca_quy_doi_dinh_duong"])),
@@ -133,5 +143,5 @@ def dich_benh(w: World) -> None:
     for agent in w.agents.values():
         if agent.con_song:
             agent.health = max(0.0, agent.health - loss)
-    if w.mua_mua():
+    if w.dau_nam():
         w.events.ghi(w.tick, "dich_benh", mat_suc_khoe=loss)

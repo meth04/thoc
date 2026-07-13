@@ -55,9 +55,9 @@ def _replay_tu_transcript(args, run_dir: Path, meta: dict, manifest: dict) -> in
     print(f"hash replay : {h}")
     print(f"hash gốc    : {meta['world_hash']}")
     print("KẾT QUẢ     : " + ("TRÙNG ✅" if trung else "LỆCH ❌"))
-    if reader.misses:
-        print("CẢNH BÁO: transcript thiếu response — prompt lệch tất định, replay không đủ.")
-    if args.verify and not trung:
+    if reader.misses or reader.con_lai():
+        print("LỖI: transcript không được tiêu thụ khép kín — artifact replay không đầy đủ.")
+    if args.verify and (not trung or reader.misses or reader.con_lai()):
         return 1
     return 0
 

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import pickle
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel
 
 from engine.config import Config
 from engine.events import EventLog
@@ -20,6 +23,86 @@ from engine.worldmap import sinh_ban_do
 VO_THUA_NHAN = "VO_THUA_NHAN"  # tài sản không người thừa kế
 CONG_QUY = "CONG_QUY"  # công quỹ làng — một CHỦ THỂ ledger như VO_THUA_NHAN; thu thuế/
 # tái phân phối/sung công đều là chuyen CÂN giữa dân và chủ thể này (bảo toàn tự xanh)
+
+
+def _canonical_state(value: Any) -> Any:
+    """Đưa state có thể ảnh hưởng hành vi về JSON ổn định để băm.
+
+    ``world_hash`` không được dựa vào ``repr`` của dataclass/Pydantic, vì thứ tự dict,
+    set và kiểu key tuple có thể làm cùng một state cho hash khác nhau. Hàm này cũng
+    giữ nguyên độ chính xác float thay vì làm tròn tùy tiện: một thay đổi nhỏ nhưng có
+    thể đổi quyết định ở tick sau phải được phát hiện.
+    """
+    if isinstance(value, BaseModel):
+        return _canonical_state(value.model_dump(mode="json"))
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            f.name: _canonical_state(getattr(value, f.name))
+            for f in fields(value)
+        }
+    if isinstance(value, dict):
+        items = [(_canonical_state(k), _canonical_state(v)) for k, v in value.items()]
+        items.sort(key=lambda pair: json.dumps(pair[0], ensure_ascii=False, sort_keys=True,
+                                               separators=(",", ":"), default=str))
+        return {"__dict__": items}
+    if isinstance(value, tuple):
+        return {"__tuple__": [_canonical_state(v) for v in value]}
+    if isinstance(value, list):
+        return [_canonical_state(v) for v in value]
+    if isinstance(value, set | frozenset):
+        vals = [_canonical_state(v) for v in value]
+        vals.sort(key=lambda v: json.dumps(v, ensure_ascii=False, sort_keys=True,
+                                           separators=(",", ":"), default=str))
+        return {"__set__": vals}
+    if isinstance(value, Path):
+        return str(value)
+    # `float.hex` là biểu diễn đầy đủ và tất định; chuẩn hóa -0.0 để cùng số học
+    # không bị xem là hai state khác nhau chỉ vì dấu của zero.
+    if isinstance(value, float):
+        return {"__float__": (0.0 if value == 0.0 else value).hex()}
+    if isinstance(value, str | int | bool) or value is None:
+        return value
+    # NumPy scalar / enum / loại nhỏ khác: str ổn định hơn repr có địa chỉ bộ nhớ.
+    return str(value)
+
+
+def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
+    """Lược bỏ nhánh config bị scenario-gate tắt khỏi hash.
+
+    ``Config.digest`` vẫn ghi toàn bộ YAML để provenance, nhưng world hash phải biểu diễn
+    *quỹ đạo có thể xảy ra*. Một block fiscal hoàn toàn tắt và một config cũ chưa có block
+    đó có cùng transition function, nên không được tạo false-negative replay/hash.
+    """
+    cfg = copy.deepcopy(raw)
+    fiscal = cfg.get("fiscal")
+    if not isinstance(fiscal, dict) or not bool(fiscal.get("bat", False)):
+        cfg.pop("fiscal", None)
+
+    politics = cfg.get("chinh_tri")
+    if isinstance(politics, dict) and not bool(politics.get("bat", True)):
+        cfg["chinh_tri"] = {"bat": False}
+
+    space = cfg.get("khong_gian")
+    if not isinstance(space, dict) or not bool(space.get("bat", False)):
+        cfg.pop("khong_gian", None)
+    else:
+        # Subsystems tắt độc lập không thể ảnh hưởng tick; giữ flag để khác với bật.
+        for name in ("do", "khai_hoang", "vu_dong", "ga_rung", "cham_tre", "endowment"):
+            block = space.get(name)
+            if isinstance(block, dict) and not bool(block.get("bat", False)):
+                space[name] = {"bat": False}
+        if not bool(space.get("hai_bo", False)):
+            space["hai_bo"] = False
+            space.pop("do", None)
+
+    disease = cfg.get("cu_soc", {}).get("dich_benh") if isinstance(cfg.get("cu_soc"), dict) else None
+    if isinstance(disease, dict) and not bool(disease.get("bat", False)):
+        cfg["cu_soc"]["dich_benh"] = {"bat": False}
+
+    strict = cfg.get("minds", {}).get("nghiem_thuc") if isinstance(cfg.get("minds"), dict) else None
+    if isinstance(strict, dict) and not bool(strict.get("bat", False)):
+        cfg["minds"]["nghiem_thuc"] = {"bat": False}
+    return cfg
 
 
 @dataclass
@@ -76,6 +159,10 @@ class World:
     _next_dn: int = 0
     gia_lich_su: dict[str, list] = field(default_factory=dict)  # tài sản → [(tick, giá, kl)]
     gat_tick: dict[str, tuple[str, float]] = field(default_factory=dict)  # thửa → (ai, kg)
+    # Mọi thửa đã canh (lúa hoặc vụ đông) trong tick — dùng cho hồi màu; `gat_tick` giữ
+    # riêng lúa/thóc để các clause chia_san_luong cũ không vô tình chuyển thóc cho ngô/khoai.
+    canh_tick: set[str] = field(default_factory=set)
+    thu_hoach_cay_tick: list[dict[str, Any]] = field(default_factory=list)
     yeu_cau_rut_tick: dict[tuple[str, str], float] = field(default_factory=dict)
     niem_yet_dat: dict = field(default_factory=dict)  # thua → NiemYetDat
     # giao dịch đất đã khớp kèm năng suất kỳ vọng lúc bán; chỉ metric/analysis đọc.
@@ -120,6 +207,10 @@ class World:
     # settlement_fail_tick); các pha sau đọc để biết ai được hoạt động bờ đối diện. Không
     # teleport: không có chuyến ⇒ không vào set ⇒ kẹt bờ cư trú.
     ben_kia_tick: set[str] = field(default_factory=set)
+    # accounting chăm trẻ: credit công của carer theo (carer, parent) để clause gop_cong
+    # trả lương cho đúng dịch vụ thay vì buộc carer giao hai lần cùng một ngày công.
+    cong_cham_tre_theo_cap: dict[tuple[str, str], float] = field(default_factory=dict)
+    cham_tre_tick: dict[str, float] = field(default_factory=dict)
 
     def ghi_thu_nhap(self, aid: str, nguon: str, quy_thoc: float) -> None:
         if quy_thoc <= 0:
@@ -132,10 +223,66 @@ class World:
         self._next_id += 1
         return f"A{self._next_id:04d}"
 
-    # ---------- thời tiết ----------
+    # ---------- calendar / thời tiết ----------
+    def tick_moi_nam(self) -> int:
+        """Số tick trong một năm lịch, suy từ đơn vị thời gian của config.
+
+        Calendar legacy giữ ``6 tháng/tick`` = 2 tick/năm. Scenario có thể dùng 4
+        tháng/tick (3 mùa) nhưng phải chia tròn một năm; từ chối cấu hình mơ hồ thay vì
+        âm thầm đổi tuổi, hazard hay báo cáo.
+        """
+        thang = float(self.cfg.get("thoi_gian.thang_moi_tick"))
+        if thang <= 0:
+            raise ValueError("thoi_gian.thang_moi_tick phải dương")
+        so_tick = int(round(12.0 / thang))
+        if so_tick < 1 or abs(so_tick * thang - 12.0) > 1e-9:
+            raise ValueError(
+                "thoi_gian.thang_moi_tick phải chia tròn 12 để calendar có đơn vị năm rõ ràng"
+            )
+        return so_tick
+
+    def nam(self, tick: int | None = None) -> int:
+        """Năm lịch chứa ``tick``.
+
+        Legacy không khai báo calendar nên giữ nguyên index ``tick // 2`` (một phần của
+        replay contract cũ). Calendar khai báo tường minh bắt đầu tại tick 1 và gán đủ N
+        mùa đầu tiên vào cùng năm 1, tránh việc mùa cuối vô tình rơi sang năm thời tiết kế.
+        """
+        t = self.tick if tick is None else tick
+        lich = self.cfg.raw().get("thoi_gian", {}).get("lich_mua")
+        if lich is None:
+            return t // self.tick_moi_nam()
+        if t <= 0:
+            return 0
+        return (t - 1) // self.tick_moi_nam() + 1
+
+    def mua(self, tick: int | None = None) -> str:
+        """Nhãn mùa của tick hiện tại, đọc từ calendar scenario nếu được khai báo.
+
+        Một lịch có N tick phải chứa đúng N nhãn. Không có ``lich_mua`` giữ nguyên
+        quy ước legacy: tick lẻ=mưa/lúa, tick chẵn=khô.
+        """
+        t = self.tick if tick is None else tick
+        lich = self.cfg.raw().get("thoi_gian", {}).get("lich_mua")
+        if lich is None:
+            return "lua" if t % 2 == 1 else "kho"
+        if not isinstance(lich, list) or len(lich) != self.tick_moi_nam():
+            raise ValueError("thoi_gian.lich_mua phải là list có đúng tick_moi_nam phần tử")
+        # Tick 1 là mùa đầu tiên; tick 0 (khởi tạo) vòng về mùa cuối để không tạo một
+        # mùa hư cấu trước khi thế giới bắt đầu chạy.
+        return str(lich[(t - 1) % len(lich)])
+
+    def dau_nam(self, tick: int | None = None) -> bool:
+        t = self.tick if tick is None else tick
+        return t % self.tick_moi_nam() == 1
+
+    def cuoi_nam(self, tick: int | None = None) -> bool:
+        t = self.tick if tick is None else tick
+        return t % self.tick_moi_nam() == 0
+
     def thoi_tiet(self, tick: int) -> tuple[str, float]:
         """Thời tiết của năm chứa tick — ngẫu nhiên ngoại sinh DUY NHẤT, seeded theo năm."""
-        nam = tick // 2
+        nam = self.nam(tick)
         if nam not in self.thoi_tiet_nam:
             tt = self.cfg.get("thoi_gian.thoi_tiet")
             g = self.rng.get("thoi_tiet", nam)
@@ -146,8 +293,7 @@ class World:
         return loai_tt, float(self.cfg.get("thoi_gian.thoi_tiet")[loai_tt]["he_so"])
 
     def mua_mua(self, tick: int | None = None) -> bool:
-        t = self.tick if tick is None else tick
-        return t % 2 == 1
+        return self.mua(tick).startswith("lua")
 
     def co_dich_benh(self, tick: int | None = None) -> bool:
         """Cú sốc dịch bệnh theo năm, tắt mặc định và tất định theo seed.
@@ -160,7 +306,7 @@ class World:
         disease = self.cfg.get("cu_soc.dich_benh")
         if not bool(disease["bat"]):
             return False
-        year = t // 2
+        year = self.nam(t)
         if year not in self.dich_benh_nam:
             g = self.rng.get("dich_benh", year)
             self.dich_benh_nam[year] = bool(g.random() < float(disease["xac_suat_moi_nam"]))
@@ -239,7 +385,7 @@ class World:
         a = self.agents.get(aid)
         if a is None or not a.con_song:
             return
-        dong = f"Năm {self.tick // 2}: {noi_dung}"
+        dong = f"Năm {self.nam()}: {noi_dung}"
         if doi:
             toi_da = int(self.cfg.get("minds.ky_uc_doi_toi_da"))
             if len(a.ky_uc_doi) < toi_da:
@@ -311,56 +457,129 @@ class World:
         return ho
 
     # ---------- world hash (điều luật #4) ----------
+    def behavioral_state(self) -> dict[str, Any]:
+        """Toàn bộ state có thể làm tick/prompt/replay tiếp theo rẽ nhánh.
+
+        Không đưa event journal, metric history, transaction journal, cache thuần đọc và
+        observation state vào đây: chúng không được engine/minds dùng để quyết định. Ngược
+        lại, mọi thứ agent thấy ở prompt, mọi cache RNG/weather, hợp đồng đầy đủ, lịch sử giá,
+        pool tài nguyên, tin nhắn và state chính trị đều phải có mặt. Đây là ranh giới công
+        khai cho reproducibility; thêm field state mới phải hoặc vào đây, hoặc được ghi rõ là
+        read-only tại nơi khai báo.
+        """
+        two_bank = bool(self.cfg.get("khong_gian.hai_bo", False))
+        parcels = {
+            pid: p
+            for pid, p in self.parcels.items()
+        }
+        if not two_bank:
+            # Bờ sông vô hiệu khi scenario tắt; giữ tương thích hash cho state layout cũ mà
+            # không che giấu một thay đổi có tác dụng trong scenario hai-bờ.
+            parcels = {
+                pid: {
+                    "id": p.id,
+                    "r": p.r,
+                    "c": p.c,
+                    "loai": p.loai,
+                    "mau_mo": p.mau_mo,
+                    "mau_mo_goc": p.mau_mo_goc,
+                    "chu": p.chu,
+                    "lang": p.lang,
+                    "nguoi_canh": p.nguoi_canh,
+                    "homestead_dem": p.homestead_dem,
+                    "homestead_ai": p.homestead_ai,
+                }
+                for pid, p in self.parcels.items()
+            }
+        ledger = self.ledger
+        state: dict[str, Any] = {
+            "hash_schema": "behavioral-state-v2",
+            # Config là một phần của state chuyển tiếp; normalize các block scenario tắt để
+            # config cũ thiếu block và config mới `bat:false` vẫn có cùng behavioral hash.
+            "config": _behavioral_config(self.cfg.raw()),
+            "seed": self.seed,
+            "tick": self.tick,
+            "ids": {
+                "agent": self._next_id,
+                "contract": self._next_hd,
+                "proposal": self._next_dn,
+                "entity": self._next_entity,
+                "blueprint": self._next_bp,
+            },
+            "ledger": {
+                "balances": ledger._so_du,
+                "flow_sources": ledger.flows._nguon,
+                "flow_sinks": ledger.flows._sink,
+                "flow_totals": ledger.flows._tich_luy,
+            },
+            "population": self.agents,
+            "parcels": parcels,
+            "villages": self.villages,
+            # thoi_tiet_nam/dich_benh_nam là cache lười thuần xác định từ
+            # (seed, config, year); đưa cache vào hash sẽ khiến một policy chỉ ĐỌC thời tiết
+            # thay hash. Giá trị vật lý tương lai vẫn được băm gián tiếp qua seed/config/tick.
+            "family_queue": self.cau_hon_cho,
+            "messages": self.hom_thu,
+            "relationships": self.quan_he,
+            "contracts": {"active": self.hop_dong, "closed": self.hop_dong_xong},
+            "board": self.bang_rao,
+            "market": {
+                "price_history": self.gia_lich_su,
+                "land_listings": self.niem_yet_dat,
+                "withdraw_requests": self.yeu_cau_rut_tick,
+                "classified_ads": getattr(self, "rao_vat", []),
+            },
+            "production": {
+                "harvests_this_tick": self.gat_tick,
+                "cultivated_this_tick": self.canh_tick,
+                "crop_harvests_this_tick": self.thu_hoach_cay_tick,
+                "previous_deaths": self.chet_tick_truoc,
+                "crossed_river": self.ben_kia_tick if two_bank else set(),
+                "care_labor_credit": self.cong_cham_tre_theo_cap,
+                "care_this_tick": self.cham_tre_tick,
+            },
+            "minds": {"policy_cards": self.policy_cards},
+            "politics": {"government": self.chinh_quyen, "riot_count": self.so_bao_dong_tick},
+            "research": {
+                "entities": self.entities,
+                "blueprints": self.blueprints,
+                "points": self.diem_nc,
+                "product_names": self.ten_hang,
+                "knowledge": self.tri_thuc,
+                "knowledge_floor": self.san_tri_thuc_tier,
+            },
+            # Các cửa sổ sau được observatory dùng để cập nhật phan_loai; phan_loai lại nằm
+            # trong prompt của agent, nên chúng không phải metric vô hại.
+            "observatory_inputs": {
+                "labels": self.nhan_dinh_che,
+                "classifications": self.phan_loai,
+                "income_this_tick": self.thu_nhap_tick,
+                "income_window": self.thu_nhap_4,
+                "payment_this_tick": self.kl_thanh_toan_tick,
+                "payment_window": self.kl_thanh_toan_4,
+                "labor_this_tick": self.cong_dung_tick,
+                "labor_window": self.cong_dung_4,
+            },
+            # commons là state vật lý: nếu khác đi, lợi ích biên của cá/gà và hành vi tick
+            # sau khác ngay. `getattr` giúp đọc checkpoint cũ trước migration.
+            "commons": {
+                "fish_stock": getattr(self, "ca_ton", None),
+                "wild_chicken_stock": getattr(self, "ga_rung_ton", None),
+            },
+        }
+        return state
+
     def world_hash(self) -> str:
-        agents_s = sorted(
-            (
-                a.id, a.ten, a.gioi_tinh, a.tuoi_tick, a.lang, round(a.health, 6), a.e_bac,
-                a.con_song, a.vo_chong or "", a.cha or "", a.me or "", tuple(sorted(a.con)),
-                tuple(sorted(a.persona.as_dict().items())),
-                round(a.tay_nghe, 6), a.giam_ho or "", tuple(sorted(a.con_nuoi)),
-            )
-            for a in self.agents.values()
-        )
-        parcels_s = sorted(
-            (p.id, p.loai, round(p.mau_mo, 6), p.chu or "", p.homestead_dem, p.homestead_ai or "")
-            for p in self.parcels.values()
-        )
-        so_du_s = sorted(
-            (ct, ts, round(v, 6)) for (ct, ts), v in self.ledger._so_du.items() if abs(v) > 1e-9
-        )
-        hd_s = sorted(
-            (h.id, h.trang_thai, h.tick_ky, tuple(h.cac_ben),
-             tuple(c.loai for c in h.dieu_khoan))
-            for h in self.hop_dong.values()
-        ) + [len(self.hop_dong_xong)]
-        gia_s = sorted(
-            (ts, len(ls), round(ls[-1][1], 6)) for ts, ls in self.gia_lich_su.items() if ls
-        )
-        # quan hệ ảnh hưởng hành vi (thứ tự khớp bảng rao, trigger...) → phải vào hash
-        qh_s = sorted(
-            (a, b, round(v, 6)) for (a, b), v in self.quan_he.items() if abs(v) > 1e-9
-        )
-        p4_s = [
-            sorted((e.id, e.ten, e.con_hoat_dong) for e in self.entities.values()),
-            sorted((b.id, b.linh_vuc, round(b.do_lon, 6), b.chu)
-                   for b in self.blueprints.values()),
-            sorted((k[0], k[1], round(v, 6)) for k, v in self.diem_nc.items() if v > 1e-9),
-            round(self.tri_thuc, 6),
-            self.san_tri_thuc_tier,
-        ]
-        cq = self.chinh_quyen
-        cq_s = (
-            (
-                cq.truong_lang or "", round(cq.thue_suat, 6), round(cq.luong_toi_thieu, 6),
-                cq.nhiem_ky_den, tuple(sorted(cq.nghiep_doan)),
-                tuple(sorted(cq.phieu.items())),
-            )
-            if cq is not None else ()
-        )
+        """SHA-256 của toàn bộ behavioral state, không phải snapshot rút gọn.
+
+        Được dùng cho checkpoint/replay/kiểm chứng thuần đọc. Nếu state liên quan đến
+        quyết định đổi mà hash không đổi, đó là lỗi nghiêm trọng chứ không phải tối ưu hóa.
+        """
         blob = json.dumps(
-            [self.tick, self.seed, agents_s, parcels_s, so_du_s, hd_s, gia_s, p4_s, qh_s,
-             cq_s],
-            ensure_ascii=False, default=str,
+            _canonical_state(self.behavioral_state()),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
         )
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
@@ -369,35 +588,72 @@ class World:
         thu_muc.mkdir(parents=True, exist_ok=True)
         duong_dan = thu_muc / f"checkpoint_{self.tick:04d}.pkl"
         events, self.events = self.events, EventLog(None)  # file handle không pickle được
+        # Transaction journal cũ không điều khiển future state: metrics chỉ quét transaction
+        # của TICK HIỆN TẠI và checkpoint được ghi cuối tick. Giữ nó trong mọi checkpoint làm
+        # artifact tăng theo O(tick²) (mỗi snapshot lặp toàn bộ ledger history). Flow totals,
+        # balances và metrics history vẫn được giữ nên audit/replay/resume không mất dữ liệu
+        # hành vi; event/metrics đã có artifact append-only riêng ở run directory.
+        lich_su, self.ledger._lich_su = self.ledger._lich_su, []
         try:
             with open(duong_dan, "wb") as f:
                 pickle.dump(self, f)
         finally:
+            self.ledger._lich_su = lich_su
             self.events = events
-        meta = {"tick": self.tick, "world_hash": self.world_hash(), "seed": self.seed}
+        meta = {
+            "tick": self.tick,
+            "world_hash": self.world_hash(),
+            "seed": self.seed,
+            "config_digest": self.cfg.digest(),
+        }
         with open(thu_muc / "checkpoint_moi_nhat.json", "w", encoding="utf-8") as f:
             json.dump(meta, f)
+        # Checkpoint phải tự đủ để tiếp tục đúng scenario cả khi caller không còn nhớ overlay.
+        # run.py vẫn kiểm manifest/digest trước resume; snapshot này chủ yếu bảo vệ API trực tiếp
+        # và test/review khỏi vô tình nạp base world.yaml cho một run spatial.
+        with open(thu_muc / "config_snapshot.json", "w", encoding="utf-8") as f:
+            json.dump(self.cfg.raw(), f, ensure_ascii=False, sort_keys=True)
         return duong_dan
 
     @staticmethod
-    def nap_checkpoint(duong_dan: Path, events_path: Path | None = None) -> World:
+    def nap_checkpoint(duong_dan: Path, events_path: Path | None = None,
+                       cfg: Config | None = None) -> World:
         from engine.config import load_config
 
         with open(duong_dan, "rb") as f:
             w: World = pickle.load(f)
         w.events = EventLog(events_path)
-        # config đọc lại từ YAML hiện hành (nguồn sự thật duy nhất) — checkpoint cũ
-        # thiếu key mới sẽ không làm code mới KeyError
-        w.cfg = load_config()
+        # Ưu tiên config caller (run.py đã kiểm manifest); nếu dùng API trực tiếp thì nạp
+        # snapshot cạnh checkpoint. Checkpoint cũ chưa có snapshot mới rơi về YAML base.
+        if cfg is not None:
+            w.cfg = cfg
+        else:
+            snapshot = Path(duong_dan).parent / "config_snapshot.json"
+            if snapshot.exists():
+                w.cfg = Config(json.loads(snapshot.read_text(encoding="utf-8")))
+            else:
+                w.cfg = load_config()
         # migration: checkpoint trước khi có mau_mo_goc → đất không bao giờ hồi màu
         for p in w.parcels.values():
             p.mau_mo_goc = p.mau_mo_goc or p.mau_mo
         # migration: checkpoint trước khi có trữ lượng cá / ký ức đời
         if not hasattr(w, "ca_ton"):
             w.ca_ton = _ca_suc_chua(w) * float(w.cfg.get("danh_ca.ty_le_ton_ban_dau"))
+        if not hasattr(w, "ga_rung_ton"):
+            ga_k = _ga_rung_suc_chua(w)
+            w.ga_rung_ton = (
+                ga_k * float(w.cfg.get("khong_gian.ga_rung.ty_le_ton_ban_dau", 0.0))
+                if ga_k > 0 else None
+            )
         for a in w.agents.values():
             if not hasattr(a, "ky_uc_doi"):
                 a.ky_uc_doi = []
+            if not hasattr(a, "gia_ky_vong"):
+                from engine.pricing import khoi_tao_gia_ky_vong
+
+                a.gia_ky_vong = khoi_tao_gia_ky_vong(
+                    w, a.id, w.rng.get(f"gia_ky_vong:{a.id}", 0)
+                )
         # migration: checkpoint trước khi có định chế chính trị
         if not hasattr(w, "chinh_quyen"):
             w.chinh_quyen = None
@@ -414,6 +670,14 @@ class World:
             w.poverty_streak = {}
         if not hasattr(w, "settlement_fail_tick"):
             w.settlement_fail_tick = 0
+        if not hasattr(w, "canh_tick"):
+            w.canh_tick = set()
+        if not hasattr(w, "thu_hoach_cay_tick"):
+            w.thu_hoach_cay_tick = []
+        if not hasattr(w, "cong_cham_tre_theo_cap"):
+            w.cong_cham_tre_theo_cap = {}
+        if not hasattr(w, "cham_tre_tick"):
+            w.cham_tre_tick = {}
         # migration ADR 0005: bờ sông (static) + qua-sông transient — checkpoint cũ (OFF)
         # nạp lại ⇒ field trung tính ⇒ replay + world_hash bất biến (§11.3)
         if not hasattr(w, "ben_kia_tick"):
@@ -465,6 +729,13 @@ def dang_ky_flows(ledger: Ledger) -> None:
     f.dang_ky("ca", "danh_ca", "nguon")
     f.dang_ky("ca", "an", "sink")
     f.dang_ky("ca", "hao_thit", "sink")
+    # Vụ đông (scenario-gated): ngô/khoai là tài sản ăn được riêng, không đổi thóc
+    # ngầm. Đăng ký vô điều kiện an toàn vì chưa dùng thì không có entry audit nào.
+    for cay in ("ngo", "khoai"):
+        f.dang_ky(cay, "gat", "nguon")
+        f.dang_ky(cay, "an", "sink")
+        f.dang_ky(cay, "hao_kho", "sink")
+    f.dang_ky("cong", "cham_tre", "sink")
     f.dang_ky("nha", "xay", "nguon")
     f.dang_ky("may", "che_tac", "nguon")
     f.dang_ky("may", "hao_mon", "sink")
@@ -485,6 +756,16 @@ def _ca_suc_chua(w: World) -> float:
     """Sức chứa trữ lượng cá của sông (K) = số ô sông × sức chứa mỗi ô."""
     so_o = sum(1 for p in w.parcels.values() if p.loai == "song")
     return so_o * float(w.cfg.get("danh_ca.suc_chua_moi_o_kg"))
+
+
+def _ga_rung_suc_chua(w: World) -> float:
+    """Sức chứa gà rừng = habitat rừng còn lại × K/ô (chỉ khi scenario bật)."""
+    from engine.spatial import _ga_rung_bat
+
+    if not _ga_rung_bat(w):
+        return 0.0
+    so_o = sum(1 for p in w.parcels.values() if p.loai == "rung")
+    return so_o * float(w.cfg.get("khong_gian.ga_rung.suc_chua_moi_o"))
 
 
 def _endowment_t0_kg(cfg: Config, la_nguoi_lon: bool) -> float:
@@ -511,6 +792,11 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
     g = rng.get("khoi_tao", 0)
     w.parcels, w.villages = sinh_ban_do(cfg, g)
     w.ca_ton = _ca_suc_chua(w) * float(cfg.get("danh_ca.ty_le_ton_ban_dau"))
+    ga_k = _ga_rung_suc_chua(w)
+    w.ga_rung_ton = (
+        ga_k * float(cfg.get("khong_gian.ga_rung.ty_le_ton_ban_dau", 0.0))
+        if ga_k > 0 else None
+    )
 
     n = cfg.get("nhan_khau.dan_so_ban_dau")
     tuoi_min, tuoi_max = cfg.get("nhan_khau.tuoi_ban_dau")
@@ -534,6 +820,13 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
             persona=persona,
             lang=0,
             e_bac=e0,
+        )
+        # Neo giá thuộc về tác nhân, được rút từ stream RNG riêng để thêm cơ chế này không
+        # làm trôi giới/persona/học vấn của các agent còn lại.
+        from engine.pricing import khoi_tao_gia_ky_vong
+
+        w.agents[aid].gia_ky_vong = khoi_tao_gia_ky_vong(
+            w, aid, rng.get(f"gia_ky_vong:{aid}", 0)
         )
         endow = _endowment_t0_kg(cfg, w.agents[aid].truong_thanh(tuoi_tt))
         w.ledger.sinh(aid, "thoc", endow, "khoi_tao", "tài sản khởi đầu", tick=0)

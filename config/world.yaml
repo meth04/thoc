@@ -170,6 +170,20 @@ hanh_vi:
     chiet_khau_moi_tick: 0.20
     ky_han_dinh_gia_tick: 6
     trong_so_gia_thi_truong: 0.60
+  # Neo reservation-value của TÁC NHÂN trước phiên chợ đầu tiên. Đây không phải bảng giá
+  # engine: mỗi người nhận prior khác nhau theo seed, rồi học dần từ giá khớp thật.
+  # Mọi số nằm ở config để scenario có thể hiệu chỉnh/ablate minh bạch.
+  gia_ky_vong:
+    he_so_cap_nhat: 0.45
+    he_so_phan_tan_mac_dinh: 0.15
+    mac_dinh: {trung_vi: 1.0, he_so_phan_tan: 0.0}
+    tai_san:
+      go:         {trung_vi: 12.0, he_so_phan_tan: 0.25}
+      quang_dong: {trung_vi: 40.0, he_so_phan_tan: 0.25}
+      cong_cu:    {trung_vi: 100.0, he_so_phan_tan: 0.20}
+      nha:        {trung_vi: 450.0, he_so_phan_tan: 0.25}
+      ga:         {trung_vi: 40.0, he_so_phan_tan: 0.30}
+      xu:         {trung_vi: 1.0, he_so_phan_tan: 0.20}
 
 di_cu:                           # luật vật lý lập làng mới (không phải định chế)
   so_thua_toi_thieu: 8           # cần cụm ruộng công đủ rộng
@@ -238,6 +252,14 @@ fiscal:                          # tài khóa/khu vực công — ADR 0004 §T08
   chi_cong_toi_da_moi_tick: 5    # trần số đơn vị xây/tick (chống spam intent)
 
 minds:
+  # Research treatment mode: one provider/model/sampling setup for every agent tier, no
+  # automatic route fallback. Tắt cho production; bật bằng overlay thí nghiệm có provenance.
+  nghiem_thuc:
+    bat: false
+    provider: ""
+    model: ""
+    temperature: 0.7
+    max_output_tokens: 2000
   ky_uc_toi_da: 10
   ky_uc_doi_toi_da: 12   # dấu mốc đời không trôi (cưới, sinh, tang, đất, nhà, ân oán)               # ký ức đời người — giữ N biến cố gần nhất
   batch_toi_da: 8            # (di sản batch cũ — kiến trúc 1-to-1 không còn gộp agent)

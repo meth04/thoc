@@ -6,8 +6,10 @@ hợp đồng quen thuộc. Thẻ KHÔNG đề nghị hợp đồng mới, khôn
 
 from __future__ import annotations
 
+from engine.economy import household_food_equivalent
 from engine.intents import KeHoach
 from engine.market import Lenh
+from engine.pricing import gia_ky_vong
 from engine.world import World
 from minds.schemas import TheChinhSach
 
@@ -34,12 +36,13 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
 
     ho = w.ho_cua(aid)
     thoc_ho = sum(w.ledger.so_du(m, "thoc") for m in ho)
+    food_ho = household_food_equivalent(w, ho)
     nhu_cau_tick = sum(
         nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(tt) else nc["tre_em_kg_tick"]
         for m in ho
     )
     muc_du_tru = nhu_cau_tick * the.du_tru_muc_tieu
-    an_ninh = thoc_ho / muc_du_tru if muc_du_tru > 0 else 1.0
+    an_ninh = food_ho / muc_du_tru if muc_du_tru > 0 else 1.0
 
     if w.mua_mua():
         thieu = max(0.0, muc_du_tru * 2 - thoc_ho)
@@ -82,12 +85,12 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
 
     # mua bán theo ngưỡng thẻ
     if the.mua_cong_cu_khi_hong and w.ledger.so_du(aid, "cong_cu") < 1 and thoc_ho > 500:
-        gia_cu = w.gia_gan_nhat("cong_cu") or 100.0
+        gia_cu = gia_ky_vong(w, aid, "cong_cu")
         kh.dat_lenh.append(Lenh(aid, "mua", "cong_cu", 1.0, round(gia_cu * 1.05, 0)))
     if the.ban_go_nguong is not None:
         go_co = w.ledger.so_du(aid, "go")
         if go_co > the.ban_go_nguong:
-            gia_go = w.gia_gan_nhat("go") or 12.0
+            gia_go = gia_ky_vong(w, aid, "go")
             kh.dat_lenh.append(
                 Lenh(aid, "ban", "go", round(go_co - the.ban_go_nguong, 1),
                      round(gia_go * 0.9, 1))
@@ -118,7 +121,7 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
         if an_ninh < 0.9 and not bc.ruong_cua.get(aid) and not kh.canh_thua:
             kh.danh_ca_cong = max(kh.danh_ca_cong, 120.0)
         if so_ga > 12:
-            gia_ga = w.gia_gan_nhat("ga") or 40.0
+            gia_ga = gia_ky_vong(w, aid, "ga")
             kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),
                                     round(gia_ga * 0.95, 1)))
 

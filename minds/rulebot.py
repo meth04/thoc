@@ -22,9 +22,11 @@ from engine.contracts import (
     ben_hien_tai,
 )
 from engine.demography import can_huyet
+from engine.economy import household_food_equivalent
 from engine.intents import KeHoach
 from engine.market import Lenh
-from engine.spatial import _bo_cua, _hai_bo_bat
+from engine.pricing import gia_ky_vong
+from engine.spatial import _bo_cua, _cham_tre_bat, _hai_bo_bat, _vu_dong_bat
 from engine.world import World
 
 
@@ -184,12 +186,13 @@ def ke_hoach_mot_nguoi(
         # ---- hộ & an ninh lương thực ----
         ho = w.ho_cua(aid)
         thoc_ho = sum(w.ledger.so_du(m, "thoc") for m in ho)
+        food_ho = household_food_equivalent(w, ho)
         nhu_cau_tick = sum(
             nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(tt) else nc["tre_em_kg_tick"]
             for m in ho
         )
         muc_du_tru = nhu_cau_tick * (1.5 + p5.tiet_kiem / 3.0)
-        an_ninh = thoc_ho / muc_du_tru if muc_du_tru > 0 else 1.0
+        an_ninh = food_ho / muc_du_tru if muc_du_tru > 0 else 1.0
 
         # ---- mùa mưa: canh tác ----
         if w.mua_mua():
@@ -214,6 +217,20 @@ def ke_hoach_mot_nguoi(
                 kh.canh_thua = _chon_thua_canh(bc, aid, so_thua, da_nham)
         else:
             # ---- mùa khô: gỗ, chế tác, xây, học ----
+            # Vụ đông chỉ mở khi scenario bật. Agent còn đủ đất/công có thể xen ngô hoặc
+            # khoai trước khi chuyển sang khai thác/chế tác; không khóa ai thành nông dân.
+            if _vu_dong_bat(w) and (an_ninh < 2.5 or p5.tiet_kiem >= 5):
+                crops = w.cfg.get("khong_gian.vu_dong.cay")
+                ruong_kho = list(bc.ruong_cua.get(aid, ()))
+                cong_uoc = 180.0 * (a.health / 100.0)
+                for i, p in enumerate(ruong_kho):
+                    cay = sorted(crops)[(i + p5.tiet_kiem) % len(crops)] if crops else ""
+                    spec = crops.get(cay, {})
+                    cong_can = float(spec.get("cong", cong_uoc + 1.0))
+                    if cong_uoc + 1e-9 < cong_can:
+                        continue
+                    kh.canh_vu_dong.append((p.id, cay))
+                    cong_uoc -= cong_can
             go_co = w.ledger.so_du(aid, "go")
             co_nha_ho = any(w.ledger.so_du(m, "nha") >= 1.0 for m in ho)
             co_cong_cu = w.ledger.so_du(aid, "cong_cu") >= 1.0
@@ -256,8 +273,8 @@ def ke_hoach_mot_nguoi(
                     kh.cong_khai_go = 80.0
             elif an_ninh > 1.0 and p5.cham_chi >= 6:
                 # nghề khai thác chọn theo GIÁ: quặng (20 công/đv) vs gỗ (10 công/đv)
-                gia_go_ref = w.gia_gan_nhat("go") or 12.0
-                gia_quang_ref = w.gia_gan_nhat("quang_dong") or 40.0
+                gia_go_ref = gia_ky_vong(w, aid, "go")
+                gia_quang_ref = gia_ky_vong(w, aid, "quang_dong")
                 if gia_quang_ref / 20.0 > gia_go_ref / 10.0 and co_cong_cu:
                     kh.cong_khai_quang = 60.0
                 else:
@@ -382,8 +399,30 @@ def hanh_vi_khong_gian(w: World, a, kh: KeHoach, bc: _BoiCanhTick, an_ninh: floa
 
 
 def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float,
-                              bc: _BoiCanhTick) -> None:
+                               bc: _BoiCanhTick) -> None:
     aid = a.id
+    # Worker nhận giao kèo gop_cong quy mô đúng bằng nhu cầu chăm trẻ của một hộ có
+    # trẻ nhỏ có thể chọn dùng công đó để trông trẻ. Hợp đồng/payment vẫn là grammar
+    # chung; module care chỉ accounting time, không tạo nghề/class riêng.
+    if _cham_tre_bat(w):
+        care_cfg = w.cfg.get("khong_gian.cham_tre")
+        age_need = float(care_cfg["tuoi_can_cham"])
+        labor_one = float(care_cfg["cong_cham_moi_tre"])
+        for hd in w.hop_dong.values():
+            if hd.trang_thai != "hieu_luc":
+                continue
+            for clause in hd.dieu_khoan:
+                if clause.loai != "gop_cong" or ben_hien_tai(w, hd.id, clause.tu) != aid:
+                    continue
+                parent = ben_hien_tai(w, hd.id, clause.den)
+                if parent not in w.agents:
+                    continue
+                children = [
+                    cid for cid in w.ho_cua(parent)
+                    if w.agents[cid].con_song and w.agents[cid].tuoi_nam < age_need
+                ]
+                if children and clause.so_cong_moi_tick <= labor_one * len(children):
+                    kh.cham_tre_cho.extend(cid for cid in children if cid not in kh.cham_tre_cho)
     # P2P (PART 5.4): người hợp tác cao, thi thoảng nhắn thẳng một hàng xóm THÂN để mặc
     # cả/hỏi mua (thông tin lan 1-1, ngoài chợ) — mock exercise nhan_tin, tất định seeded
     if a.persona.hop_tac >= 6 and g.random() < 0.04:
@@ -407,11 +446,11 @@ def _phung_duong_va_chan_nuoi(w: World, a, kh: KeHoach, g, an_ninh: float,
     if an_ninh < 0.6 and so_ga >= 2:
         kh.giet_ga = max(kh.giet_ga, 2)
     if so_ga > 12:
-        gia_ga = w.gia_gan_nhat("ga") or 40.0
+        gia_ga = gia_ky_vong(w, aid, "ga")
         kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),
                                 round(gia_ga * 0.95, 1)))
     elif so_ga == 0 and an_ninh > 2.0 and a.persona.tiet_kiem >= 6 and g.random() < 0.1:
-        gia_ga = w.gia_gan_nhat("ga") or 40.0
+        gia_ga = gia_ky_vong(w, aid, "ga")
         kh.dat_lenh.append(Lenh(aid, "mua", "ga", 3.0, round(gia_ga * 1.1, 1)))
     # đánh cá: không ruộng/đói → sông là sinh kế cuối cùng trước khi làm liều
     so_ruong = len(bc.ruong_cua.get(aid, ()))
@@ -508,11 +547,11 @@ def _phase4_hanh_vi(w: World, a, kh: KeHoach, g, an_ninh: float,
                                   or xu >= r_may["quang_hoac_xu"]):
             kh.xay_may = 1
         else:
-            gia_go = w.gia_gan_nhat("go") or 12.0
+            gia_go = gia_ky_vong(w, aid, "go")
             if go < r_may["go"]:
                 kh.dat_lenh.append(Lenh(aid, "mua", "go", round(r_may["go"] - go, 1),
                                         round(gia_go * 1.15, 1)))
-            gia_quang = w.gia_gan_nhat("quang_dong") or 40.0
+            gia_quang = gia_ky_vong(w, aid, "quang_dong")
             if quang < r_may["quang_hoac_xu"] and xu < r_may["quang_hoac_xu"]:
                 kh.dat_lenh.append(Lenh(aid, "mua", "quang_dong",
                                         round(r_may["quang_hoac_xu"] - quang, 1),
@@ -521,7 +560,7 @@ def _phase4_hanh_vi(w: World, a, kh: KeHoach, g, an_ninh: float,
     # 3c) hàng tiện nghi: giàu mua dùng; ai có blueprint che_bien thì chế đem bán
     if w.ten_hang and thoc > 1200 and g.random() < 0.4:
         ma = sorted(w.ten_hang)[int(g.integers(0, len(w.ten_hang)))]
-        gia_hang = w.gia_gan_nhat(ma) or 40.0
+        gia_hang = gia_ky_vong(w, aid, ma)
         kh.dat_lenh.append(Lenh(aid, "mua", ma, 2.0, round(gia_hang * 1.1, 1)))
     bp_che_bien = [bp for bp in w.blueprints.values()
                    if bp.chu == aid and bp.hang_moi]
@@ -530,9 +569,9 @@ def _phase4_hanh_vi(w: World, a, kh: KeHoach, g, an_ninh: float,
         if ton < 6 and not w.mua_mua():
             kh.che_hang[bp.hang_moi] = kh.che_hang.get(bp.hang_moi, 0) + 4
         if ton >= 1:
-            gia_hang = w.gia_gan_nhat(bp.hang_moi) or 40.0
+            gia_hang = gia_ky_vong(w, aid, bp.hang_moi)
             kh.dat_lenh.append(Lenh(aid, "ban", bp.hang_moi, round(ton, 1),
-                                    round(max(gia_hang * 0.9, 15.0), 1)))
+                                    round(gia_hang * 0.9, 1)))
 
     # 4) li-xăng blueprint mình sở hữu (công thức 8)
     bp_cua = [bp for bp in w.blueprints.values()
@@ -632,7 +671,7 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g,
         from engine.production import he_so_may as _hsm
 
         he_may_e = max(_hsm(w, eid), 1.0)
-        gia_go = w.gia_gan_nhat("go") or 12.0
+        gia_go = gia_ky_vong(w, eid, "go")
         bp_hang = [bp for bp in w.blueprints.values() if bp.chu == eid and bp.hang_moi]
         cong_con = cong_thue
         for bp in bp_hang:
@@ -647,7 +686,7 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g,
                         continue
                     thieu = suc * float(sl) - w.ledger.so_du(eid, ts)
                     if thieu > 0 and ts != "thoc":
-                        gia_nl = w.gia_gan_nhat(ts) or 12.0
+                        gia_nl = gia_ky_vong(w, eid, ts)
                         kh.dat_lenh.append(Lenh(eid, "mua", ts, round(thieu, 1),
                                                 round(gia_nl * 1.1, 1)))
         if cong_con >= 60 / he_may_e:
@@ -659,9 +698,9 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g,
                                         round(gia_go * 1.1, 1)))
     ton_cu = w.ledger.so_du(eid, "cong_cu")
     if ton_cu >= 1:
-        gia_cu = w.gia_gan_nhat("cong_cu") or 100.0
+        gia_cu = gia_ky_vong(w, eid, "cong_cu")
         kh.dat_lenh.append(Lenh(eid, "ban", "cong_cu", round(ton_cu, 1),
-                                round(max(gia_cu * 0.9, 50), 0)))
+                                round(gia_cu * 0.9, 0)))
     if chien_luoc:
         # gom vật liệu + dựng MỘT máy khi có blueprint (máy nhân công suất mọi việc)
         from engine.research import duoc_ap_dung
@@ -673,11 +712,11 @@ def _ke_hoach_entity(w: World, eid: str, bc: _BoiCanhTick, da_nham: set[str], g,
             if go >= r_may["go"] and (quang >= can_kl or xu >= can_kl) and cong_thue >= 100:
                 kh.xay_may = 1
             elif thoc > 1500:
-                gia_go = w.gia_gan_nhat("go") or 12.0
+                gia_go = gia_ky_vong(w, eid, "go")
                 if go < r_may["go"]:
                     kh.dat_lenh.append(Lenh(eid, "mua", "go", round(r_may["go"] - go, 1),
                                             round(gia_go * 1.15, 1)))
-                gia_quang = w.gia_gan_nhat("quang_dong") or 40.0
+                gia_quang = gia_ky_vong(w, eid, "quang_dong")
                 if quang < can_kl and xu < can_kl:
                     kh.dat_lenh.append(Lenh(eid, "mua", "quang_dong",
                                             round(can_kl - quang, 1),
@@ -749,7 +788,8 @@ def _tra_loi_bang_rao(w: World, a, kh: KeHoach, g, thoc: float, an_ninh: float,
             to = next(c for c in hd.dieu_khoan if c.loai == "chuyen_giao_dinh_ky")
             if qsd.tai_san.startswith("thua:"):
                 # thuê đất tô cố định: nhận nếu không đất và tô < kỳ vọng sản lượng
-                to_moi_vu = to.so_luong / max(to.moi_n_tick, 1) * 2
+                # So sánh tô theo NĂM, không ngầm giả định 2 tick/năm.
+                to_moi_vu = to.so_luong / max(to.moi_n_tick, 1) * w.tick_moi_nam()
                 nhan = so_ruong == 0 and to.tai_san == "thoc" and to_moi_vu <= 350
             elif qsd.tai_san.startswith("blueprint:"):
                 # li-xăng sáng chế: nông dân/thợ khấm khá thuê bí quyết
@@ -858,6 +898,32 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
                                        so_luong=round(120 * gia_cong, 0), moi_n_tick=1),
             ], nguoi_soan=aid))
 
+    # 2b) Trẻ nhỏ cần thời gian chăm thực sự. Hộ có dự trữ có thể rao một giao kèo
+    # gop_cong quy mô bằng nhu cầu chăm; ai nhận hợp đồng sẽ chọn `cham_tre_cho` ở
+    # tick sau. Đây dùng chính primitive lao động+payment, không thêm class "bảo mẫu".
+    if _cham_tre_bat(w):
+        care_cfg = w.cfg.get("khong_gian.cham_tre")
+        age_need = float(care_cfg["tuoi_can_cham"])
+        children = [
+            cid for cid in w.ho_cua(aid)
+            if w.agents[cid].con_song and w.agents[cid].tuoi_nam < age_need
+        ]
+        cong_can = min(
+            len(children) * float(care_cfg["cong_cham_moi_tre"]),
+            float(w.cfg.get("nhu_cau.ngay_cong_moi_tick")),
+        )
+        gia_cong = float(care_cfg["gia_cong_goi_y"])
+        if children and thoc > nhu_cau_tick + cong_can * gia_cong:
+            _dang_neu_chua_treo(kh, bc, aid, HopDong(
+                cac_ben=[aid, "?"], hinh_thuc="mieng",
+                thoi_han=int(care_cfg["thoi_han_goi_y_tick"]),
+                dieu_khoan=[
+                    ClauseGopCong(tu="?", den=aid, so_cong_moi_tick=cong_can),
+                    ClauseChuyenGiaoDinhKy(tu=aid, den="?", tai_san="thoc",
+                                           so_luong=round(cong_can * gia_cong, 2),
+                                           moi_n_tick=1),
+                ], nguoi_soan=aid))
+
     # 3) nhiều đất canh không xuể → mời cấy rẽ / tô cố định (chỉ thửa CHƯA cho thuê)
     thua_ranh = [p for p in bc.ruong_cua.get(aid, ())[3:] if p.id not in bc.thua_dang_thue]
     if thua_ranh and g.random() < 0.5:
@@ -920,7 +986,7 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
     # người lười tự khai thác thì MUA, người chăm khai thác dư thì BÁN; công cụ hao mòn
     # 5%/tick nên cầu tái diễn liên tục — đây là dòng máu của chợ làng.
     go_co = w.ledger.so_du(aid, "go")
-    gia_go = w.gia_gan_nhat("go") or 12.0
+    gia_go = gia_ky_vong(w, aid, "go")
     co_nha_ho = any(w.ledger.so_du(m, "nha") >= 1.0 for m in w.ho_cua(aid))
     can_go = (not co_nha_ho) or kh.che_tao_cong_cu or go_co < 2
     if kh.cong_khai_go == 0 and can_go and go_co < 6 and thoc > 400 and p5.cham_chi <= 4:
@@ -928,22 +994,22 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
                                 round(gia_go * (1.0 + 0.05 * p5.lieu_linh), 1)))
     if go_co > 4 and p5.cham_chi >= 5:
         kh.dat_lenh.append(Lenh(aid, "ban", "go", round(go_co - 3, 1),
-                                round(max(gia_go * (0.85 + 0.03 * p5.tiet_kiem), 3.0), 1)))
+                                round(gia_go * (0.85 + 0.03 * p5.tiet_kiem), 1)))
     quang_co = w.ledger.so_du(aid, "quang_dong")
     if quang_co > 3:
-        gia_quang = w.gia_gan_nhat("quang_dong") or 40.0
+        gia_quang = gia_ky_vong(w, aid, "quang_dong")
         kh.dat_lenh.append(Lenh(aid, "ban", "quang_dong", round(quang_co - 2, 1),
                                 round(gia_quang * 0.9, 1)))
     # chợ nhà: vô gia cư có tiền thì MUA; thợ dựng nhà thừa đem bán
     co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in w.ho_cua(aid))
-    gia_nha = w.gia_gan_nhat("nha") or 450.0
+    gia_nha = gia_ky_vong(w, aid, "nha")
     if not co_nha and thoc > gia_nha * 1.05:
         kh.dat_lenh.append(Lenh(aid, "mua", "nha", 1.0, round(gia_nha * 1.1, 0)))
     if co_nha and p5.cham_chi >= 7 and not w.mua_mua():
         so_nha = w.ledger.so_du(aid, "nha")
         if so_nha >= 2:
             kh.dat_lenh.append(Lenh(aid, "ban", "nha", round(so_nha - 1, 1),
-                                    round(max(gia_nha * 0.95, 350), 0)))
+                                    round(gia_nha * 0.95, 0)))
         elif (w.ledger.so_du(aid, "go")
                 >= w.cfg.get("san_xuat.recipe.nha.go") and an_ninh > 1.0
                 and bc.cong_thue_vao.get(aid, 0.0) >= 60 and g.random() < 0.5):
@@ -951,13 +1017,13 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
             kh.xay_nha = max(kh.xay_nha, 1)
 
     cong_cu_co = w.ledger.so_du(aid, "cong_cu")
-    gia_cu = w.gia_gan_nhat("cong_cu") or 100.0
+    gia_cu = gia_ky_vong(w, aid, "cong_cu")
     if cong_cu_co < 1 and thoc > 500:
         kh.dat_lenh.append(Lenh(aid, "mua", "cong_cu", 1.0,
                                 round(gia_cu * (1.0 + 0.03 * p5.lieu_linh), 0)))
     if cong_cu_co >= 2:
         kh.dat_lenh.append(Lenh(aid, "ban", "cong_cu", round(cong_cu_co - 1, 2),
-                                round(max(gia_cu * 0.9, 40), 0)))
+                                round(gia_cu * 0.9, 0)))
     # thợ chăm chỉ chuyên chế công cụ để bán (nghề thủ công tự phát)
     if not w.mua_mua() and p5.cham_chi >= 6 and cong_cu_co < 3:
         if go_co >= 4:
@@ -966,7 +1032,7 @@ def _hop_dong_va_cho(w: World, a, kh: KeHoach, g, thoc_ho: float,
             kh.cong_khai_go = 60.0
 
     # thóc đổi gỗ hai chiều — giá thóc (theo gỗ) nổi theo đói kém
-    gia_thoc_go = w.gia_gan_nhat("thoc/go") or (1.0 / gia_go)
+    gia_thoc_go = gia_ky_vong(w, aid, "thoc", "go")
     if an_ninh < 0.8 and go_co >= 1 and thoc < nhu_cau_tick * 2:
         do_doi = min(1.0, 0.8 - an_ninh + 0.2)
         kh.dat_lenh.append(Lenh(aid, "mua", "thoc", round(nhu_cau_tick, 0),

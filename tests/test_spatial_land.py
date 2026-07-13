@@ -95,27 +95,32 @@ def test_on_khai_hoang_bo_kia_can_qua_song():
     production.khai_hoang_dat(w, kh)
     assert w.parcels[p.id].loai == "ruong"
     assert w.parcels[p.id].mau_mo == pytest.approx(0.7)
-    assert w.ledger.so_du(aid, "cong") == pytest.approx(1000.0 - 120.0)
+    cong_khai_hoang = float(w.cfg.get("khong_gian.khai_hoang.cong_moi_thua"))
+    assert w.ledger.so_du(aid, "cong") == pytest.approx(1000.0 - cong_khai_hoang)
     assert w.parcels[p.id].chu is None                    # KHÔNG cấp title free
 
 
 def test_on_khai_hoang_tao_quyen_dat_qua_homestead():
-    """Vỡ hoang rồi canh liên tiếp 2 vụ mưa ⇒ quyền đất HỢP LỆ qua homestead (không tức thì)."""
+    """Vỡ hoang rồi canh đủ số vụ lúa config ⇒ quyền đất HỢP LỆ qua homestead, không free title."""
     w = tao_the_gioi(load_config(overlays=[OVERLAY]), SEED)
     p = _thua_cong(w, bo="hoang")
     aid = sorted(w.agents)[0]
     w.ben_kia_tick = {aid}
-    w.tick = 1
-    _cap(w, aid, "cong", 1000.0, "sinh_cong")
-    _cap(w, aid, "thoc", 2000.0, "khoi_tao")
-    production.thi_hanh_san_xuat(w, {aid: KeHoach(id=aid, khai_hoang=[p.id], canh_thua=[p.id])})
-    assert w.parcels[p.id].loai == "ruong"
-    assert w.parcels[p.id].chu is None                    # mới 1 vụ ⇒ chưa thành chủ
-    assert w.parcels[p.id].homestead_ai == aid
-    w.tick = 3
-    _cap(w, aid, "cong", 1000.0, "sinh_cong")
-    _cap(w, aid, "thoc", 2000.0, "khoi_tao")
-    production.thi_hanh_san_xuat(w, {aid: KeHoach(id=aid, canh_thua=[p.id])})
+    so_vu = int(w.cfg.get("san_xuat.homestead_tick_lien_tiep"))
+    tick_lua = [t for t in range(1, 3 * so_vu + 3) if w.mua_mua(t)][:so_vu]
+    assert len(tick_lua) == so_vu
+    for i, tick in enumerate(tick_lua):
+        w.tick = tick
+        _cap(w, aid, "cong", 1000.0, "sinh_cong")
+        _cap(w, aid, "thoc", 2000.0, "khoi_tao")
+        kh = KeHoach(id=aid, canh_thua=[p.id])
+        if i == 0:
+            kh.khai_hoang = [p.id]
+        production.thi_hanh_san_xuat(w, {aid: kh})
+        if i == 0:
+            assert w.parcels[p.id].loai == "ruong"
+            assert w.parcels[p.id].chu is None             # mới 1 vụ ⇒ chưa thành chủ
+            assert w.parcels[p.id].homestead_ai == aid
     assert w.parcels[p.id].chu == aid
 
 

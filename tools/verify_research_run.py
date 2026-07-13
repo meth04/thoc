@@ -146,6 +146,25 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
     else:
         ket.add("config_digest_reproduced", None, "overlay thiếu — không tái dựng được digest")
 
+    # Calendar phải được manifest ghi rõ khi run có seasonal overlay; thiếu ở manifest cũ
+    # chỉ là metadata legacy (soft), còn manifest mới mà lệch config thì không thể diễn giải
+    # horizon/tuổi/hazard theo năm một cách kiểm toán được.
+    calendar = repro.get("calendar")
+    if calendar is None:
+        ket.add("calendar_consistent", None, "manifest legacy chưa ghi calendar", hard=False)
+    elif overlays_missing:
+        ket.add("calendar_consistent", None, "overlay thiếu — không kiểm calendar", hard=False)
+    else:
+        thang = float(cfg.get("thoi_gian.thang_moi_tick"))
+        so_tick = int(round(12.0 / thang))
+        ok_calendar = (
+            float(calendar.get("months_per_tick", -1)) == thang
+            and int(calendar.get("ticks_per_year", -1)) == so_tick
+            and calendar.get("seasons") == cfg.raw().get("thoi_gian", {}).get("lich_mua")
+        )
+        ket.add("calendar_consistent", ok_calendar,
+                f"months/ticks/seasons={thang}/{so_tick}/{cfg.raw().get('thoi_gian', {}).get('lich_mua')}")
+
     # 4. scenario files chưa trôi
     scenario = repro.get("scenario")
     if scenario:

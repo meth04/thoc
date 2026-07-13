@@ -80,18 +80,23 @@ class MindMock:
         for aid, d, ly_do in thung:
             w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
 
-    def _ghi_log(self, w: World, req: LLMRequest, resp: LLMResponse, fallback: bool) -> None:
+    def _ghi_log(self, w: World, req: LLMRequest, resp: LLMResponse, fallback: bool,
+                 error: Exception | None = None) -> None:
         """Ghi llm_calls + gom telemetry (token/latency/lượt công cụ) theo tick. Gọi dưới
         self._lock ở nhánh real fan-out; nhánh nền/mock đơn luồng nên an toàn."""
         self.log.ghi(w.tick, req, resp, fallback)
         # transcript lossless (P1): raw ĐẦY ĐỦ (llm_calls cắt 4000 ký tự nên không dùng
-        # replay được). Bỏ qua call LỖI (provider "loi") — chúng là điểm dừng, không có
-        # response để replay; miss transcript lúc replay sẽ tự tái hiện dừng-êm.
-        if self.transcript is not None and resp.provider != "loi":
+        # replay được). Call lỗi cũng là outcome cần replay: nếu bỏ qua nó, replay có một
+        # ``miss`` nhân tạo và không còn là artifact đủ để tái lập đường dừng-êm.
+        if self.transcript is not None:
             self.transcript.ghi(
                 w.tick, req.tier, resp.provider, resp.model,
                 w.cfg.get(f"models.tiers.{req.tier}.temperature", None),
                 req.prompt, resp.text, resp.tok_in, resp.tok_out,
+                error_type=type(error).__name__ if error is not None else (
+                    "ProviderError" if resp.provider == "loi" else None
+                ),
+                error_message=str(error) if error is not None else resp.text,
             )
         self.tok_in += resp.tok_in
         self.tok_out += resp.tok_out
@@ -322,7 +327,7 @@ class MindMock:
             text=f"[LOI] {che_key(str(e))[:500]}", provider="loi", model="",
             retries=int(getattr(e, "so_attempt_hong", 0)),
         )
-        self._ghi_log(w, req, resp_loi, True)
+        self._ghi_log(w, req, resp_loi, True, error=e)
 
     def _nen_hoi_ky(self, w: World) -> None:
         for aid in sorted(w.agents):
@@ -334,7 +339,7 @@ class MindMock:
             hd = sum(1 for h in w.hop_dong.values()
                      if h.trang_thai == "hieu_luc" and aid in h.cac_ben)
             a.hoi_ky = (
-                f"Năm {w.tick // 2}: {a.tuoi_nam:.0f} tuổi, {len(a.con)} con, "
+                f"Năm {w.nam()}: {a.tuoi_nam:.0f} tuổi, {len(a.con)} con, "
                 f"{tai_san:.0f}kg thóc, {dat} thửa đất, {hd} giao kèo, học vấn E{a.e_bac}."
             )[: int(w.cfg.get("minds.hoi_ky_token_toi_da")) * 4]
 

@@ -106,7 +106,8 @@ def test_on_co_do_tra_thoc_qua_duoc():
     assert spatial.co_the_o_bo(w, kh, den) is True
     assert w.ledger.so_du(op, "thoc") == thoc_op0 + 5.0   # phí vào chủ đò
     assert w.ledger.so_du(kh, "thoc") == thoc_k0 - 5.0     # khách trả, cân
-    assert w.ledger.so_du(op, "thuyen") == pytest.approx(0.95)  # thuyền hao mòn 0.05
+    hao_mon = float(w.cfg.get("khong_gian.do.hao_mon_moi_tick_dung"))
+    assert w.ledger.so_du(op, "thuyen") == pytest.approx(1.0 - hao_mon)
     audit.kiem_toan_the_gioi(w, len(w.parcels))            # bảo toàn xanh
 
 
@@ -168,7 +169,8 @@ def test_on_chu_thuyen_tu_qua_mien_phi():
     spatial.buoc_qua_song(w, ke)
     assert a in w.ben_kia_tick
     assert w.ledger.so_du(a, "thoc") == thoc0          # miễn phí
-    assert w.ledger.so_du(a, "thuyen") == pytest.approx(0.95)
+    hao_mon = float(w.cfg.get("khong_gian.do.hao_mon_moi_tick_dung"))
+    assert w.ledger.so_du(a, "thuyen") == pytest.approx(1.0 - hao_mon)
 
 
 # --------------------------------------------------------------------------- #

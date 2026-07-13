@@ -85,11 +85,11 @@ def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> Non
 
 
 def decay_quan_he(w: World) -> None:
-    """Quan hệ không nuôi thì nhạt dần — áp cuối mỗi năm (tick chẵn), tất định.
+    """Quan hệ không nuôi thì nhạt dần — áp cuối mỗi năm lịch, tất định.
 
     Nhân mọi trọng số với (1 - decay); xóa cạnh quá mờ và cạnh dính chủ thể
     không còn hoạt động (đồ thị không phình vô hạn với người chết)."""
-    if w.mua_mua():
+    if not w.cuoi_nam():
         return
     decay = float(w.cfg.get("quan_he.decay_moi_nam"))
     nguong = float(w.cfg.get("quan_he.nguong_xoa_canh"))

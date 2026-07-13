@@ -200,14 +200,16 @@ def cai_chet(w: World) -> list[str]:
         a = w.agents[aid]
         if not a.con_song:
             continue
-        vua_doi = w.tick - a.doi_tick <= 2  # thiếu ăn trong vòng 1 năm gần đây
+        vua_doi = w.tick - a.doi_tick <= w.tick_moi_nam()  # thiếu ăn trong vòng 1 năm gần đây
         ly_do = None
         if a.health <= 0:
             ly_do = "chet_doi" if vua_doi else "kiet_suc"
         elif a.health < sk["nguong_nguy_kich"] and g.random() < sk["p_chet_khi_nguy_kich"]:
             ly_do = "chet_doi" if vua_doi else "benh_tat"
         else:
-            q_tick = 1 - (1 - _q_nam(a.tuoi_nam, gp, ns)) ** 0.5
+            # Hazard Gompertz được khai báo theo NĂM. Căn theo độ dài tick để một
+            # scenario 3 mùa/năm không lặng lẽ làm xác suất chết thường niên cao hơn.
+            q_tick = 1 - (1 - _q_nam(a.tuoi_nam, gp, ns)) ** (1.0 / w.tick_moi_nam())
             if g.random() < q_tick:
                 # đói mà chết thì là chết đói, dù trời có gọi đúng số
                 yeu = a.health < float(sk["nguong_phan_loai_chet_doi"])

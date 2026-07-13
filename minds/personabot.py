@@ -13,6 +13,7 @@ import json
 import numpy as np
 
 from engine.market import Lenh
+from engine.pricing import gia_ky_vong
 from engine.world import World
 from minds.translate import ke_hoach_thanh_quyet_dinh
 
@@ -45,10 +46,10 @@ def sinh_quyet_dinh(w: World, aid: str, bc, da_nham: set[str],
         a = w.agents[aid]
         lua = int(g.integers(0, 3))
         if lua == 0 and w.ledger.so_du(aid, "thoc") > 300:
-            gia_go = w.gia_gan_nhat("go") or 12.0
+            gia_go = gia_ky_vong(w, aid, "go")
             kh.dat_lenh.append(Lenh(aid, "mua", "go", 1.0, _nhieu(gia_go * 1.2, g, 0.2)))
         elif lua == 1 and w.ledger.so_du(aid, "go") > 1:
-            gia_go = w.gia_gan_nhat("go") or 12.0
+            gia_go = gia_ky_vong(w, aid, "go")
             kh.dat_lenh.append(Lenh(aid, "ban", "go", 1.0, _nhieu(gia_go * 0.8, g, 0.2)))
         elif lua == 2 and a.e_bac < 4:
             kh.hoc = True
