@@ -146,12 +146,21 @@ def khai_hoang_dat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         for pid in sorted(kh.khai_hoang):
             p = w.parcels.get(pid)
             if p is None or p.loai not in ("rung", "doi") or p.chu is not None:
+                from engine.action_journal import rejected as journal_rejected
+
+                journal_rejected(w, aid, "khai_hoang", "parcel_not_clearable", target=pid)
                 continue
             if not co_the_o_bo(w, aid, p.bo):
+                from engine.action_journal import rejected as journal_rejected
+
+                journal_rejected(w, aid, "khai_hoang", "parcel_unreachable", target=pid)
                 _ghi_su_co(w, aid, f"khai hoang {pid} bất thành: chưa qua sông tới bờ kia")
                 continue
             tieu = [("cong", cong_moi, "dung")]
             if not _lam_nguyen_tu(w, aid, f"khai hoang {pid}", tieu, []):
+                from engine.action_journal import rejected as journal_rejected
+
+                journal_rejected(w, aid, "khai_hoang", "insufficient_labor", target=pid)
                 _ghi_su_co(w, aid, f"khai hoang {pid} không thành: {_thieu_gi(w, aid, tieu)}")
                 continue
             ghi_cong_dung(w, "phi_nong", cong_moi)
@@ -169,6 +178,9 @@ def khai_hoang_dat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                              go_thu_hoi=round(go_thu_hoi, 9))
             else:
                 w.events.ghi(w.tick, "khai_hoang", id=aid, thua=pid, tu_loai=tu_loai)
+            from engine.action_journal import executed as journal_executed
+
+            journal_executed(w, aid, "khai_hoang", target=pid, code="cleared")
             w.ghi_ky_uc(aid, f"tôi vỡ hoang thửa {pid} ({tu_loai}) thành ruộng", doi=True)
 
 
@@ -256,6 +268,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 if not _lam_nguyen_tu(w, aid, f"canh {pid}", tieu, []):
                     _ghi_su_co(w, aid, f"gieo {pid} không thành: {_thieu_gi(w, aid, tieu)}")
                     continue  # thiếu công/giống → thửa này bỏ, KHÔNG mất gì
+                from engine.action_journal import executed as journal_executed
+
+                journal_executed(w, aid, "phan_bo_cong", code="cultivated")
                 ghi_cong_dung(w, "nong", cong_can)
                 da_canh_tick_nay[pid] = aid
                 w.canh_tick.add(pid)
@@ -325,6 +340,10 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                                            [("cong", cong_can, "dung")], []):
                         _ghi_su_co(w, aid, f"canh {cay} {pid} không thành: thiếu công")
                         continue
+                    from engine.action_journal import executed as journal_executed
+
+                    journal_executed(w, aid, "canh_vu_dong", target=pid,
+                                     code="winter_crop_cultivated")
                     ghi_cong_dung(w, "nong", cong_can)
                     da_canh_tick_nay[pid] = aid
                     w.canh_tick.add(pid)

@@ -27,3 +27,8 @@ quan_sat.nhan_khau.min_n_tu_vong,deaths,design_assumption,,"P4 minimum death cou
 quan_sat.nhan_khau.tuoi_nghi,years,design_assumption,,"P4 dependency-ratio age cutoff; sensitivity required for substantive claims."
 quan_sat.nhan_khau.bang_song.bands,years,design_assumption,,"P4 disclosed abridged period-life-table bands; not a calibrated historical schedule."
 quan_sat.nhan_khau.bang_song.min_person_tick_moi_band,person-tick/band,design_assumption,,"P4 missing-data threshold for a life-table age band."
+minds.action_journal.enforce,boolean,design_assumption,,"V3 interface treatment: preflight-rejected targets are filtered before engine execution; legacy scenarios leave this gate off."
+khong_gian.vu_dong.cay.ngo,kg and labor/field,design_assumption,,"V3 crop trade-off: higher total food per field and higher labor requirement than potato; sensitivity required."
+khong_gian.vu_dong.cay.khoai,kg and labor/field,design_assumption,,"V3 crop trade-off: lower labor requirement and lower total food per field than maize; sensitivity required."
+suc_khoe.nha_o,health/tick,design_assumption,,"V3 shelter exposure/recovery treatment; health feeds existing labor-supply mechanism and is not a calibrated historical estimate."
+nhan_khau.tu_vong_nguyen_nhan.tuoi_gia_tu,years,design_assumption,,"V3 reporting threshold separating baseline mortality from old-age labels; it does not change mortality hazard."

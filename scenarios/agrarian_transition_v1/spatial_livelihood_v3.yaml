@@ -1,0 +1,44 @@
+# spatial_livelihood_v3.yaml — remediation overlay, applied AFTER spatial_v1 + v2.
+#
+# This is a new experimental treatment.  It deliberately does not edit legacy
+# spatial_v1/v2 files, so their recorded configs and transcript replay claims
+# remain interpretable.  Every number below is a design assumption, not a
+# historical calibration; provenance.csv records the unit and rationale.
+
+minds:
+  action_journal:
+    bat: true
+    enforce: true
+
+khong_gian:
+  # Neither winter crop dominates in all factual states:
+  # maize gives more food per scarce field but consumes more labour; potato
+  # consumes less labour but gives less total food per field.
+  vu_dong:
+    cay:
+      ngo:   {cong: 50, san_luong_kg: 360, quy_doi_dinh_duong: 0.90}
+      khoai: {cong: 25, san_luong_kg: 310, quy_doi_dinh_duong: 0.75}
+
+  # Re-declared for visibility in this treatment. Forest stock, regeneration,
+  # canopy and wild-chicken carrying capacity remain inherited from v2.
+  rung:
+    bat: true
+    trong_rung:
+      bat: true
+
+suc_khoe:
+  # Shelter is a persistent economic constraint: a full meal cannot erase the
+  # exposure loss in the same tick.  Health already scales labour supply in
+  # production.sinh_cong, so no separate productivity multiplier is needed.
+  nha_o:
+    bat: true
+    he_so_hoi_khi_vo_gia_cu: 0.35
+    mat_suc_khoe_mua_mua: 9.0
+    mat_suc_khoe_mua_kho: 2.0
+
+nhan_khau:
+  # Baseline Gompertz deaths before this age are labelled baseline mortality,
+  # not old age.  Hunger/illness/childbirth causes retain their own labels.
+  tu_vong_nguyen_nhan:
+    bat: true
+    tuoi_gia_tu: 65

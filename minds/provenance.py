@@ -52,8 +52,8 @@ def record_plan(w: Any, aid: str, origin: str, *, detail: str | None = None) -> 
     _record(w)["plans"][str(aid)] = item
 
 
-def record_action(w: Any, aid: str, action: str, origin: str,
-                  *, detail: str | None = None) -> None:
+def record_action(w: Any, aid: str, action: str, origin: str, *,
+                  target: str | None = None, detail: str | None = None) -> None:
     """Record an action added after, or distinguished within, a supplied plan."""
     if origin not in ORIGINS:
         raise ValueError(f"unknown decision origin: {origin}")
@@ -62,9 +62,33 @@ def record_action(w: Any, aid: str, action: str, origin: str,
         "action": str(action),
         "origin": origin,
     }
+    if target not in (None, ""):
+        item["target"] = str(target)
     if detail:
         item["detail"] = str(detail)
     _record(w)["actions"].append(item)
+
+
+def _target(raw: dict[str, Any]) -> str | None:
+    for key in ("thua", "ref", "di_san", "tre", "den", "cua", "muc_tieu", "entity"):
+        value = raw.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def record_raw_actions(w: Any, aid: str, actions: list[dict[str, Any]], origin: str) -> None:
+    """Record the exact public action objects supplied by a decision source."""
+    for raw in actions:
+        if isinstance(raw, dict) and raw.get("loai"):
+            record_action(w, aid, str(raw["loai"]), origin, target=_target(raw))
+
+
+def record_plan_actions(w: Any, kh: Any, origin: str) -> None:
+    """Render a final KeHoach back to wire actions for policy/fallback provenance."""
+    from minds.capabilities import hanh_dong_tu_ke_hoach
+
+    record_raw_actions(w, str(kh.id), hanh_dong_tu_ke_hoach(kh), origin)
 
 
 def summary(w: Any) -> dict[str, dict[str, int] | int]:

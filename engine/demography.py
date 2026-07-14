@@ -206,6 +206,9 @@ def cai_chet(w: World) -> list[str]:
     sk = w.cfg.raw()["suc_khoe"]
     gp = w.cfg.get("nhan_khau.tu_vong_gompertz")
     ns = w.cfg.get("nhan_khau.tu_vong_noi_suy")
+    nguyen_nhan = w.cfg.get("nhan_khau.tu_vong_nguyen_nhan", {})
+    tach_nguyen_nhan = isinstance(nguyen_nhan, dict) and bool(nguyen_nhan.get("bat", False))
+    tuoi_gia_tu = float(nguyen_nhan.get("tuoi_gia_tu", float("inf"))) if tach_nguyen_nhan else float("inf")
     g = w.rng.get("tu_vong", w.tick)
     chet: list[str] = []
     for aid in sorted(w.agents):
@@ -225,7 +228,12 @@ def cai_chet(w: World) -> list[str]:
             if g.random() < q_tick:
                 # đói mà chết thì là chết đói, dù trời có gọi đúng số
                 yeu = a.health < float(sk["nguong_phan_loai_chet_doi"])
-                ly_do = "chet_doi" if (vua_doi and yeu) else "tuoi_gia"
+                if vua_doi and yeu:
+                    ly_do = "chet_doi"
+                elif tach_nguyen_nhan and a.tuoi_nam < tuoi_gia_tu:
+                    ly_do = "tu_vong_co_ban"
+                else:
+                    ly_do = "tuoi_gia"
         if ly_do:
             from engine import metrics_demography, projects, quotes
 

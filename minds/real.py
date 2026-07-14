@@ -247,7 +247,9 @@ class MindReal(MindMock):
             for hd_moi in anh_xa[:3]:
                 try:
                     _mot_hanh_dong(w, ke_hoach[aid], HanhDong.model_validate(hd_moi))
+                    target = hd_moi.get("thua", hd_moi.get("ref"))
                     record_action(w, aid, str(hd_moi.get("loai", "?")), "translator",
+                                  target=str(target) if target not in (None, "") else None,
                                   detail=str(d.get("loai", "unknown")))
                     da_ap += 1
                 except Exception:  # noqa: BLE001

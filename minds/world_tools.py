@@ -15,6 +15,9 @@ Tên hàm/tham số bằng tiếng Việt không dấu (LLM gọi được), mô
 from __future__ import annotations
 
 from collections.abc import Callable
+import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 from engine.metrics import gini
@@ -75,7 +78,7 @@ KHAI_BAO_CONG_CU: list[dict[str, Any]] = [
     {
         "name": "dat_cong_gan",
         "description": "Danh sách thửa ruộng công CHƯA ai sở hữu gần làng (id + độ màu mỡ) "
-                       "— nơi có thể khai hoang.",
+                       "— có thể canh tác; KHÔNG phải mục tiêu khai hoang.",
         "parameters": {
             "type": "object",
             "properties": {"toi_da": {"type": "integer", "description": "số thửa tối đa trả về"}},
@@ -235,11 +238,12 @@ def _xem_co_hoi_san_xuat(w: World, aid: str, args: dict) -> dict:
     cards: list[dict[str, Any]] = []
     reachable = _reachable_parcels(w, aid)
     owned_fields = [p for p in reachable if p.loai == "ruong" and p.chu == aid]
+    common_fields = [p for p in reachable if p.loai == "ruong" and p.chu is None]
     if w.mua_mua():
         sx = cfg["san_xuat"]
         cards.append({
             "hoat_dong": "canh_lua",
-            "thua_co_the_dung": [p.id for p in owned_fields[:6]],
+            "thua_co_the_dung": [p.id for p in [*owned_fields, *common_fields][:6]],
             "cong_moi_thua": float(sx["cong_moi_thua"]),
             "giong_thoc_moi_thua": float(sx["giong_kg_moi_thua"]),
             "san_luong_co_so_kg_moi_thua": float(sx["san_luong_goc_kg"]),
@@ -252,13 +256,22 @@ def _xem_co_hoi_san_xuat(w: World, aid: str, args: dict) -> dict:
                 if isinstance(spec, dict):
                     cards.append({
                         "hoat_dong": f"canh_{crop}",
-                        "thua_co_the_dung": [p.id for p in owned_fields[:6]],
+                        "thua_co_the_dung": [p.id for p in [*owned_fields, *common_fields][:6]],
                         "cong_moi_thua": float(spec.get("cong", 0.0)),
                         "san_luong_co_so_kg_moi_thua": float(spec.get("san_luong_kg", 0.0)),
                         "quy_doi_luong_thuc": float(spec.get("quy_doi_dinh_duong", 0.0)),
                         "cong_hien_co": labour,
                     })
     forests = [p for p in reachable if p.loai == "rung"]
+    clearable = [p for p in reachable if p.loai in {"rung", "doi"} and p.chu is None]
+    if bool(w.cfg.get("khong_gian.khai_hoang.bat", False)) and clearable:
+        cards.append({
+            "hoat_dong": "khai_hoang",
+            "thua_co_the_dung": [p.id for p in clearable[:6]],
+            "loai_thua_hop_le": ["rung", "doi"],
+            "cong_moi_thua": float(w.cfg.get("khong_gian.khai_hoang.cong_moi_thua")),
+            "cong_hien_co": labour,
+        })
     if forests:
         cards.append({
             "hoat_dong": "khai_go",
@@ -397,6 +410,22 @@ CONG_CU: dict[str, Callable[[World, str, dict], dict]] = {
     "nghe_ve": _nghe_ve,
     "get_phan_bo_cua_cai": _get_phan_bo_cua_cai,
 }
+
+
+def canonical_json(value: Any) -> str:
+    """Stable serialization used to attest a read-only tool response."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def result_hash(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def catalog_hash() -> str:
+    """Hash both tool declarations and implementation bytes for replay integrity."""
+    declarations = canonical_json(KHAI_BAO_CONG_CU).encode("utf-8")
+    source = Path(__file__).read_bytes()
+    return hashlib.sha256(declarations + b"\0" + source).hexdigest()
 
 
 def thuc_thi(w: World, aid: str, ten: str, args: dict | None) -> dict:

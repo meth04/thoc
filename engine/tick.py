@@ -33,9 +33,11 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     # Observation-only provenance is reset before the mind runs. A custom
     # mind that does not record an origin is reported as `external` below,
     # rather than silently counted as an LLM decision.
+    from engine.action_journal import reset_tick as reset_action_journal
     from minds.provenance import reset_tick as reset_decision_provenance
 
     reset_decision_provenance(w)
+    reset_action_journal(w)
 
     # 1. bat_dau: tuổi tiến đúng một khoảng lịch; ``tuoi_tick`` được lưu theo nửa-năm
     # để legacy 2-tick/năm không đổi, còn calendar 3 mùa/năm tăng 2/3 mỗi mùa.
@@ -59,6 +61,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     for aid in sorted(ke_hoach):
         if aid not in w.decision_provenance_tick.get("plans", {}):
             record_plan(w, aid, "external")
+    from engine.action_journal import preflight_plans
+
+    preflight_plans(w, ke_hoach)
 
     # 3b. lập pháp nhân + di chúc + di cư (trước bảng rao để entity ký được ngay)
     from engine import entities as entities_mod

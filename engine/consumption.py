@@ -46,6 +46,8 @@ def an_va_suc_khoe(w: World) -> None:
     # thiếu vẫn chia đều theo tỷ lệ ở mức HỘ (`ty_le_no`). KHÔNG nhân dịp này thêm luật ưu
     # tiên trẻ em/người già — đó là một treatment riêng, phải qua cổng, ngoài P1.
     cap = _cap_luong_thuc_bat(w)
+    nha_o = sk.get("nha_o", {})
+    nha_o_bat = isinstance(nha_o, dict) and bool(nha_o.get("bat", False))
 
     # Ăn theo hộ: gom nhu cầu, ăn từ kho các thành viên (chủ hộ trước).
     # Dedup bằng da_xu_ly tại thành viên ĐẦU TIÊN gặp theo thứ tự sorted —
@@ -58,6 +60,7 @@ def an_va_suc_khoe(w: World) -> None:
             continue
         ho = [m for m in w.ho_cua(aid) if w.agents[m].con_song]
         da_xu_ly.update(ho)
+        co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in ho)
         nhu_cau_tung_nguoi = {
             m: (nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(tt) else nc["tre_em_kg_tick"])
             for m in ho
@@ -122,15 +125,25 @@ def an_va_suc_khoe(w: World) -> None:
             if ag.tuoi_nam > tuoi_giam:  # tuổi già hao sức — cần được chăm sóc, ăn đủ
                 ag.health = max(0.0, ag.health - hao_gia)
             if ty_le_no >= 1.0 - 1e-9:
-                ag.health = min(100.0, ag.health + sk["hoi_khi_an_du"])
+                hoi = float(sk["hoi_khi_an_du"])
+                if nha_o_bat and not co_nha:
+                    hoi *= float(nha_o.get("he_so_hoi_khi_vo_gia_cu", 1.0))
+                ag.health = min(100.0, ag.health + hoi)
             else:
                 mat = sk["mat_toi_da_khi_doi"] * (1.0 - ty_le_no)
                 ag.health = max(0.0, ag.health - mat)
                 ag.doi_tick = w.tick  # đánh dấu vừa thiếu ăn — phân loại cái chết đúng
                 if ty_le_no < float(td["nguong_an_doi_event"]):
                     w.events.ghi(w.tick, "an_doi", id=m, ty_le_no=round(ty_le_no, 2))
+            if nha_o_bat:
+                ag.vo_gia_cu = not co_nha
+                if not co_nha:
+                    key = "mat_suc_khoe_mua_mua" if w.mua_mua() else "mat_suc_khoe_mua_kho"
+                    ag.health = max(0.0, ag.health - float(nha_o.get(key, 0.0)))
 
     # Vô gia cư: hộ không sở hữu nhà nào → mùa mưa mất health
+    if nha_o_bat:
+        return
     da_xu_ly.clear()
     for aid in sorted(w.agents):
         a = w.agents[aid]

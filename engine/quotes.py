@@ -199,6 +199,9 @@ def _post(w: Any, aid: str, raw: dict[str, Any]) -> None:
         so_luong=round(quantity, 9), don_gia=round(price, 9), thanh_toan=payment,
         het_han_tick=expiry, giao_tai=delivery, doi_tac=doi_tac, lang=lang,
     )
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "dang_bao_gia", code="quote_posted")
 
 
 def _settle_fill(w: Any, q: BaoGia, fill: QuoteFill) -> bool:
@@ -330,6 +333,9 @@ def _accept(w: Any, aid: str, raw: dict[str, Any]) -> None:
     q.con_lai = max(0.0, q.con_lai - quantity)
     w.events.ghi(w.tick, "bao_gia_khop", id=q.id, ben_nhan=aid,
                  so_luong=round(quantity, 9), con_lai=round(q.con_lai, 9))
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "chap_nhan_bao_gia", target=q.id, code="quote_accepted")
     if due <= w.tick:
         _settle_fill(w, q, fill)
     if q.con_lai <= EPSILON:
@@ -368,6 +374,9 @@ def _cancel(w: Any, aid: str, quote_id: str) -> None:
     q.con_lai = 0.0
     q.trang_thai = "da_huy"
     _release_unallocated(w, q, "bao_gia_huy")
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "huy_bao_gia", target=quote_id, code="quote_cancelled")
     _cap_nhat_trang_thai(w, q)
 
 

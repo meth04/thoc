@@ -222,6 +222,7 @@ def tinh_metrics(w: World) -> dict[str, Any]:
 
 def buoc_ket_toan(w: World) -> dict[str, Any]:
     from engine import metrics_demography, projects, quotes
+    from engine.action_journal import summary as action_journal_summary
     from minds.provenance import summary as decision_provenance_summary
 
     # Persist a state-derived exposure snapshot before reading its rolling
@@ -229,6 +230,9 @@ def buoc_ket_toan(w: World) -> dict[str, Any]:
     metrics_demography.chot_tick(w)
     m = tinh_metrics(w)
     m["decision_provenance"] = decision_provenance_summary(w)
+    action_journal = action_journal_summary(w)
+    if action_journal is not None:
+        m["action_journal"] = action_journal
     demography = metrics_demography.tinh(w)
     if demography is not None:
         m["demography"] = demography

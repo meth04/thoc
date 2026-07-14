@@ -186,6 +186,9 @@ def _create(w: Any, aid: str, raw: Any) -> None:
         cong_can=round(labour, 9), vat_lieu_can=dict(sorted(materials.items())),
         han_tick=project.han_tick,
     )
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "tao_du_an", code="project_created", pending=True)
 
 
 def dang_ky_du_an(w: Any, ke_hoach: dict[str, Any]) -> None:
@@ -255,6 +258,9 @@ def _contribute_material(w: Any, aid: str, raw: Any) -> None:
     w.events.ghi(w.tick, code, id=project.id, ai=aid, tai_san=asset,
                  requested=round(requested, 9), executed=round(actual, 9),
                  remaining=round(project.vat_lieu_can[asset] - project.vat_lieu_da[asset], 9))
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "gop_vat_lieu_du_an", target=project.id, code=code)
 
 
 def _contribute_labour(w: Any, aid: str, raw: Any) -> None:
@@ -292,6 +298,9 @@ def _contribute_labour(w: Any, aid: str, raw: Any) -> None:
     w.events.ghi(w.tick, code, id=project.id, ai=aid,
                  requested=round(requested, 9), executed=round(actual, 9),
                  remaining=round(project.cong_can - project.cong_da, 9))
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "gop_cong_du_an", target=project.id, code=code)
 
 
 def _ready(project: DuAn) -> bool:
@@ -379,6 +388,9 @@ def _cancel_request(w: Any, aid: str, project_id: str) -> None:
         _record_failure(w, aid, "project_closed", "dự án đã đóng")
         return
     _cancel(w, project, "da_huy", "cancelled_by_owner")
+    from engine.action_journal import executed as journal_executed
+
+    journal_executed(w, aid, "huy_du_an", target=project_id, code="project_cancelled")
 
 
 def _expire_and_dead(w: Any) -> None:

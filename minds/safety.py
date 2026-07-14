@@ -57,7 +57,7 @@ def ap_dung_san_an_toi_thieu(w: World, ke_hoach: dict[str, KeHoach], bc,
             continue
         plan = ke_hoach.setdefault(farmer, KeHoach(id=farmer))
         plan.canh_thua = [*plan.canh_thua, *parcels]
-        record_action(w, farmer, "phan_bo_cong", "survival_floor",
+        record_action(w, farmer, "phan_bo_cong", "survival_floor", target=parcels[0],
                       detail="minimum_food_security")
         da_nham.update(parcels)
         da_bao_ve += 1

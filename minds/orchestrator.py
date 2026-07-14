@@ -18,7 +18,7 @@ from engine.world import World
 from minds.gateway import LLMCallLog, LLMRequest, LLMResponse, MockProvider
 from minds.policy_cards import thi_hanh_the
 from minds.prompts import build_agent_prompt
-from minds.provenance import record_plan
+from minds.provenance import record_plan, record_plan_actions, record_raw_actions
 from minds.providers_real import LoiHetQuota, che_key
 from minds.repair import parse_batch
 from minds.safety import ap_dung_san_an_toi_thieu
@@ -98,6 +98,8 @@ class MindMock:
                     "ProviderError" if resp.provider == "loi" else None
                 ),
                 error_message=str(error) if error is not None else resp.text,
+                tool_turns=resp.tool_turns,
+                tool_catalog_hash=resp.tool_catalog_hash,
             )
         self.tok_in += resp.tok_in
         self.tok_out += resp.tok_out
@@ -142,6 +144,7 @@ class MindMock:
                 self.so_fallback += 1
                 ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
                 record_plan(w, aid, "fallback", detail="budget_guard")
+                record_plan_actions(w, ke_hoach[aid], "fallback")
             thinkers = []
 
         if thinkers:
@@ -169,6 +172,7 @@ class MindMock:
                     self.so_fallback += 1
                     ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, set())
                     record_plan(w, aid, "fallback", detail="llm_response_unusable")
+                    record_plan_actions(w, ke_hoach[aid], "fallback")
                     continue
                 kh = quyet_dinh_thanh_ke_hoach(w, qd, thung_intent_la)
                 the_hien_tai = _the_cua(w, aid)
@@ -182,7 +186,11 @@ class MindMock:
                     except Exception as e:  # noqa: BLE001 — thẻ hỏng thì giữ thẻ cũ
                         w.ghi_unrecognized(aid, "the_chinh_sach", f"patch hỏng: {e}")
                 ke_hoach[aid] = kh
-                record_plan(w, aid, "mock" if self._tuan_tu else "llm")
+                origin = "mock" if self._tuan_tu else "llm"
+                record_plan(w, aid, origin)
+                record_raw_actions(
+                    w, aid, [action.model_dump() for action in qd.hanh_dong], origin
+                )
                 # mock (_tuan_tu) chia sẻ da_nham giữa người nghĩ để người-thẻ/entity không
                 # nhắm trùng thửa công. Lúc GATHER, PersonaBot đã nạp da_nham; nhưng
                 # replay-from-transcript KHÔNG chạy PersonaBot nên tái dựng phần đã nhắm từ
@@ -202,6 +210,7 @@ class MindMock:
                 continue
             ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
             record_plan(w, aid, "policy_card")
+            record_plan_actions(w, ke_hoach[aid], "policy_card")
 
         # --- entity: việc thường nhật chạy MỖI tick (thẻ của pháp nhân) ---
         bo_sung_ke_hoach_entity(w, ke_hoach, bc, da_nham)

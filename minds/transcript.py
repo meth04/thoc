@@ -79,7 +79,9 @@ class TranscriptWriter:
 
     def ghi(self, tick: int, tier: str, provider: str, model: str, temperature,
             prompt: str, response_raw: str, tok_in: int, tok_out: int,
-            *, error_type: str | None = None, error_message: str | None = None) -> None:
+            *, error_type: str | None = None, error_message: str | None = None,
+            tool_turns: list[dict] | None = None,
+            tool_catalog_hash: str | None = None) -> None:
         """Ghi cả response thành công lẫn lỗi terminal.
 
         Một lỗi provider là một nhánh điều khiển có tác dụng lên run (fallback/dừng êm),
@@ -105,6 +107,8 @@ class TranscriptWriter:
             "error_message": che_key(error_message or "") if is_error else "",
             "tok_in": int(tok_in),
             "tok_out": int(tok_out),
+            "tool_turns": tool_turns or [],
+            "tool_catalog_hash": tool_catalog_hash,
         }, ensure_ascii=False) + "\n")
 
     # ``flush``/``fsync``/``dong`` là IDEMPOTENT (như ``EventLog`` và ``LLMCallLog``): trên

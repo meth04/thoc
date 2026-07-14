@@ -117,7 +117,7 @@ def build_user_chung(w: World) -> str:
     ten_hanh_dong = ", ".join(c.ten for c in kha_dung_trong(w))
     return (
         f"[TÌNH HÌNH CHUNG] Mùa {ten_mua}, thời tiết {loai_tt} "
-        f"(hệ số {he_so}). Làng có {dan_song} nhân khẩu; đất công chưa ai khai hoang "
+        f"(hệ số {he_so}). Làng có {dan_song} nhân khẩu; ruộng công chưa có người sở hữu "
         f"còn {dat_cong_con} thửa; {ta_song}. "
         f"Giá chợ gần nhất: {gia_str or 'chưa có phiên nào'}. {vu_dong}"
         f"Bảng rao có {so_rao} đề nghị.{_tinh_hinh_viec_lang(w)} "
@@ -559,6 +559,63 @@ def _cau_can_tinh(w: World, a) -> str:
     return cau + "."
 
 
+def _fact_cards_cuc_bo(w: World, aid: str) -> list[str]:
+    """Visible, engine-owned targets; facts only, never livelihood advice.
+
+    The distinction between a common *field* and common *forest/hill* is
+    intentionally explicit.  A field may be cultivated and homesteaded; only
+    forest/hill is a legal target of ``khai_hoang``.  This prevents an LLM from
+    inventing a parcel id or repeatedly clearing a rice field.
+    """
+    from engine.spatial import co_the_o_bo
+
+    reachable = [p for p in w.parcels.values() if co_the_o_bo(w, aid, p.bo)]
+    fields = sorted((p for p in reachable if p.loai == "ruong" and p.chu is None),
+                    key=lambda p: p.id)[:6]
+    rows: list[str] = []
+    if fields:
+        rows.append(
+            "FACT CARD — RUỘNG CÔNG CÓ THỂ CANH: "
+            + ", ".join(f"{p.id}(màu {p.mau_mo:.2f})" for p in fields)
+            + ". Dùng phan_bo_cong.canh_thua; đây KHÔNG phải mục tiêu khai_hoang."
+        )
+    if bool(w.cfg.get("khong_gian.khai_hoang.bat", False)):
+        clearable = sorted(
+            (p for p in reachable if p.loai in {"rung", "doi"} and p.chu is None),
+            key=lambda p: p.id,
+        )[:6]
+        if clearable:
+            rows.append(
+                "FACT CARD — RỪNG/ĐỒI CÔNG CÓ THỂ KHAI HOANG: "
+                + ", ".join(f"{p.id}({p.loai})" for p in clearable)
+                + ". Dùng khai_hoang.thua; tốn công theo luật vật lý."
+            )
+    from engine.projects import visible_to
+    from engine.quotes import quote_visible_to
+
+    projects = visible_to(w, aid)
+    if projects:
+        rows.append(
+            "FACT CARD — DỰ ÁN MỞ: "
+            + ", ".join(
+                f"{p.id}({p.loai}; công còn {max(0.0, p.cong_can - p.cong_da):g})"
+                for p in projects[:6]
+            )
+            + ". Chỉ dùng đúng id đã nêu khi góp vật liệu/công."
+        )
+    quotes = quote_visible_to(w, aid)
+    if quotes:
+        rows.append(
+            "FACT CARD — BÁO GIÁ MỞ: "
+            + ", ".join(
+                f"{q.id}({q.chieu} {q.con_lai:g} {q.tai_san} @ {q.don_gia:g} {q.thanh_toan})"
+                for q in quotes[:6]
+            )
+            + ". Chỉ dùng đúng id đã nêu khi chấp nhận báo giá."
+        )
+    return rows
+
+
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     a = w.agents[aid]
     tai_san = w.ledger.tai_san_cua(aid)
@@ -746,7 +803,8 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         dong.append("BÍ QUYẾT BẠN NẮM (blueprint của riêng bạn / được cấp quyền dùng): "
                     + "; ".join(bi_quyet) + ".")
     if dat_cong:
-        dong.append(f"Đất công gần làng còn trống: {[p.id for p in dat_cong]}.")
+        dong.append(f"Ruộng công gần làng còn trống để CANH: {[p.id for p in dat_cong]}.")
+    dong.extend(_fact_cards_cuc_bo(w, aid))
     if ung_vien:
         dong.append(f"Người độc thân bạn quen: {ung_vien}.")
     if rao_cho_toi:

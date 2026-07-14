@@ -265,6 +265,11 @@ class World:
     # record owned by minds/metrics, deliberately absent from behavioral_state:
     # recording an origin must never change a world transition or legacy hash.
     decision_provenance_tick: dict[str, Any] = field(default_factory=dict)
+    # Versioned action-result journal (v3). This is observation state only;
+    # engine.action_journal is the single writer and it never enters
+    # behavioral_state().
+    action_journal_tick: list[dict[str, Any]] = field(default_factory=list)
+    _action_journal_seq: int = 0
     # P4 demographic observation state. It is intentionally excluded from
     # behavioral_state: it records completed facts but never controls a future
     # transition. engine.metrics_demography owns its contents.
@@ -481,6 +486,9 @@ class World:
 
     def ghi_unrecognized(self, ai: str, loai: str, ly_do: str) -> None:
         """Intent không hợp lệ → bỏ qua + log (điều luật #3) — mỏ 'ý định mới lạ'."""
+        from engine.action_journal import rejected as journal_rejected
+
+        journal_rejected(self, ai, loai, "unrecognized_intent", detail=ly_do)
         self.events.ghi(self.tick, "unrecognized_intent", ai=ai, intent=loai, ly_do=ly_do)
         if self.unrecognized_path is not None:
             with open(self.unrecognized_path, "a", encoding="utf-8") as f:

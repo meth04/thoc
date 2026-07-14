@@ -29,6 +29,10 @@ class LLMResponse:
     latency_s: float = 0.0
     key_hash: str = ""
     retries: int = 0
+    # Read-only MCP turns are part of a real agent's evidence trail. They are
+    # empty for ordinary/mock calls and are persisted losslessly in transcript.
+    tool_turns: list[dict[str, Any]] = field(default_factory=list)
+    tool_catalog_hash: str | None = None
 
 
 class LLMCallLog:
