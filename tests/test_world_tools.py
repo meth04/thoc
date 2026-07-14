@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from engine.config import load_config
 from minds.keypool import EnvKeys
@@ -88,6 +89,44 @@ def test_fact_cards_local_include_visible_quote_and_project_without_mutating_sta
     assert w.world_hash() == h0
 
 
+def test_transcript_replays_and_attests_each_read_only_tool_turn(tmp_path):
+    """Replay fails loudly if the recorded tool information set has drifted."""
+    from minds.gateway import LLMRequest
+    from minds.transcript import (
+        TranscriptProvider,
+        TranscriptReader,
+        TranscriptToolMismatch,
+        TranscriptWriter,
+    )
+    from minds.world_tools import catalog_hash, result_hash
+
+    w = the_gioi_test(seed=13, giu_lai=1, thoc_moi_nguoi=2_000.0)
+    aid = next(aid for aid, agent in sorted(w.agents.items()) if agent.con_song)
+    req = LLMRequest(prompt="fixture agentic tool transcript", ctx={}, tier="T0", batch_ids=[aid])
+    result = thuc_thi(w, aid, "xem_thoi_tiet", {})
+    turn = {
+        "turn": 0, "index": 0, "name": "xem_thoi_tiet", "args": {},
+        "result": result, "result_hash": result_hash(result),
+    }
+
+    good = tmp_path / "good.jsonl"
+    writer = TranscriptWriter(good)
+    writer.ghi(0, "T0", "fixture", "fixture", 0.0, req.prompt, "{}", 0, 0,
+               tool_turns=[turn], tool_catalog_hash=catalog_hash())
+    writer.dong()
+    response = TranscriptProvider(TranscriptReader(good)).goi_agentic(req, w, aid)
+    assert response.tool_turns == [turn]
+
+    bad = tmp_path / "bad.jsonl"
+    writer = TranscriptWriter(bad)
+    bad_turn = {**turn, "result_hash": "0" * 64}
+    writer.ghi(0, "T0", "fixture", "fixture", 0.0, req.prompt, "{}", 0, 0,
+               tool_turns=[bad_turn], tool_catalog_hash=catalog_hash())
+    writer.dong()
+    with pytest.raises(TranscriptToolMismatch, match="result mismatch"):
+        TranscriptProvider(TranscriptReader(bad)).goi_agentic(req, w, aid)
+
+
 def _fake_transport_vong_cong_cu(dem: dict):
     """Gemini giả: lượt 1 gọi công cụ xem_thoi_tiet; lượt 2 trả quyết định."""
 
@@ -122,6 +161,7 @@ def _fake_transport_vong_cong_cu(dem: dict):
 def test_vong_agentic_goi_cong_cu_roi_quyet_dinh():
     """LLM gọi công cụ (đọc thời tiết) rồi trả quyết định; world_hash bất biến."""
     from minds.gateway import LLMRequest
+    from minds.world_tools import catalog_hash, result_hash
 
     w = the_gioi_test(seed=7, giu_lai=3, thoc_moi_nguoi=2000.0)
     aid = sorted(a for a, ag in w.agents.items() if ag.con_song)[0]
@@ -137,6 +177,10 @@ def test_vong_agentic_goi_cong_cu_roi_quyet_dinh():
     # đã gọi công cụ ≥1 lần, rồi ra JSON quyết định hợp lệ
     assert dem.get("goi_tool", 0) >= 1
     assert resp.retries >= 1  # số lượt gọi công cụ
+    assert resp.tool_catalog_hash == catalog_hash()
+    assert len(resp.tool_turns) == 1
+    assert resp.tool_turns[0]["name"] == "xem_thoi_tiet"
+    assert resp.tool_turns[0]["result_hash"] == result_hash(resp.tool_turns[0]["result"])
     du_lieu = json.loads(resp.text)
     assert du_lieu["id"] == aid and du_lieu["hanh_dong"]
     # công cụ CHỈ ĐỌC — thế giới không đổi sau cả vòng agentic

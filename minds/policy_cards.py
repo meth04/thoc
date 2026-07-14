@@ -14,6 +14,50 @@ from engine.world import World
 from minds.schemas import TheChinhSach
 
 
+def chon_vu_dong_theo_rang_buoc(w: World, parcels: list, cong_san_sang: float,
+                                 thieu_luong_thuc: float) -> list[tuple[str, str]]:
+    """Choose winter crops from current physical trade-offs, never a fixed crop rule.
+
+    A crop that meets the remaining per-field food need with less labour is
+    preferred.  When no feasible crop can meet that need, the higher food per
+    scarce field is preferred.  Therefore a labour-constrained household can
+    rationally choose potato, while a land-constrained hungry household can
+    choose maize under the very same scenario configuration.
+    """
+    crops = w.cfg.get("khong_gian.vu_dong.cay", {})
+    if not isinstance(crops, dict) or cong_san_sang <= 0 or not parcels:
+        return []
+    _weather, weather_multiplier = w.thoi_tiet(w.tick)
+    remaining_labor = max(0.0, float(cong_san_sang))
+    remaining_food = max(0.0, float(thieu_luong_thuc))
+    selected: list[tuple[str, str]] = []
+    for index, parcel in enumerate(parcels):
+        fields_left = len(parcels) - index
+        need_here = remaining_food / fields_left if fields_left else 0.0
+        options: list[tuple[bool, float, float, str]] = []
+        for crop, spec in sorted(crops.items()):
+            if not isinstance(spec, dict):
+                continue
+            labor = float(spec.get("cong", 0.0))
+            nutrition = float(spec.get("san_luong_kg", 0.0)) * float(
+                spec.get("quy_doi_dinh_duong", 0.0)
+            )
+            expected_food = max(0.0, nutrition * float(parcel.mau_mo) * weather_multiplier)
+            if labor > 0 and expected_food > 0 and labor <= remaining_labor + 1e-9:
+                options.append((expected_food >= need_here, labor, expected_food, str(crop)))
+        if not options:
+            continue
+        sufficient = [item for item in options if item[0]]
+        # enough food: economise scarce labour; otherwise economise scarce land
+        chosen = (min(sufficient, key=lambda row: (row[1], -row[2], row[3])) if sufficient
+                  else max(options, key=lambda row: (row[2], -row[1], row[3])))
+        _enough, labor, food, crop = chosen
+        selected.append((parcel.id, crop))
+        remaining_labor -= labor
+        remaining_food = max(0.0, remaining_food - food)
+    return selected
+
+
 def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -> KeHoach:
     from minds.rulebot import _chon_thua_canh
 
@@ -63,6 +107,33 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
         if so_thua > 0:
             kh.canh_thua = _chon_thua_canh(bc, aid, so_thua, da_nham)
     else:
+        winter_labor = 0.0
+        from engine.spatial import _vu_dong_bat, co_the_o_bo
+
+        if _vu_dong_bat(w) and food_ho < muc_du_tru:
+            from engine.contracts import quyen_su_dung_thua
+
+            leased = quyen_su_dung_thua(w, aid)
+            fields = list(bc.ruong_cua.get(aid, ()))
+            known_ids = {field.id for field in fields}
+            for pid in sorted(leased):
+                parcel = w.parcels.get(pid)
+                if parcel is not None and parcel.id not in known_ids:
+                    fields.append(parcel)
+                    known_ids.add(parcel.id)
+            fields = [
+                p for p in fields
+                if p.id not in da_nham and p.loai == "ruong" and co_the_o_bo(w, aid, p.bo)
+            ][:max(0, int(the.canh_toi_da))]
+            cong_du_kien = (cong_moi_tick * (a.health / 100.0)
+                             + float(bc.cong_thue_vao.get(aid, 0.0)))
+            kh.canh_vu_dong = chon_vu_dong_theo_rang_buoc(
+                w, fields, cong_du_kien, max(0.0, muc_du_tru - food_ho)
+            )
+            da_nham.update(pid for pid, _crop in kh.canh_vu_dong)
+            crop_specs = w.cfg.get("khong_gian.vu_dong.cay", {})
+            winter_labor = sum(float(crop_specs[crop]["cong"])
+                                for _pid, crop in kh.canh_vu_dong)
         go_co = w.ledger.so_du(aid, "go")
         co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in ho)
         # nhà 240 công: một người không đủ — cần vợ/chồng góp công hoặc công thuê vào
@@ -74,7 +145,7 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
             if cong_du_kien >= float(sx["recipe"]["nha"]["cong"]):
                 kh.xay_nha = 1
         elif not co_nha and the.khai_go_khi_ranh and an_ninh > 0.4:
-            kh.cong_khai_go = cong_moi_tick
+            kh.cong_khai_go = max(0.0, cong_moi_tick - winter_labor)
         # vợ/chồng (id lớn hơn) góp công cho người dựng nhà cùng hộ
         if (not co_nha and a.vo_chong and aid > a.vo_chong and vc is not None
                 and vc.con_song and w.ledger.so_du(a.vo_chong, "go")

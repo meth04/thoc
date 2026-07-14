@@ -81,12 +81,17 @@ def _amount_main_for_fill(q: BaoGia, fill: QuoteFill) -> float:
     return fill.quantity if q.chieu == "ban" else fill.quantity * q.don_gia
 
 
-def _record_failure(w: Any, aid: str, code: str, detail: str) -> None:
+def _record_failure(w: Any, aid: str, code: str, detail: str, *,
+                    action: str | None = None, target: str | None = None) -> None:
     """Actionable local feedback without treating a rejected intent as execution."""
     a = w.agents.get(aid)
     if a is not None and a.con_song:
         a.su_co = [*a.su_co, f"[{code}] {detail}"][-3:]
     w.events.ghi(w.tick, "bao_gia_tu_choi", ai=aid, code=code, chi_tiet=detail)
+    if action is not None:
+        from engine.action_journal import rejected as journal_rejected
+
+        journal_rejected(w, aid, action, code, target=target, detail=detail, feedback=False)
 
 
 def _agent_lang_bo(w: Any, aid: str) -> tuple[int, str | None]:
@@ -138,8 +143,9 @@ def _new_id(w: Any) -> str:
 
 
 def _post(w: Any, aid: str, raw: dict[str, Any]) -> None:
+    action = "dang_bao_gia"
     if not isinstance(raw, dict):
-        _record_failure(w, aid, "bad_params", "báo giá phải là object")
+        _record_failure(w, aid, "bad_params", "báo giá phải là object", action=action)
         return
     try:
         chieu = str(raw.get("chieu", ""))
@@ -148,21 +154,24 @@ def _post(w: Any, aid: str, raw: dict[str, Any]) -> None:
         price = float(raw.get("don_gia", raw.get("gia", 0.0)))
         payment = str(raw.get("thanh_toan", "thoc"))
     except (TypeError, ValueError):
-        _record_failure(w, aid, "bad_params", "không đọc được lượng hoặc đơn giá")
+        _record_failure(w, aid, "bad_params", "không đọc được lượng hoặc đơn giá", action=action)
         return
     if (chieu not in {"ban", "mua"} or not tai_san or not payment or payment == tai_san
             or not math.isfinite(quantity) or not math.isfinite(price)
             or quantity <= EPSILON or price <= EPSILON):
-        _record_failure(w, aid, "bad_params", "chiều, tài sản, lượng hoặc đơn giá không hợp lệ")
+        _record_failure(w, aid, "bad_params", "chiều, tài sản, lượng hoặc đơn giá không hợp lệ",
+                        action=action)
         return
     doi_tac_raw = raw.get("doi_tac")
     doi_tac = str(doi_tac_raw) if doi_tac_raw not in (None, "", "*") else None
     if doi_tac is not None and (doi_tac == aid or not w.chu_the_hoat_dong(doi_tac)):
-        _record_failure(w, aid, "counterparty_unavailable", "đối tác đích danh không hoạt động")
+        _record_failure(w, aid, "counterparty_unavailable", "đối tác đích danh không hoạt động",
+                        action=action)
         return
     parsed_due = _parse_due(w, raw.get("giao_tai", "ngay"))
     if parsed_due is None:
-        _record_failure(w, aid, "bad_params", "giao_tai phải là ngay hoặc tick lớn hơn tick hiện tại")
+        _record_failure(w, aid, "bad_params", "giao_tai phải là ngay hoặc tick lớn hơn tick hiện tại",
+                        action=action)
         return
     delivery, _due = parsed_due
     ttl = int(w.cfg.get("thuong_mai.bao_gia.het_han_tick", 1))
@@ -173,10 +182,10 @@ def _post(w: Any, aid: str, raw: dict[str, Any]) -> None:
         try:
             expiry = int(requested_expiry)
         except (TypeError, ValueError):
-            _record_failure(w, aid, "bad_params", "het_han_tick không phải số nguyên")
+            _record_failure(w, aid, "bad_params", "het_han_tick không phải số nguyên", action=action)
             return
         if expiry <= w.tick:
-            _record_failure(w, aid, "expired_quote", "hạn báo giá phải ở tương lai")
+            _record_failure(w, aid, "expired_quote", "hạn báo giá phải ở tương lai", action=action)
             return
 
     quote_id = _new_id(w)
@@ -190,7 +199,8 @@ def _post(w: Any, aid: str, raw: dict[str, Any]) -> None:
     try:
         w.ledger.chuyen(aid, _holder(quote_id), asset, amount, f"ký quỹ báo giá {quote_id}", w.tick)
     except LoiSoKep:
-        _record_failure(w, aid, "insufficient_inventory", f"không đủ {asset} để ký quỹ")
+        _record_failure(w, aid, "insufficient_inventory", f"không đủ {asset} để ký quỹ",
+                        action=action)
         return
     q.escrow = {asset: amount}
     w.bao_gia[quote_id] = q
@@ -286,30 +296,38 @@ def _settle_fill(w: Any, q: BaoGia, fill: QuoteFill) -> bool:
 
 
 def _accept(w: Any, aid: str, raw: dict[str, Any]) -> None:
+    action = "chap_nhan_bao_gia"
+    target = (str(raw.get("ref", raw.get("id", "")))
+              if isinstance(raw, dict) and raw.get("ref", raw.get("id")) else None)
     if not isinstance(raw, dict):
-        _record_failure(w, aid, "bad_params", "chấp nhận báo giá phải là object")
+        _record_failure(w, aid, "bad_params", "chấp nhận báo giá phải là object", action=action)
         return
     quote_id = str(raw.get("ref", raw.get("id", "")))
     q = w.bao_gia.get(quote_id)
     if q is None:
-        _record_failure(w, aid, "offer_not_found", "không có báo giá này")
+        _record_failure(w, aid, "offer_not_found", "không có báo giá này",
+                        action=action, target=target)
         return
     if q.trang_thai != "dang_treo" or q.con_lai <= EPSILON:
-        _record_failure(w, aid, "quote_exhausted", "báo giá đã hết hoặc đã đóng")
+        _record_failure(w, aid, "quote_exhausted", "báo giá đã hết hoặc đã đóng",
+                        action=action, target=q.id)
         return
     if w.tick > q.het_han_tick:
-        _record_failure(w, aid, "expired_quote", "báo giá đã hết hạn")
+        _record_failure(w, aid, "expired_quote", "báo giá đã hết hạn", action=action, target=q.id)
         return
     if not _visible(w, aid, q):
-        _record_failure(w, aid, "offer_not_visible", "báo giá không dành cho bạn hoặc không tới được")
+        _record_failure(w, aid, "offer_not_visible", "báo giá không dành cho bạn hoặc không tới được",
+                        action=action, target=q.id)
         return
     try:
         quantity = float(raw.get("so_luong", q.con_lai))
     except (TypeError, ValueError):
-        _record_failure(w, aid, "bad_params", "lượng chấp nhận không hợp lệ")
+        _record_failure(w, aid, "bad_params", "lượng chấp nhận không hợp lệ",
+                        action=action, target=q.id)
         return
     if not math.isfinite(quantity) or quantity <= EPSILON:
-        _record_failure(w, aid, "bad_params", "lượng chấp nhận phải dương")
+        _record_failure(w, aid, "bad_params", "lượng chấp nhận phải dương",
+                        action=action, target=q.id)
         return
     quantity = min(quantity, q.con_lai)
     seller, buyer = (q.nguoi_dang, aid) if q.chieu == "ban" else (aid, q.nguoi_dang)
@@ -321,7 +339,8 @@ def _accept(w: Any, aid: str, raw: dict[str, Any]) -> None:
         w.ledger.chuyen(aid, cp_holder, cp_asset, cp_amount,
                          f"ký quỹ chấp nhận báo giá {q.id}", w.tick)
     except LoiSoKep:
-        _record_failure(w, aid, "insufficient_payment", f"không đủ {cp_asset} để chấp nhận")
+        _record_failure(w, aid, "insufficient_payment", f"không đủ {cp_asset} để chấp nhận",
+                        action=action, target=q.id)
         return
     _delivery, due = _parse_due(w, q.giao_tai) or ("ngay", w.tick)
     fill = QuoteFill(
@@ -361,15 +380,18 @@ def _release_unallocated(w: Any, q: BaoGia, loai: str) -> None:
 
 
 def _cancel(w: Any, aid: str, quote_id: str) -> None:
+    action = "huy_bao_gia"
     q = w.bao_gia.get(quote_id)
     if q is None:
-        _record_failure(w, aid, "offer_not_found", "không có báo giá này")
+        _record_failure(w, aid, "offer_not_found", "không có báo giá này",
+                        action=action, target=quote_id)
         return
     if q.nguoi_dang != aid:
-        _record_failure(w, aid, "not_authorized", "chỉ người đăng mới được hủy báo giá")
+        _record_failure(w, aid, "not_authorized", "chỉ người đăng mới được hủy báo giá",
+                        action=action, target=quote_id)
         return
     if q.trang_thai not in {"dang_treo", "da_khop"}:
-        _record_failure(w, aid, "quote_closed", "báo giá đã đóng")
+        _record_failure(w, aid, "quote_closed", "báo giá đã đóng", action=action, target=quote_id)
         return
     q.con_lai = 0.0
     q.trang_thai = "da_huy"
@@ -557,7 +579,28 @@ def metrics(w: Any) -> dict[str, Any] | None:
     }
 
 
+def payment_value_tick(w: Any) -> float:
+    """Value of A2A quote settlements completed *this* tick, in food-accounting units.
+
+    This deliberately excludes postings, acceptances and escrow locks: they are
+    promises or custody transfers, not completed bilateral exchange.  It is a
+    reporting helper only and never feeds an economic decision.
+    """
+    if not _bao_gia_bat(w):
+        return 0.0
+    total = 0.0
+    for _quote_id, quote in sorted(getattr(w, "bao_gia", {}).items()):
+        payment_unit_value = (
+            1.0 if quote.thanh_toan == "thoc"
+            else float(w.gia_gan_nhat(quote.thanh_toan) or 0.0)
+        )
+        for fill in quote.fills:
+            if fill.status == "settled" and fill.tick_settle == w.tick:
+                total += float(fill.quantity) * float(quote.don_gia) * payment_unit_value
+    return round(total, 9)
+
+
 __all__ = [
     "BaoGia", "QuoteFill", "_bao_gia_bat", "buoc_bao_gia", "giao_hang_den_han",
-    "kiem_tra_ky_quy", "metrics", "quote_visible_to", "xu_ly_nguoi_chet",
+    "kiem_tra_ky_quy", "metrics", "payment_value_tick", "quote_visible_to", "xu_ly_nguoi_chet",
 ]

@@ -74,11 +74,17 @@ def _registry(w: Any) -> dict[str, dict[str, Any]]:
     return {str(k): dict(v) for k, v in raw.items() if isinstance(v, dict)}
 
 
-def _record_failure(w: Any, aid: str, code: str, detail: str) -> None:
+def _record_failure(w: Any, aid: str, code: str, detail: str, *,
+                    action: str | None = None, target: str | None = None) -> None:
+    """Emit identical human and machine-readable feedback for a rejected intent."""
     agent = w.agents.get(aid)
     if agent is not None and agent.con_song:
         agent.su_co = [*agent.su_co, f"[{code}] {detail}"][-3:]
     w.events.ghi(w.tick, "du_an_tu_choi", ai=aid, code=code, chi_tiet=detail)
+    if action is not None:
+        from engine.action_journal import rejected as journal_rejected
+
+        journal_rejected(w, aid, action, code, target=target, detail=detail, feedback=False)
 
 
 def _new_id(w: Any) -> str:
@@ -106,18 +112,21 @@ def _recipe_for(w: Any, spec: dict[str, Any]) -> tuple[dict[str, float], float]:
     return materials, labour
 
 
-def _site_for(w: Any, aid: str, spec: dict[str, Any], raw_site: Any) -> tuple[str | None, str | None]:
+def _site_for(w: Any, aid: str, spec: dict[str, Any], raw_site: Any, *,
+              action: str | None = None) -> tuple[str | None, str | None]:
     """Validate the worksite when the project registry requires a parcel."""
     needs_site = bool(spec.get("can_thua", False))
     if not needs_site:
         return None, None
     site = str(raw_site) if raw_site not in (None, "") else ""
     if not site:
-        _record_failure(w, aid, "no_site", "công trình này cần một thửa của chủ dự án")
+        _record_failure(w, aid, "no_site", "công trình này cần một thửa của chủ dự án",
+                        action=action)
         return None, "no_site"
     parcel = w.parcels.get(site)
     if parcel is None or parcel.chu != aid:
-        _record_failure(w, aid, "no_right", "không có quyền đặt công trình trên thửa này")
+        _record_failure(w, aid, "no_right", "không có quyền đặt công trình trên thửa này",
+                        action=action, target=site)
         return None, "no_right"
     return site, None
 
@@ -128,17 +137,20 @@ def _active_owned(w: Any, aid: str) -> int:
 
 
 def _create(w: Any, aid: str, raw: Any) -> None:
+    target = str(raw.get("thua", "")) if isinstance(raw, dict) and raw.get("thua") else None
     if not isinstance(raw, dict):
-        _record_failure(w, aid, "bad_params", "dự án phải là object")
+        _record_failure(w, aid, "bad_params", "dự án phải là object", action="tao_du_an")
         return
     kind = str(raw.get("loai_du_an", raw.get("cong_trinh", raw.get("loai", ""))))
     spec = _registry(w).get(kind)
     if spec is None:
-        _record_failure(w, aid, "unknown_project", "loại công trình không có trong scenario")
+        _record_failure(w, aid, "unknown_project", "loại công trình không có trong scenario",
+                        action="tao_du_an", target=target)
         return
     capacity = int(_settings(w).get("toi_da_moi_chu", 0))
     if capacity < 1 or _active_owned(w, aid) >= capacity:
-        _record_failure(w, aid, "project_capacity", "đã đạt số dự án đang mở tối đa")
+        _record_failure(w, aid, "project_capacity", "đã đạt số dự án đang mở tối đa",
+                        action="tao_du_an", target=target)
         return
     try:
         materials, labour = _recipe_for(w, spec)
@@ -147,19 +159,21 @@ def _create(w: Any, aid: str, raw: Any) -> None:
         input_flow = str(spec["luong_vat_lieu"])
         output_flow = str(spec["luong_san_pham"])
     except (KeyError, TypeError, ValueError) as exc:
-        _record_failure(w, aid, "bad_project_spec", str(exc))
+        _record_failure(w, aid, "bad_project_spec", str(exc), action="tao_du_an", target=target)
         return
     if not output or not input_flow or not output_flow or output_qty <= EPSILON:
-        _record_failure(w, aid, "bad_project_spec", "đầu ra hoặc luồng ledger không hợp lệ")
+        _record_failure(w, aid, "bad_project_spec", "đầu ra hoặc luồng ledger không hợp lệ",
+                        action="tao_du_an", target=target)
         return
-    site, problem = _site_for(w, aid, spec, raw.get("thua"))
+    site, problem = _site_for(w, aid, spec, raw.get("thua"), action="tao_du_an")
     if problem is not None:
         return
     agent = w.agents[aid]
     parcel = w.parcels.get(site) if site else None
     duration = int(_settings(w).get("han_tick", 0))
     if duration < 1:
-        _record_failure(w, aid, "bad_project_spec", "hạn dự án phải là tick dương")
+        _record_failure(w, aid, "bad_project_spec", "hạn dự án phải là tick dương",
+                        action="tao_du_an", target=target)
         return
     project_id = _new_id(w)
     project = DuAn(
@@ -202,17 +216,19 @@ def dang_ky_du_an(w: Any, ke_hoach: dict[str, Any]) -> None:
             _create(w, aid, raw)
 
 
-def _get_open(w: Any, aid: str, raw: Any) -> DuAn | None:
+def _get_open(w: Any, aid: str, raw: Any, action: str) -> DuAn | None:
+    target = str(raw.get("ref", "")) if isinstance(raw, dict) and raw.get("ref") else None
     if not isinstance(raw, dict):
-        _record_failure(w, aid, "bad_params", "đóng góp dự án phải là object")
+        _record_failure(w, aid, "bad_params", "đóng góp dự án phải là object", action=action)
         return None
     project_id = str(raw.get("ref", ""))
     project = getattr(w, "du_an", {}).get(project_id)
     if project is None:
-        _record_failure(w, aid, "project_not_found", "không có dự án này")
+        _record_failure(w, aid, "project_not_found", "không có dự án này",
+                        action=action, target=target)
         return None
     if project.trang_thai != "dang_lam":
-        _record_failure(w, aid, "project_closed", "dự án đã đóng")
+        _record_failure(w, aid, "project_closed", "dự án đã đóng", action=action, target=target)
         return None
     return project
 
@@ -224,32 +240,39 @@ def _can_reach(w: Any, aid: str, project: DuAn) -> bool:
 
 
 def _contribute_material(w: Any, aid: str, raw: Any) -> None:
-    project = _get_open(w, aid, raw)
+    action = "gop_vat_lieu_du_an"
+    target = str(raw.get("ref", "")) if isinstance(raw, dict) and raw.get("ref") else None
+    project = _get_open(w, aid, raw, action)
     if project is None:
         return
     if not _can_reach(w, aid, project):
-        _record_failure(w, aid, "no_access", "chưa tới được địa điểm dự án")
+        _record_failure(w, aid, "no_access", "chưa tới được địa điểm dự án",
+                        action=action, target=project.id)
         return
     try:
         asset = str(raw.get("tai_san", ""))
         requested = float(raw.get("so_luong", 0.0))
     except (TypeError, ValueError):
-        _record_failure(w, aid, "bad_params", "vật liệu hoặc lượng không đọc được")
+        _record_failure(w, aid, "bad_params", "vật liệu hoặc lượng không đọc được",
+                        action=action, target=target)
         return
     if asset not in project.vat_lieu_can or not math.isfinite(requested) or requested <= EPSILON:
-        _record_failure(w, aid, "bad_params", "vật liệu không thuộc recipe hoặc lượng không dương")
+        _record_failure(w, aid, "bad_params", "vật liệu không thuộc recipe hoặc lượng không dương",
+                        action=action, target=project.id)
         return
     remaining = max(0.0, project.vat_lieu_can[asset] - project.vat_lieu_da[asset])
     actual = min(requested, remaining, w.ledger.so_du(aid, asset))
     if actual <= EPSILON:
         code = "no_inventory" if w.ledger.so_du(aid, asset) <= EPSILON else "material_complete"
-        _record_failure(w, aid, code, "không còn vật liệu có thể ký quỹ cho dự án")
+        _record_failure(w, aid, code, "không còn vật liệu có thể ký quỹ cho dự án",
+                        action=action, target=project.id)
         return
     try:
         w.ledger.chuyen(aid, _holder(project.id), asset, actual,
                          f"ký quỹ vật liệu dự án {project.id}", w.tick)
     except LoiSoKep:
-        _record_failure(w, aid, "no_inventory", "số dư vật liệu không đủ")
+        _record_failure(w, aid, "no_inventory", "số dư vật liệu không đủ",
+                        action=action, target=project.id)
         return
     project.vat_lieu_da[asset] += actual
     by_person = project.dong_gop_vat_lieu.setdefault(aid, {})
@@ -264,30 +287,37 @@ def _contribute_material(w: Any, aid: str, raw: Any) -> None:
 
 
 def _contribute_labour(w: Any, aid: str, raw: Any) -> None:
-    project = _get_open(w, aid, raw)
+    action = "gop_cong_du_an"
+    target = str(raw.get("ref", "")) if isinstance(raw, dict) and raw.get("ref") else None
+    project = _get_open(w, aid, raw, action)
     if project is None:
         return
     if not _can_reach(w, aid, project):
-        _record_failure(w, aid, "no_access", "chưa tới được địa điểm dự án")
+        _record_failure(w, aid, "no_access", "chưa tới được địa điểm dự án",
+                        action=action, target=project.id)
         return
     try:
         requested = float(raw.get("so_cong", 0.0))
     except (TypeError, ValueError):
-        _record_failure(w, aid, "bad_params", "lượng công không đọc được")
+        _record_failure(w, aid, "bad_params", "lượng công không đọc được",
+                        action=action, target=target)
         return
     if not math.isfinite(requested) or requested <= EPSILON:
-        _record_failure(w, aid, "bad_params", "lượng công phải dương")
+        _record_failure(w, aid, "bad_params", "lượng công phải dương",
+                        action=action, target=project.id)
         return
     remaining = max(0.0, project.cong_can - project.cong_da)
     actual = min(requested, remaining, w.ledger.so_du(aid, "cong"))
     if actual <= EPSILON:
         code = "insufficient_labor" if w.ledger.so_du(aid, "cong") <= EPSILON else "labor_complete"
-        _record_failure(w, aid, code, "không còn công khả dụng để góp dự án")
+        _record_failure(w, aid, code, "không còn công khả dụng để góp dự án",
+                        action=action, target=project.id)
         return
     try:
         w.ledger.huy(aid, "cong", actual, "dung", f"góp công dự án {project.id}", w.tick)
     except LoiSoKep:
-        _record_failure(w, aid, "insufficient_labor", "công khả dụng không đủ")
+        _record_failure(w, aid, "insufficient_labor", "công khả dụng không đủ",
+                        action=action, target=project.id)
         return
     from engine.production import ghi_cong_dung
 
@@ -379,13 +409,16 @@ def _cancel(w: Any, project: DuAn, status: str, reason: str) -> None:
 def _cancel_request(w: Any, aid: str, project_id: str) -> None:
     project = getattr(w, "du_an", {}).get(project_id)
     if project is None:
-        _record_failure(w, aid, "project_not_found", "không có dự án này")
+        _record_failure(w, aid, "project_not_found", "không có dự án này",
+                        action="huy_du_an", target=project_id)
         return
     if project.chu != aid:
-        _record_failure(w, aid, "not_authorized", "chỉ chủ dự án được hủy")
+        _record_failure(w, aid, "not_authorized", "chỉ chủ dự án được hủy",
+                        action="huy_du_an", target=project_id)
         return
     if project.trang_thai != "dang_lam":
-        _record_failure(w, aid, "project_closed", "dự án đã đóng")
+        _record_failure(w, aid, "project_closed", "dự án đã đóng",
+                        action="huy_du_an", target=project_id)
         return
     _cancel(w, project, "da_huy", "cancelled_by_owner")
     from engine.action_journal import executed as journal_executed

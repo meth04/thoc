@@ -12,7 +12,6 @@ from engine.world import tao_the_gioi
 from minds.prompts import build_agent_prompt
 from minds.world_tools import thuc_thi
 
-
 SPATIAL = Path("scenarios/agrarian_transition_v1/spatial_v1.yaml").resolve()
 LIVELIHOOD = Path("scenarios/agrarian_transition_v1/spatial_livelihood_v2.yaml").resolve()
 
@@ -58,6 +57,46 @@ def test_stale_project_reference_is_visible_not_silently_ignored():
     assert plan.gop_cong_du_an == []
     journal = w.metrics_lich_su[-1]["action_journal"]
     assert journal["reason_codes"]["project_not_found"] == 1
+
+
+def test_runtime_quote_failure_is_journaled_as_a_rejection():
+    """Preflight cannot know stock locked earlier in the same tick; execution must still speak."""
+    w, aid = _world()
+    plan = KeHoach(id=aid, dang_bao_gia=[{
+        "chieu": "ban", "tai_san": "go", "so_luong": 1_000_000.0,
+        "don_gia": 4.0, "thanh_toan": "thoc", "doi_tac": None, "giao_tai": "ngay",
+    }])
+
+    _run_one(w, aid, plan)
+
+    row = next(item for item in w.action_journal_tick if item["action"] == "dang_bao_gia")
+    assert row["preflight"] == "ok"
+    assert row["execution"] == "rejected"
+    assert row["reason_code"] == "insufficient_inventory"
+    assert "insufficient_inventory" in w.agents[aid].su_co[-1]
+    cumulative = w.metrics_lich_su[-1]["action_journal"]["cumulative"]
+    assert cumulative["execution"]["rejected"] == 1
+    assert cumulative["reason_codes"]["insufficient_inventory"] == 1
+
+
+def test_reforestation_requires_a_hill_not_an_existing_forest():
+    w, aid = _world()
+    # Make a locally reachable factual counterexample; it remains a forest, so
+    # planting it again is not a permissible reforestation target.
+    from engine.spatial import _bo_cua
+
+    current_bank = _bo_cua(w, aid)
+    parcel = next(p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None)
+    parcel.loai = "rung"
+    parcel.bo = current_bank
+    plan = KeHoach(id=aid, trong_rung=[parcel.id])
+
+    _run_one(w, aid, plan)
+
+    assert plan.trong_rung == []
+    row = next(item for item in w.action_journal_tick if item["action"] == "trong_rung")
+    assert row["preflight"] == "rejected"
+    assert row["reason_code"] == "parcel_not_reforestable"
 
 
 def test_fact_cards_separate_cultivable_common_fields_from_clearable_land():

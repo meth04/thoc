@@ -7,7 +7,7 @@ from pathlib import Path
 from engine import consumption, demography, metrics_demography
 from engine.config import load_config
 from engine.world import tao_the_gioi
-
+from minds.policy_cards import chon_vu_dong_theo_rang_buoc
 
 ROOT = Path(__file__).resolve().parents[1]
 SPATIAL = ROOT / "scenarios" / "agrarian_transition_v1" / "spatial_v1.yaml"
@@ -47,6 +47,20 @@ def test_v3_winter_crop_config_has_land_labor_tradeoff_not_strict_dominance():
     assert maize_food > potato_food  # scarce land favors maize's larger total output
     assert float(maize["cong"]) > float(potato["cong"])
     assert maize_food / float(maize["cong"]) < potato_food / float(potato["cong"])
+
+
+def test_v3_crop_choice_changes_with_labor_and_food_constraints():
+    w, aid = _world(405)
+    field = next(parcel for parcel in w.parcels.values() if parcel.loai == "ruong")
+    field.mau_mo = 1.0
+
+    # A hungry household with scarce land needs maximum food from one field.
+    land_scarce = chon_vu_dong_theo_rang_buoc(w, [field], 60.0, 500.0)
+    # The same household with only 30 labour days cannot use maize at all.
+    labor_scarce = chon_vu_dong_theo_rang_buoc(w, [field], 30.0, 500.0)
+
+    assert land_scarce == [(field.id, "ngo")]
+    assert labor_scarce == [(field.id, "khoai")]
 
 
 def test_v3_homeless_full_meal_does_not_erase_shelter_exposure():

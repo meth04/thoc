@@ -112,6 +112,13 @@ class AIStudioProvider:
         contents: list[dict] = [{"role": "user", "parts": [{"text": req.prompt}]}]
         tools = [{"functionDeclarations": khai_bao}]
         tok_in = tok_out = 0
+        # A function call is evidence, not merely an implementation detail:
+        # persist the exact effective arguments and read-only response so a
+        # later replay can attest the information set that preceded a choice.
+        from minds.world_tools import catalog_hash, result_hash
+
+        tool_turns: list[dict] = []
+        tool_catalog = catalog_hash()
         for luot in range(max_luot + 1):
             key = chon_key()
             if key is None:
@@ -150,18 +157,33 @@ class AIStudioProvider:
                 return LLMResponse(
                     text=text, provider="aistudio", model=model, tok_in=tok_in,
                     tok_out=tok_out, latency_s=time.time() - t0,
-                    key_hash=key_hash(key), retries=luot)  # retries = số lượt (độ sâu nghĩ)
+                    key_hash=key_hash(key), retries=luot,
+                    tool_turns=tool_turns, tool_catalog_hash=tool_catalog,
+                )  # retries = số lượt (độ sâu nghĩ)
             # LLM gọi công cụ → thực thi CHỈ ĐỌC, đưa kết quả vào hội thoại rồi lặp
             contents.append({"role": "model", "parts": [
                 {"functionCall": fc} for fc in goi_cong_cu]})
+            responses: list[dict] = []
+            for index, fc in enumerate(goi_cong_cu):
+                name = str(fc.get("name", ""))
+                raw_args = fc.get("args")
+                args = dict(raw_args) if isinstance(raw_args, dict) else {}
+                result = thuc_thi(w, aid, name, args)
+                tool_turns.append({
+                    "turn": int(luot),
+                    "index": int(index),
+                    "name": name,
+                    "args": args,
+                    "result": result,
+                    "result_hash": result_hash(result),
+                })
+                responses.append({"functionResponse": {"name": name, "response": result}})
             contents.append({"role": "user", "parts": [
-                {"functionResponse": {"name": fc.get("name", ""),
-                                      "response": thuc_thi(w, aid, fc.get("name", ""),
-                                                           fc.get("args"))}}
-                for fc in goi_cong_cu]})
+                *responses]})
         # lượt cuối ép JSON nên luôn return ở trên — nhánh này chỉ để an toàn kiểu
         return LLMResponse(text="{}", provider="aistudio", model=model, tok_in=tok_in,
-                           tok_out=tok_out, latency_s=time.time() - t0, key_hash="")
+                           tok_out=tok_out, latency_s=time.time() - t0, key_hash="",
+                           tool_turns=tool_turns, tool_catalog_hash=tool_catalog)
 
 
 class NineRouterProvider:
@@ -190,6 +212,10 @@ class NineRouterProvider:
         tools = [{"type": "function", "function": kb} for kb in khai_bao]
         messages: list[dict] = [{"role": "user", "content": req.prompt}]
         tok_in = tok_out = 0
+        from minds.world_tools import catalog_hash, result_hash
+
+        tool_turns: list[dict] = []
+        tool_catalog = catalog_hash()
         for luot in range(max_luot + 1):
             body: dict = {"model": model, "messages": messages, "temperature": temperature,
                           "max_tokens": max_tokens, "stream": False}
@@ -215,22 +241,35 @@ class NineRouterProvider:
                 return LLMResponse(
                     text=msg.get("content") or "", provider="ninerouter", model=model,
                     tok_in=tok_in, tok_out=tok_out, latency_s=time.time() - t0,
-                    key_hash=key_hash(self.key), retries=luot)
+                    key_hash=key_hash(self.key), retries=luot,
+                    tool_turns=tool_turns, tool_catalog_hash=tool_catalog)
             messages.append({"role": "assistant", "content": msg.get("content"),
                              "tool_calls": goi_cc})
             import json as _json
-            for tc in goi_cc:
+            for index, tc in enumerate(goi_cc):
                 fn = tc.get("function", {})
                 try:
                     args = _json.loads(fn.get("arguments") or "{}")
                 except (ValueError, TypeError):
                     args = {}
-                kq = thuc_thi(w, aid, fn.get("name", ""), args)
+                if not isinstance(args, dict):
+                    args = {}
+                name = str(fn.get("name", ""))
+                kq = thuc_thi(w, aid, name, args)
+                tool_turns.append({
+                    "turn": int(luot),
+                    "index": int(index),
+                    "name": name,
+                    "args": args,
+                    "result": kq,
+                    "result_hash": result_hash(kq),
+                })
                 messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),
-                                 "content": _json.dumps(kq, ensure_ascii=False)})
+                                  "content": _json.dumps(kq, ensure_ascii=False)})
         return LLMResponse(text="{}", provider="ninerouter", model=model, tok_in=tok_in,
                            tok_out=tok_out, latency_s=time.time() - t0,
-                           key_hash=key_hash(self.key))
+                           key_hash=key_hash(self.key), tool_turns=tool_turns,
+                           tool_catalog_hash=tool_catalog)
 
     def goi(self, req: LLMRequest, model: str, temperature: float,
             max_tokens: int) -> LLMResponse:

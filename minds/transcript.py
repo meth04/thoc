@@ -18,9 +18,10 @@ Che key: prompt/response đi qua ``che_key`` trước khi ghi (điều luật #4
 bao giờ lộ). ``prompt_hash`` băm prompt GỐC nên replay (băm ``req.prompt`` gốc) vẫn khớp.
 
 GIỚI HẠN (không overclaim):
-- Vòng công cụ MCP (``goi_agentic``) ghi 1 entry/agent: prompt khởi đầu + QUYẾT ĐỊNH cuối.
-  Công cụ CHỈ ĐỌC (điều luật #1) không chạm state ⇒ chỉ quyết định cuối vào world-hash ⇒
-  replay quyết định cuối là đủ; KHÔNG tái diễn các lượt công cụ trung gian.
+- Vòng công cụ MCP (``goi_agentic``) ghi 1 entry/agent: prompt khởi đầu, từng tool-call /
+  result (kèm hash), và QUYẾT ĐỊNH cuối. Khi replay, các tool CHỈ ĐỌC được chạy lại trên đúng
+  snapshot rồi so với transcript; điều này chứng minh information set, không biến tool thành
+  một transition hay bằng chứng rằng lựa chọn là tối ưu.
 - Hồi ký/niềm tin (``a.hoi_ky``, ``a.niem_tin``) KHÔNG vào world_hash nhưng CÓ trong prompt
   tick sau; nên mọi call (kể cả nén/phản tư) đều được ghi + phục vụ từ transcript để prompt
   các tick sau trùng khít.
@@ -175,14 +176,21 @@ class TranscriptProvider:
         return self._tra(req)
 
     def goi_agentic(self, req: LLMRequest, w, aid: str) -> LLMResponse:
-        # MCP: chỉ QUYẾT ĐỊNH cuối được ghi (công cụ chỉ đọc, không chạm state)
-        return self._tra(req)
+        d = self._lay(req)
+        self._kiem_tool_turns(d, w, aid)
+        return self._phan_hoi(d)
 
     def _tra(self, req: LLMRequest) -> LLMResponse:
+        return self._phan_hoi(self._lay(req))
+
+    def _lay(self, req: LLMRequest) -> dict:
         try:
-            d = self.reader.lay(req.prompt)
+            return self.reader.lay(req.prompt)
         except KeyError:
             raise LoiHetQuota("transcript thiếu response cho prompt") from None
+
+    @staticmethod
+    def _phan_hoi(d: dict) -> LLMResponse:
         if d.get("outcome") == "error" or d.get("provider") == "loi":
             message = str(d.get("error_message") or d.get("response_raw")
                           or "provider error recorded in transcript")
@@ -191,7 +199,43 @@ class TranscriptProvider:
             text=d.get("response_raw", ""), provider=d.get("provider", "transcript"),
             model=d.get("model", ""), tok_in=int(d.get("tok_in", 0)),
             tok_out=int(d.get("tok_out", 0)), key_hash="transcript",
+            tool_turns=list(d.get("tool_turns") or []),
+            tool_catalog_hash=d.get("tool_catalog_hash"),
         )
+
+    @staticmethod
+    def _kiem_tool_turns(d: dict, w, aid: str) -> None:
+        """Replay each recorded read-only query and fail closed on evidence drift."""
+        turns = d.get("tool_turns") or []
+        if not turns:
+            return  # Legacy transcripts predate the tool-turn evidence contract.
+        from minds.world_tools import catalog_hash, result_hash, thuc_thi
+
+        recorded_catalog = d.get("tool_catalog_hash")
+        current_catalog = catalog_hash()
+        if recorded_catalog and recorded_catalog != current_catalog:
+            raise TranscriptToolMismatch(
+                "tool_catalog_hash mismatch: transcript tool interface differs from current code"
+            )
+        for position, turn in enumerate(turns):
+            if not isinstance(turn, dict):
+                raise TranscriptToolMismatch(f"tool turn {position} is not an object")
+            name = str(turn.get("name", ""))
+            args = turn.get("args")
+            if not isinstance(args, dict):
+                raise TranscriptToolMismatch(f"tool turn {position} has non-object arguments")
+            actual = thuc_thi(w, aid, name, dict(args))
+            expected_hash = str(turn.get("result_hash", ""))
+            actual_hash = result_hash(actual)
+            if not expected_hash or expected_hash != actual_hash:
+                raise TranscriptToolMismatch(
+                    f"tool turn {position} result mismatch for {name}: "
+                    f"recorded={expected_hash or '<missing>'} actual={actual_hash}"
+                )
+
+
+class TranscriptToolMismatch(RuntimeError):
+    """A recorded MCP information set cannot be reproduced on the replay snapshot."""
 
 
 def tao_mind_replay(w, cfg, mode: str, reader: TranscriptReader, p_malformed=None):

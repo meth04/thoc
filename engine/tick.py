@@ -342,6 +342,7 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
         del w.poverty_streak[head]
     m["kl_cho"] = round(kl_cho, 3)
     m["kl_giao_dich"] = round(kl_cho + getattr(w, "kl_hd_tick", 0.0), 3)
+    m["trade_flows"] = metrics.giao_dich_theo_kenh(w, kl_cho, w.metrics_lich_su)
     hieu_luc = [h for h in w.hop_dong.values() if h.trang_thai == "hieu_luc"]
     m["hd_hieu_luc"] = len(hieu_luc)
     m["so_mo_tip"] = len({board.mo_tip_hop_dong(h) for h in hieu_luc})

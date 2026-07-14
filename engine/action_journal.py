@@ -109,7 +109,7 @@ def preflight_ok(w: Any, row: dict[str, Any] | None) -> None:
 
 
 def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = None,
-             detail: str | None = None, preflight: bool = False) -> None:
+             detail: str | None = None, preflight: bool = False, feedback: bool = True) -> None:
     """Record a stable rejection; create a row if parsing never produced one."""
     if not _enabled(w):
         return
@@ -124,7 +124,7 @@ def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = N
     if preflight:
         row["preflight"] = "rejected"
     agent = w.agents.get(str(aid))
-    if agent is not None and agent.con_song:
+    if feedback and agent is not None and agent.con_song:
         target_text = f" {target}" if target not in (None, "") else ""
         agent.su_co = [*agent.su_co, f"[{code}] {action}{target_text}"][-3:]
     row["execution"] = "rejected"
@@ -200,38 +200,70 @@ def _preflight(w: Any, aid: str, raw: dict[str, Any]) -> tuple[str | None, str |
             if parcel.chu is not None:
                 return "parcel_not_common", "clearing requires a common parcel"
         elif action == "canh_vu_dong":
+            if w.mua_mua():
+                return "season_not_available", "winter crops can only be cultivated in the dry season"
             if parcel.loai != "ruong":
                 return "parcel_not_cultivable", "winter crops require a field"
-            if parcel.chu not in (None, aid):
+            from engine.contracts import quyen_su_dung_thua
+
+            rights = quyen_su_dung_thua(w, aid)
+            if parcel.chu not in (None, aid) and parcel.id not in rights:
                 return "no_land_right", "actor does not own this field"
             crop = str(raw.get("cay", ""))
             crops = w.cfg.get("khong_gian.vu_dong.cay", {})
             if not isinstance(crops, dict) or crop not in crops:
                 return "crop_unavailable", "crop is not enabled by this scenario"
         else:
-            if parcel.loai not in {"rung", "doi"}:
-                return "parcel_not_reforestable", "reforestation requires a cleared hill/forest parcel"
+            if parcel.loai != "doi":
+                return "parcel_not_reforestable", "reforestation requires a reachable hill parcel"
     elif action == "phan_bo_cong":
+        if raw.get("canh_thua") and not w.mua_mua():
+            return "season_not_available", "rice cultivation can only be submitted in a rice season"
+        from engine.contracts import quyen_su_dung_thua
+        from engine.spatial import co_the_o_bo
+
+        rights = quyen_su_dung_thua(w, aid)
         for parcel_id in raw.get("canh_thua", []) or []:
             parcel = w.parcels.get(str(parcel_id))
             if parcel is None:
                 return "parcel_not_found", f"field {parcel_id} does not exist"
             if parcel.loai != "ruong":
                 return "parcel_not_cultivable", f"{parcel_id} is not a field"
+            if parcel.chu not in (None, aid) and parcel.id not in rights:
+                return "no_land_right", f"actor has no cultivation right for {parcel_id}"
+            if not co_the_o_bo(w, aid, parcel.bo):
+                return "parcel_unreachable", f"actor has not reached {parcel_id}'s bank"
     elif action in {"gop_vat_lieu_du_an", "gop_cong_du_an", "huy_du_an"}:
         project = getattr(w, "du_an", {}).get(str(raw.get("ref", "")))
         if project is None:
             return "project_not_found", "project id is not open in world state"
         if project.trang_thai != "dang_lam":
             return "project_closed", "project is not open"
+        if action == "huy_du_an" and project.chu != aid:
+            return "not_authorized", "only the project owner can cancel it"
+        if action != "huy_du_an":
+            from engine.spatial import co_the_o_bo
+
+            if not co_the_o_bo(w, aid, project.bo):
+                return "project_unreachable", "actor has not reached the project site"
     elif action == "chap_nhan_bao_gia":
         quote = getattr(w, "bao_gia", {}).get(str(raw.get("ref", "")))
         if quote is None:
             return "offer_not_found", "quote id is not open in world state"
+        if quote.trang_thai != "dang_treo" or quote.con_lai <= 0:
+            return "quote_closed", "quote is no longer open"
+        from engine.quotes import _visible
+
+        if not _visible(w, aid, quote):
+            return "offer_not_visible", "quote is not visible or cannot be accepted by this actor"
     elif action == "huy_bao_gia":
         quote = getattr(w, "bao_gia", {}).get(str(raw.get("ref", "")))
         if quote is None:
             return "offer_not_found", "quote id is not open in world state"
+        if quote.nguoi_dang != aid:
+            return "not_authorized", "only the poster can cancel this quote"
+        if quote.trang_thai not in {"dang_treo", "da_khop"}:
+            return "quote_closed", "quote is already closed"
     elif target and target.startswith("DA") and target not in getattr(w, "du_an", {}):
         return "project_not_found", "project reference does not exist"
     return None, None
@@ -247,6 +279,10 @@ def _drop_rejected(kh: Any, raw: dict[str, Any]) -> None:
     elif action == "canh_vu_dong":
         pair = (str(raw.get("thua", "")), str(raw.get("cay", "")))
         kh.canh_vu_dong = [p for p in kh.canh_vu_dong if p != pair]
+    elif action == "phan_bo_cong":
+        rejected_fields = {str(p) for p in raw.get("canh_thua", []) or []}
+        if rejected_fields:
+            kh.canh_thua = [p for p in kh.canh_thua if p not in rejected_fields]
     elif action in {"gop_vat_lieu_du_an", "gop_cong_du_an"}:
         field = "gop_vat_lieu_du_an" if action == "gop_vat_lieu_du_an" else "gop_cong_du_an"
         ref = str(raw.get("ref", ""))
@@ -257,6 +293,13 @@ def _drop_rejected(kh: Any, raw: dict[str, Any]) -> None:
         )
     elif action == "huy_du_an":
         kh.huy_du_an = [x for x in kh.huy_du_an if x != str(raw.get("ref", ""))]
+    elif action == "chap_nhan_bao_gia":
+        ref = str(raw.get("ref", ""))
+        kh.chap_nhan_bao_gia = [
+            item for item in kh.chap_nhan_bao_gia if str(item.get("ref", "")) != ref
+        ]
+    elif action == "huy_bao_gia":
+        kh.huy_bao_gia = [x for x in kh.huy_bao_gia if x != str(raw.get("ref", ""))]
 
 
 def preflight_plans(w: Any, plans: dict[str, Any]) -> None:

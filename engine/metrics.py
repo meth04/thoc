@@ -162,6 +162,82 @@ def ecology_metrics(w: World) -> dict[str, Any] | None:
     }
 
 
+def _cong_dicts(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
+    total: dict[str, int] = {}
+    for row in rows:
+        values = row.get(key, {})
+        if not isinstance(values, dict):
+            continue
+        for name, value in values.items():
+            try:
+                total[str(name)] = total.get(str(name), 0) + int(value)
+            except (TypeError, ValueError):
+                continue
+    return dict(sorted(total.items()))
+
+
+def action_journal_cumulative(history: list[dict[str, Any]], current: dict[str, Any]) -> dict[str, Any]:
+    """Cumulative action funnel, explicitly separate from the current-tick record."""
+    rows: list[dict[str, Any]] = []
+    for metric in history:
+        journal = metric.get("action_journal") if isinstance(metric, dict) else None
+        if isinstance(journal, dict):
+            rows.append(journal)
+    rows.append(current)
+    return {
+        "planned": sum(int(row.get("planned", 0) or 0) for row in rows),
+        "preflight": _cong_dicts(rows, "preflight"),
+        "execution": _cong_dicts(rows, "execution"),
+        "by_origin": _cong_dicts(rows, "by_origin"),
+        "reason_codes": _cong_dicts(rows, "reason_codes"),
+    }
+
+
+def giao_dich_theo_kenh(w: World, central_market_quantity: float,
+                         history: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    """Report distinct execution channels without treating escrow as trade volume.
+
+    The existing payment accumulator contains both call-auction and completed
+    quote settlement.  Quotes expose their settled component explicitly, so
+    subtracting it yields the direct central-market component.  Contract and
+    land transfers stay separate because they are different institutions.
+    """
+    from engine.quotes import payment_value_tick
+
+    quote_value = payment_value_tick(w)
+    payment_total = sum(float(value) for value in w.kl_thanh_toan_tick.values())
+    direct_market_value = max(0.0, payment_total - quote_value)
+    contract_value = float(getattr(w, "kl_hd_tick", 0.0))
+    land_value = sum(
+        float(row.get("price", 0.0))
+        for row in getattr(w, "giao_dich_dat", [])
+        if int(row.get("tick", -1)) == w.tick
+    )
+    tick = {
+        # Quantity is intentionally labelled separately: heterogeneous goods
+        # cannot be added as a value measure without a contemporaneous price.
+        "central_market_matched_quantity": round(float(central_market_quantity), 9),
+        "central_market_payment_value_thoc": round(direct_market_value, 9),
+        "a2a_quote_payment_value_thoc": round(quote_value, 9),
+        "contract_transfer_value_thoc": round(contract_value, 9),
+        "land_auction_payment_value_thoc": round(land_value, 9),
+        "settled_value_thoc": round(
+            direct_market_value + quote_value + contract_value + land_value, 9
+        ),
+    }
+    cumulative: dict[str, float] = {key: 0.0 for key in tick}
+    for metric in history:
+        flows = metric.get("trade_flows") if isinstance(metric, dict) else None
+        previous_tick = flows.get("tick", {}) if isinstance(flows, dict) else {}
+        if not isinstance(previous_tick, dict):
+            continue
+        for key in cumulative:
+            cumulative[key] += float(previous_tick.get(key, 0.0) or 0.0)
+    for key, value in tick.items():
+        cumulative[key] = round(cumulative[key] + value, 9)
+    return {"tick": tick, "cumulative": cumulative}
+
+
 # ------------------------------------------------------------------ tổng hợp
 
 
@@ -232,6 +308,8 @@ def buoc_ket_toan(w: World) -> dict[str, Any]:
     m["decision_provenance"] = decision_provenance_summary(w)
     action_journal = action_journal_summary(w)
     if action_journal is not None:
+        action_journal["scope"] = "tick"
+        action_journal["cumulative"] = action_journal_cumulative(w.metrics_lich_su, action_journal)
         m["action_journal"] = action_journal
     demography = metrics_demography.tinh(w)
     if demography is not None:

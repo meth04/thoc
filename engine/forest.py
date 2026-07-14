@@ -194,10 +194,22 @@ def trong_rung_dat(w: Any, ke_hoach: dict[str, Any]) -> None:
             continue
         for pid in sorted(getattr(kh, "trong_rung", ())):
             p = w.parcels.get(pid)
-            if p is None or p.loai != "doi" or not co_the_o_bo(w, aid, p.bo):
+            if p is None or p.loai != "doi":
+                from engine.action_journal import rejected as journal_rejected
+
+                journal_rejected(w, aid, "trong_rung", "parcel_not_reforestable", target=pid)
+                _ghi_su_co(w, aid, f"trồng rừng {pid} không thành: phải là thửa đồi")
+                continue
+            if not co_the_o_bo(w, aid, p.bo):
+                from engine.action_journal import rejected as journal_rejected
+
+                journal_rejected(w, aid, "trong_rung", "parcel_unreachable", target=pid)
                 _ghi_su_co(w, aid, f"trồng rừng {pid} không thành: không có quyền tiếp cận đồi")
                 continue
             if not _lam_nguyen_tu(w, aid, f"trồng rừng {pid}", [("cong", cong, "dung")], []):
+                from engine.action_journal import rejected as journal_rejected
+
+                journal_rejected(w, aid, "trong_rung", "insufficient_labor", target=pid)
                 _ghi_su_co(w, aid, f"trồng rừng {pid} không thành: thiếu công")
                 continue
             p.loai = "rung"
@@ -211,6 +223,9 @@ def trong_rung_dat(w: Any, ke_hoach: dict[str, Any]) -> None:
                 sinh_khoi=round(float(p.sinh_khoi), 9),
                 tan=round(float(p.tan_rung), 9),
             )
+            from engine.action_journal import executed as journal_executed
+
+            journal_executed(w, aid, "trong_rung", target=pid, code="reforested")
 
 
 __all__ = [

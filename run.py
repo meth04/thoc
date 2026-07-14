@@ -384,7 +384,7 @@ def chay_run(args, *, mind_factory=None) -> int:
             st = getattr(mind_fn, "stats_tick", None)
             if st:
                 m["llm"] = {k: st.get(k, 0) for k in
-                            ("call", "tok_in", "tok_out", "fallback", "latency_ms")}
+                            ("call", "tok_in", "tok_out", "fallback", "latency_ms", "tool_call")}
             if getattr(mind_fn, "het_ngan_sach", False):
                 print(f"[budget] hết ngân sách: {getattr(mind_fn, 'ly_do_dung', '')} "
                       f"— checkpoint và dừng êm (không degrade).")

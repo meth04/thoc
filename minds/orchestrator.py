@@ -103,12 +103,16 @@ class MindMock:
             )
         self.tok_in += resp.tok_in
         self.tok_out += resp.tok_out
-        self.so_luot_cong_cu += max(0, resp.retries)  # với vòng agentic = số lượt công cụ
+        # `retries` also represents JSON repair in ordinary calls. Tool usage
+        # must be counted from the attested calls themselves, never inferred.
+        tool_calls = len(resp.tool_turns)
+        self.so_luot_cong_cu += tool_calls
         st = self.stats_tick
         st["call"] = st.get("call", 0) + 1
         st["tok_in"] = st.get("tok_in", 0) + resp.tok_in
         st["tok_out"] = st.get("tok_out", 0) + resp.tok_out
         st["latency_ms"] = st.get("latency_ms", 0) + int(resp.latency_s * 1000)
+        st["tool_call"] = st.get("tool_call", 0) + tool_calls
         if fallback:
             st["fallback"] = st.get("fallback", 0) + 1
 

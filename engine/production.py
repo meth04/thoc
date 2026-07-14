@@ -251,14 +251,30 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             for pid in kh.canh_thua:
                 p = w.parcels.get(pid)
                 if p is None or p.loai != "ruong":
+                    from engine.action_journal import rejected as journal_rejected
+
+                    journal_rejected(w, aid, "phan_bo_cong", "parcel_not_cultivable",
+                                     detail=f"{pid} is not a field")
                     continue
                 if p.chu is not None and p.chu != aid and pid not in duoc_dung:
+                    from engine.action_journal import rejected as journal_rejected
+
+                    journal_rejected(w, aid, "phan_bo_cong", "no_land_right",
+                                     detail=f"no cultivation right for {pid}")
                     continue  # đất người khác, không có quyền sử dụng
                 if pid in da_canh_tick_nay:
+                    from engine.action_journal import rejected as journal_rejected
+
+                    journal_rejected(w, aid, "phan_bo_cong", "parcel_claimed",
+                                     detail=f"{pid} was already cultivated this tick")
                     continue
                 from engine.spatial import co_the_o_bo
 
                 if not co_the_o_bo(w, aid, p.bo):
+                    from engine.action_journal import rejected as journal_rejected
+
+                    journal_rejected(w, aid, "phan_bo_cong", "parcel_unreachable",
+                                     detail=f"has not reached {pid}'s bank")
                     _ghi_su_co(w, aid, f"canh {pid} bất thành: chưa qua sông tới thửa")
                     continue
                 # máy nhân năng suất công → cùng một thửa tốn ít công hơn
@@ -266,6 +282,10 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 giong = float(sx["giong_kg_moi_thua"])
                 tieu = [("cong", cong_can, "dung"), ("thoc", giong, "giong")]
                 if not _lam_nguyen_tu(w, aid, f"canh {pid}", tieu, []):
+                    from engine.action_journal import rejected as journal_rejected
+
+                    journal_rejected(w, aid, "phan_bo_cong", "insufficient_inputs",
+                                     detail=_thieu_gi(w, aid, tieu))
                     _ghi_su_co(w, aid, f"gieo {pid} không thành: {_thieu_gi(w, aid, tieu)}")
                     continue  # thiếu công/giống → thửa này bỏ, KHÔNG mất gì
                 from engine.action_journal import executed as journal_executed
@@ -330,14 +350,32 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     p = w.parcels.get(pid)
                     spec = cay_cfg.get(cay)
                     if p is None or p.loai != "ruong" or not isinstance(spec, dict):
+                        from engine.action_journal import rejected as journal_rejected
+
+                        journal_rejected(w, aid, "canh_vu_dong", "parcel_not_cultivable",
+                                         target=pid, detail=f"{pid} is not an enabled field/crop")
                         continue
                     if p.chu is not None and p.chu != aid and pid not in qsd_map.get(aid, set()):
+                        from engine.action_journal import rejected as journal_rejected
+
+                        journal_rejected(w, aid, "canh_vu_dong", "no_land_right", target=pid)
                         continue
-                    if pid in da_canh_tick_nay or not co_the_o_bo(w, aid, p.bo):
+                    if pid in da_canh_tick_nay:
+                        from engine.action_journal import rejected as journal_rejected
+
+                        journal_rejected(w, aid, "canh_vu_dong", "parcel_claimed", target=pid)
+                        continue
+                    if not co_the_o_bo(w, aid, p.bo):
+                        from engine.action_journal import rejected as journal_rejected
+
+                        journal_rejected(w, aid, "canh_vu_dong", "parcel_unreachable", target=pid)
                         continue
                     cong_can = float(spec["cong"]) / he_so_may(w, aid)
                     if not _lam_nguyen_tu(w, aid, f"canh {cay} {pid}",
                                            [("cong", cong_can, "dung")], []):
+                        from engine.action_journal import rejected as journal_rejected
+
+                        journal_rejected(w, aid, "canh_vu_dong", "insufficient_labor", target=pid)
                         _ghi_su_co(w, aid, f"canh {cay} {pid} không thành: thiếu công")
                         continue
                     from engine.action_journal import executed as journal_executed

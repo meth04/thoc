@@ -160,3 +160,29 @@ def test_chi_nguoi_dang_moi_huy_duoc_quote_va_legacy_hash_khong_doi():
     legacy.bao_gia["BG00001"] = object()
     legacy._next_bao_gia = 99
     assert legacy.world_hash() == h0
+
+
+def test_trade_flow_metrics_separate_quote_tick_from_prior_cumulative_flow():
+    from engine import metrics
+
+    w, seller, buyer = _world()
+    quotes.buoc_bao_gia(w, {
+        seller: KeHoach(id=seller, dang_bao_gia=[_ask()]),
+        buyer: KeHoach(id=buyer, chap_nhan_bao_gia=[{"ref": "BG00001", "so_luong": 4.0}]),
+    })
+    first = metrics.buoc_ket_toan(w)
+    first["trade_flows"] = metrics.giao_dich_theo_kenh(w, 0.0, w.metrics_lich_su)
+    assert first["trade_flows"]["tick"]["a2a_quote_payment_value_thoc"] == pytest.approx(40.0)
+    assert first["trade_flows"]["tick"]["central_market_payment_value_thoc"] == 0.0
+
+    # Fixture a later, direct-market and contract observation.  The metric must
+    # retain the earlier quote in its cumulative column rather than relabel it.
+    w.tick = 2
+    w.kl_thanh_toan_tick = {"thoc": 10.0}
+    w.kl_hd_tick = 3.0
+    second = metrics.buoc_ket_toan(w)
+    second["trade_flows"] = metrics.giao_dich_theo_kenh(w, 2.0, w.metrics_lich_su)
+    assert second["trade_flows"]["tick"]["central_market_payment_value_thoc"] == 10.0
+    assert second["trade_flows"]["tick"]["a2a_quote_payment_value_thoc"] == 0.0
+    assert second["trade_flows"]["cumulative"]["a2a_quote_payment_value_thoc"] == 40.0
+    assert second["trade_flows"]["cumulative"]["settled_value_thoc"] == 53.0
