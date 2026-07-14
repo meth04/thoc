@@ -14,9 +14,9 @@ Tên hàm/tham số bằng tiếng Việt không dấu (LLM gọi được), mô
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
