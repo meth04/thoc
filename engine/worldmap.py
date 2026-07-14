@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from engine.config import Config
+from engine.forest import khoi_tao_parcel
 from engine.spatial import _hai_bo_bat
 from engine.types import Parcel, Village
 
@@ -46,7 +47,10 @@ def sinh_ban_do(cfg: Config, rng: np.random.Generator) -> tuple[dict[str, Parcel
 
     def them(r: int, c: int, loai: str, mau_mo: float = 1.0) -> None:
         pid = f"P{r:02d}_{c:02d}"
-        parcels[pid] = Parcel(id=pid, r=r, c=c, loai=loai, mau_mo=mau_mo, mau_mo_goc=mau_mo)
+        p = Parcel(id=pid, r=r, c=c, loai=loai, mau_mo=mau_mo, mau_mo_goc=mau_mo)
+        # No RNG/no hash-visible state when ecology gate is off; v2 gets its explicit stock.
+        khoi_tao_parcel(cfg, p)
+        parcels[pid] = p
 
     for r, c in song_o:
         them(r, c, "song", 0.0)
@@ -128,8 +132,10 @@ def _sinh_ban_do_hai_bo(
 
     def them(r: int, c: int, loai: str, mau_mo: float, bo: str | None) -> None:
         pid = f"P{r:02d}_{c:02d}"
-        parcels[pid] = Parcel(id=pid, r=r, c=c, loai=loai, mau_mo=mau_mo,
-                              mau_mo_goc=mau_mo, bo=bo)
+        p = Parcel(id=pid, r=r, c=c, loai=loai, mau_mo=mau_mo,
+                   mau_mo_goc=mau_mo, bo=bo)
+        khoi_tao_parcel(cfg, p)
+        parcels[pid] = p
 
     for r, c in song_o:
         them(r, c, "song", 0.0, None)

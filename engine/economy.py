@@ -61,20 +61,30 @@ def household_food_equivalent(w: World, members: list[str]) -> float:
 
 
 def household_snapshot(w: World) -> list[dict[str, float | str]]:
-    """Ảnh chụp tồn kho và an ninh lương thực cấp hộ cho metric/analysis."""
+    """Ảnh chụp tồn kho và an ninh lương thực cấp hộ cho metric/analysis.
+
+    Khi ``ho.cu_tru_ben_vung`` bật, mỗi dòng mang thêm ``rid`` (id hộ cư trú BỀN) để metric
+    quan sát (poverty streak) bám vào một định danh không gãy khi chủ hộ đổi/chết.
+    """
+    from engine.household import rid_cua
+
     rows: list[dict[str, float | str]] = []
     for members in households(w):
         need = household_food_need(w, members)
         grain = household_grain(w, members)
         food_equiv = household_food_equivalent(w, members)
-        rows.append({
+        row: dict[str, float | str] = {
             "head": members[0],
             "members": float(len(members)),
             "grain": grain,
             "food_equivalent": food_equiv,
             "food_need": need,
             "food_security": food_equiv / need if need else 0.0,
-        })
+        }
+        rid = rid_cua(w, members[0])
+        if rid is not None:
+            row["rid"] = rid
+        rows.append(row)
     return rows
 
 

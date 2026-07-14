@@ -153,4 +153,9 @@ def cuu_mang_mo_coi(w: World) -> None:
         w.cong_quan_he(gid, aid, 1.0)
         w.ghi_ky_uc(gid, f"tôi nhận cưu mang bé {aid} mồ côi — thêm miệng ăn nhưng là phúc đức", doi=True)
         w.ghi_ky_uc(aid, f"cha mẹ mất cả, {gid} đưa tôi về nuôi", doi=True)
+        # ADR 0007 §C: cưu mang là một trong sáu biến cố đổi membership. Chỉ KHAI BÁO ở đây;
+        # `household.buoc_cu_tru` (9b, chạy NGAY SAU hàm này) chuyển trẻ sang hộ giám hộ.
+        from engine import household
+
+        household.ghi_bien_co(w, "cuu_mang", tre=aid, nguoi_nuoi=gid)
         w.events.ghi(w.tick, "cuu_mang", tre=aid, nguoi_nuoi=gid)

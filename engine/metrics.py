@@ -137,6 +137,31 @@ def ty_le_phi_ly(w: World) -> float:
     return phi_ly / tong_gd if tong_gd else 0.0
 
 
+def ecology_metrics(w: World) -> dict[str, Any] | None:
+    """P4 physical stock surface; no economic decision reads these numbers."""
+    from engine.forest import _rung_bat, sinh_khoi_toi_da
+
+    if not _rung_bat(w):
+        return None
+    forest = [parcel for parcel in w.parcels.values() if parcel.loai == "rung"]
+    biomass = sum(float(getattr(parcel, "sinh_khoi", 0.0)) for parcel in forest)
+    canopy = [float(getattr(parcel, "tan_rung", 0.0)) for parcel in forest]
+    from engine.world import _ga_rung_suc_chua
+
+    wild_k = _ga_rung_suc_chua(w)
+    return {
+        "forest_area_cells": len(forest),
+        "forest_biomass": round(biomass, 9),
+        "forest_biomass_capacity": round(len(forest) * sinh_khoi_toi_da(w), 9),
+        "forest_canopy_mean": round(sum(canopy) / len(canopy), 9) if canopy else None,
+        "wild_chicken_stock": round(float(getattr(w, "ga_rung_ton", 0.0) or 0.0), 9),
+        "wild_chicken_capacity": round(wild_k, 9),
+        "domestic_chicken_stock": round(
+            w.ledger.tong_tai_san("ga") + w.ledger.tong_tai_san("ga_con"), 9
+        ),
+    }
+
+
 # ------------------------------------------------------------------ tổng hợp
 
 
@@ -196,6 +221,25 @@ def tinh_metrics(w: World) -> dict[str, Any]:
 
 
 def buoc_ket_toan(w: World) -> dict[str, Any]:
+    from engine import metrics_demography, projects, quotes
+    from minds.provenance import summary as decision_provenance_summary
+
+    # Persist a state-derived exposure snapshot before reading its rolling
+    # window. It is a no-op for legacy configurations.
+    metrics_demography.chot_tick(w)
     m = tinh_metrics(w)
+    m["decision_provenance"] = decision_provenance_summary(w)
+    demography = metrics_demography.tinh(w)
+    if demography is not None:
+        m["demography"] = demography
+    project_metrics = projects.metrics(w)
+    if project_metrics is not None:
+        m["projects"] = project_metrics
+    quote_metrics = quotes.metrics(w)
+    if quote_metrics is not None:
+        m["quotes"] = quote_metrics
+    ecology = ecology_metrics(w)
+    if ecology is not None:
+        m["ecology"] = ecology
     w.metrics_lich_su.append(m)
     return m

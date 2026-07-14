@@ -18,6 +18,7 @@ from pathlib import Path
 from engine.world import World
 from minds.gateway import LLMRequest, LLMResponse
 from minds.orchestrator import MindMock, tier_cua
+from minds.provenance import record_action
 from minds.providers_real import (
     GatewayReal,
     LoiHetQuota,
@@ -170,6 +171,11 @@ class MindReal(MindMock):
                         self._nen_heuristic(w, a)
             except Exception as e:  # noqa: BLE001 — nén hỏng thì dùng heuristic, không chết run
                 w.events.ghi(w.tick, "nen_hoi_ky_loi", loi=che_key(str(e))[:200])
+                # Call hỏng CŨNG phải vào transcript (ADR 0006 §C.4): replay sẽ gọi lại
+                # route nền này và tra transcript; không có row ⇒ miss ⇒ trượt cổng hard
+                # `misses == 0` dù artifact hoàn toàn sạch. Lỗi là một NHÁNH ĐIỀU KHIỂN có
+                # tác dụng (rơi về heuristic), không phải dữ liệu thiếu.
+                self._ghi_call_loi(w, req, e)
                 for a in lo:
                     self._nen_heuristic(w, a)
 
@@ -199,7 +205,7 @@ class MindReal(MindMock):
             w.ghi_unrecognized(aid, str(d.get("loai")), ly_do)
         hoi = hoi[:40]
 
-        from minds.prompts import SCHEMA_QUYET_DINH
+        from minds.prompts import schema_quyet_dinh_cho
 
         muc = [
             {"stt": i, "cua": aid, "y_dinh": d, "vi_sao_bi_tu_choi": ly_do}
@@ -211,7 +217,7 @@ class MindReal(MindMock):
             "đúng tinh thần của ý định, dùng đúng id/tham số có trong ý định gốc. Không "
             "dịch nổi thì trả mảng rỗng.\n\n"
             + json.dumps(muc, ensure_ascii=False, indent=1)
-            + "\n\n" + SCHEMA_QUYET_DINH
+            + "\n\n" + schema_quyet_dinh_cho(w)  # menu render từ config/catalog của w
             + '\n\nTrả về DUY NHẤT mảng JSON: [{"stt": 0, "hanh_dong": [...]}, ...] '
               "đủ mọi stt."
         )
@@ -228,6 +234,12 @@ class MindReal(MindMock):
                        for x in sua_va_parse(resp.text) if isinstance(x, dict)}
         except Exception as e:  # noqa: BLE001 — dịch hỏng thì bỏ như cũ, không chết run
             w.events.ghi(w.tick, "dich_intent_loi", loi=che_key(str(e))[:200])
+            # Route nền THỨ BA (cùng bệnh _nen_hoi_ky/_reflection): call hỏng vẫn phải có
+            # row transcript (ADR 0006 §C.4). Replay gọi lại ĐÚNG call này qua
+            # TranscriptProvider; thiếu row ⇒ miss ⇒ trượt cổng hard `misses == 0` dù
+            # artifact hoàn toàn sạch. Lỗi ở đây là NHÁNH ĐIỀU KHIỂN có tác dụng (mọi intent
+            # lạ rơi về ghi_unrecognized), không phải dữ liệu thiếu.
+            self._ghi_call_loi(w, req, e)
             ket_qua = {}
         for i, (aid, d, ly_do) in enumerate(hoi):
             anh_xa = ket_qua.get(i) or []
@@ -235,6 +247,8 @@ class MindReal(MindMock):
             for hd_moi in anh_xa[:3]:
                 try:
                     _mot_hanh_dong(w, ke_hoach[aid], HanhDong.model_validate(hd_moi))
+                    record_action(w, aid, str(hd_moi.get("loai", "?")), "translator",
+                                  detail=str(d.get("loai", "unknown")))
                     da_ap += 1
                 except Exception:  # noqa: BLE001
                     continue
@@ -313,6 +327,9 @@ class MindReal(MindMock):
                         self._reflection_mot_nguoi(w, a)
             except Exception as e:  # noqa: BLE001 — hỏng thì heuristic, không chết run
                 w.events.ghi(w.tick, "reflection_loi", loi=che_key(str(e))[:200])
+                # Như _nen_hoi_ky: lỗi route nền phải có row transcript, nếu không replay
+                # sẽ miss ở đúng call này (ADR 0006 §C.4).
+                self._ghi_call_loi(w, req, e)
                 for a in lo:
                     self._reflection_mot_nguoi(w, a)
 

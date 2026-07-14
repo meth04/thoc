@@ -87,7 +87,7 @@ def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
         cfg.pop("khong_gian", None)
     else:
         # Subsystems tắt độc lập không thể ảnh hưởng tick; giữ flag để khác với bật.
-        for name in ("do", "khai_hoang", "vu_dong", "ga_rung", "cham_tre", "endowment"):
+        for name in ("do", "khai_hoang", "vu_dong", "ga_rung", "rung", "cham_tre", "endowment"):
             block = space.get(name)
             if isinstance(block, dict) and not bool(block.get("bat", False)):
                 space[name] = {"bat": False}
@@ -102,6 +102,57 @@ def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
     strict = cfg.get("minds", {}).get("nghiem_thuc") if isinstance(cfg.get("minds"), dict) else None
     if isinstance(strict, dict) and not bool(strict.get("bat", False)):
         cfg["minds"]["nghiem_thuc"] = {"bat": False}
+
+    # Quote/escrow is a versioned commerce treatment. A disabled overlay has the same
+    # transition function as an old config with no ``bao_gia`` block, so omit it from the
+    # behavioral identity rather than creating a false replay distinction.
+    trade = cfg.get("thuong_mai")
+    if isinstance(trade, dict):
+        quotes = trade.get("bao_gia")
+        if not isinstance(quotes, dict) or not bool(quotes.get("bat", False)):
+            trade.pop("bao_gia", None)
+
+    # Generic work orders are another versioned treatment. A disabled registry
+    # has the same transition function as an old configuration with no project
+    # block, so it must not create a false legacy hash distinction.
+    projects = cfg.get("du_an")
+    if not isinstance(projects, dict) or not bool(projects.get("bat", False)):
+        cfg.pop("du_an", None)
+
+    # Hộ/di sản (ADR 0007 §A.6): giữ ĐÚNG các cờ có thể đổi quỹ đạo; sub-flag TẮT được chuẩn hóa
+    # để config cũ (thiếu block `ho`) và config mới `bat:false` có CÙNG behavioral hash.
+    #
+    # ⚠️ `cap_luong_thuc` ĐƯỢC GIỮ trong behavioral config — KHÔNG strip. ADR 0007 §B.3 tuyên bố
+    # INVARIANT P-1 ("bật riêng provisioning ⇒ world_hash TRÙNG HỆT run OFF"). Chứng minh của ADR
+    # đúng ở MỨC GIÁ TRỊ nhưng SAI ở mức BIT: `world_hash` băm `float.hex()` (chính xác tuyệt
+    # đối), còn cộng dồn IEEE-754 KHÔNG kết hợp. Legacy áp MỘT delta `-tru` cho người có kho;
+    # provisioning áp `-x₁, -x₂, …` (mỗi người ăn một bút toán) ⇒ `(bal-x₁)-x₂ ≠ bal-(x₁+x₂)`.
+    # Đo được: base seed 11, tick 4, `('A0042','thoc')` OFF=977.4906109560651 vs
+    # PROV=977.4906109560652 (lệch 1 ULP = 1.14e-13); dân số/health/flow_totals y hệt.
+    # ⇒ Cờ này CÓ đổi quỹ đạo số học ⇒ nó THUỘC transition function ⇒ để nó ngoài hash là tạo
+    # false-equivalence cho replay. Fail-closed: giữ lại. (Xem F-P1-1 trong
+    # docs/reviews/P1-engine-surgeon.md — ADR §B.3 và ma trận ablation §G.4 cần sửa.)
+    ho = cfg.get("ho")
+    if isinstance(ho, dict) and bool(ho.get("bat", False)):
+        hieu_luc: dict[str, Any] = {}
+        if bool(ho.get("cu_tru_ben_vung", False)):
+            hieu_luc["cu_tru_ben_vung"] = True
+            hieu_luc["quy_tac_cap"] = ho.get("quy_tac_cap", "nhu_cau_deu")
+            tach = ho.get("tach_ho")
+            if isinstance(tach, dict) and bool(tach.get("bat", False)):
+                hieu_luc["tach_ho"] = {"bat": True}
+        if bool(ho.get("cap_luong_thuc", False)):
+            hieu_luc["cap_luong_thuc"] = True
+        di_san = ho.get("di_san")
+        if isinstance(di_san, dict) and bool(di_san.get("bat", False)):
+            hieu_luc["di_san"] = di_san
+        if hieu_luc:
+            hieu_luc["bat"] = True
+            cfg["ho"] = hieu_luc
+        else:
+            cfg.pop("ho", None)
+    else:
+        cfg.pop("ho", None)
     return cfg
 
 
@@ -157,6 +208,14 @@ class World:
     bang_rao: dict = field(default_factory=dict)  # id → DeNghi
     _next_hd: int = 0
     _next_dn: int = 0
+    # Versioned A2A quote threads. Explicitly omitted from behavioral_state when gate off so
+    # adding this field cannot alter legacy/spatial_v1 world hashes.
+    bao_gia: dict[str, Any] = field(default_factory=dict)
+    _next_bao_gia: int = 0
+    # Versioned generic work orders. These fields are hashed only when their
+    # scenario gate is enabled.
+    du_an: dict[str, Any] = field(default_factory=dict)
+    _next_du_an: int = 0
     gia_lich_su: dict[str, list] = field(default_factory=dict)  # tài sản → [(tick, giá, kl)]
     gat_tick: dict[str, tuple[str, float]] = field(default_factory=dict)  # thửa → (ai, kg)
     # Mọi thửa đã canh (lúa hoặc vụ đông) trong tick — dùng cho hồi màu; `gat_tick` giữ
@@ -202,6 +261,16 @@ class World:
     # ⇒ không ảnh hưởng hành vi ⇒ NGOÀI hash; nhưng vào pickle checkpoint + migration.
     poverty_streak: dict[str, int] = field(default_factory=dict)
     settlement_fail_tick: int = 0
+    # Provenance of plans/actions for the current tick. It is an observation
+    # record owned by minds/metrics, deliberately absent from behavioral_state:
+    # recording an origin must never change a world transition or legacy hash.
+    decision_provenance_tick: dict[str, Any] = field(default_factory=dict)
+    # P4 demographic observation state. It is intentionally excluded from
+    # behavioral_state: it records completed facts but never controls a future
+    # transition. engine.metrics_demography owns its contents.
+    nhan_khau_tick: dict[str, Any] = field(default_factory=dict)
+    nhan_khau_lich_su: list[dict[str, Any]] = field(default_factory=list)
+    tu_vong_sinh_no_tick: set[str] = field(default_factory=set)
     # ben_kia_tick (ADR 0005 §2.3): tập agent ĐÃ QUA SÔNG tick này (trả phí đò thành công
     # hoặc tự chèo thuyền). Transient — reset đầu pha sản xuất, KHÔNG vào world_hash (như
     # settlement_fail_tick); các pha sau đọc để biết ai được hoạt động bờ đối diện. Không
@@ -211,6 +280,20 @@ class World:
     # trả lương cho đúng dịch vụ thay vì buộc carer giao hai lần cùng một ngày công.
     cong_cham_tre_theo_cap: dict[tuple[str, str], float] = field(default_factory=dict)
     cham_tre_tick: dict[str, float] = field(default_factory=dict)
+    # ---- ADR 0007: cư trú (state BỀN) + di sản ----
+    # `cu_tru` KHÔNG phải field của dataclass `Agent`: `behavioral_state()` băm "population":
+    # self.agents và `_canonical_state` duyệt `dataclasses.fields()` ⇒ thêm MỘT field vào
+    # `Agent` là đổi hash của MỌI run legacy (F-22). Ở World thì không: `behavioral_state`
+    # dựng dict tường minh nên field mới CHỈ vào hash khi ta chèn khối, và ta chỉ chèn khi
+    # cờ scenario BẬT. SINGLE-WRITER: chỉ `engine/household.py` được gán `cu_tru`/`_next_cu_tru`,
+    # chỉ `engine/estate.py` được gán `di_san*`.
+    cu_tru: dict[str, Any] = field(default_factory=dict)  # rid → household.CuTru
+    _next_cu_tru: int = 0
+    # biến cố membership transient trong tick (đọc-và-xóa bởi household.buoc_cu_tru)
+    bien_co_ho: dict[str, list] = field(default_factory=dict)
+    di_san: dict[str, Any] = field(default_factory=dict)  # "DI_SAN:<aid>" → estate.DiSan (mở)
+    di_san_xong: dict[str, Any] = field(default_factory=dict)  # đã đóng (observatory đọc)
+    _next_di_san: int = 0
 
     def ghi_thu_nhap(self, aid: str, nguon: str, quy_thoc: float) -> None:
         if quy_thoc <= 0:
@@ -434,7 +517,18 @@ class World:
         """Hộ = chủ hộ + vợ/chồng + con (đẻ lẫn nuôi) chưa trưởng thành còn sống.
 
         Trẻ chưa trưởng thành quy về hộ của cha/mẹ còn sống, hoặc người giám hộ
-        (trẻ mồ côi được cưu mang ăn chung nồi cơm nhà người nuôi)."""
+        (trẻ mồ côi được cưu mang ăn chung nồi cơm nhà người nuôi).
+
+        ⚠️ NHÁNH LEGACY (gate TẮT) GIỮ NGUYÊN TỪNG DÒNG — kể cả defect F-18: ``not
+        c.truong_thanh(tt)`` đẩy người vừa tròn 16 tuổi ra khỏi hộ cha mẹ CÒN SỐNG, trong khi
+        ``consumption.an_va_suc_khoe`` ăn theo đúng hộ này ⇒ họ ăn 0 kg dù cha mẹ đầy thóc.
+        Semantics lỗi được ĐÓNG BĂNG CÓ GHI CHÚ cho regression legacy, không retcon (ADR 0007
+        §A.6). Nhánh ON (``ho.cu_tru_ben_vung``) đọc state bền và KHÔNG đọc tuổi (INVARIANT R2).
+        """
+        from engine.household import _cu_tru_bat, ho_cua_cu_tru
+
+        if _cu_tru_bat(self):
+            return ho_cua_cu_tru(self, aid)
         a = self.agents[aid]
         tt = self.cfg.get("nhan_khau.tuoi_truong_thanh")
         if not a.truong_thanh(tt):
@@ -468,15 +562,38 @@ class World:
         read-only tại nơi khai báo.
         """
         two_bank = bool(self.cfg.get("khong_gian.hai_bo", False))
-        parcels = {
-            pid: p
-            for pid, p in self.parcels.items()
-        }
-        if not two_bank:
-            # Bờ sông vô hiệu khi scenario tắt; giữ tương thích hash cho state layout cũ mà
-            # không che giấu một thay đổi có tác dụng trong scenario hai-bờ.
-            parcels = {
-                pid: {
+        # Off must retain the exact pre-P2 canonical layout. In the two-bank legacy branch a
+        # Parcel dataclass went directly through `_canonical_state`; replacing it with a dict
+        # adds the canonical ``__dict__`` wrapper even if all visible fields are identical.
+        # Ecology state is deliberately dynamic (not a Parcel dataclass field), so the legacy
+        # branch also naturally excludes it.
+        from engine.forest import _rung_bat
+
+        if not _rung_bat(self):
+            parcels: dict[str, Any] = {pid: p for pid, p in self.parcels.items()}
+            if not two_bank:
+                parcels = {
+                    pid: {
+                        "id": p.id,
+                        "r": p.r,
+                        "c": p.c,
+                        "loai": p.loai,
+                        "mau_mo": p.mau_mo,
+                        "mau_mo_goc": p.mau_mo_goc,
+                        "chu": p.chu,
+                        "lang": p.lang,
+                        "nguoi_canh": p.nguoi_canh,
+                        "homestead_dem": p.homestead_dem,
+                        "homestead_ai": p.homestead_ai,
+                    }
+                    for pid, p in self.parcels.items()
+                }
+        else:
+            # Versioned ecology treatment: these fields alter future logging yield and chicken
+            # habitat, therefore must participate in the replay/world hash.
+            parcels = {}
+            for pid, p in self.parcels.items():
+                view: dict[str, Any] = {
                     "id": p.id,
                     "r": p.r,
                     "c": p.c,
@@ -488,9 +605,12 @@ class World:
                     "nguoi_canh": p.nguoi_canh,
                     "homestead_dem": p.homestead_dem,
                     "homestead_ai": p.homestead_ai,
+                    "sinh_khoi": float(getattr(p, "sinh_khoi", 0.0)),
+                    "tan_rung": float(getattr(p, "tan_rung", 0.0)),
                 }
-                for pid, p in self.parcels.items()
-            }
+                if two_bank:
+                    view["bo"] = p.bo
+                parcels[pid] = view
         ledger = self.ledger
         state: dict[str, Any] = {
             "hash_schema": "behavioral-state-v2",
@@ -567,6 +687,37 @@ class World:
                 "wild_chicken_stock": getattr(self, "ga_rung_ton", None),
             },
         }
+        # ADR 0007 §A.5: HAI khối CÓ ĐIỀU KIỆN. Gate TẮT ⇒ KHÔNG có key ⇒ blob JSON không đổi
+        # MỘT BYTE ⇒ ba hash pin legacy bất biến. KHÔNG bump `hash_schema`, KHÔNG thêm key rỗng
+        # "cho đẹp" (key rỗng cũng đổi hash). Gate BẬT ⇒ hash khác — đúng và mong muốn: đó là
+        # một THÍ NGHIỆM KHÁC.
+        from engine.estate import _di_san_bat
+        from engine.household import _cu_tru_bat
+
+        if _cu_tru_bat(self):
+            # Đổi ai được ăn ⇒ đổi quỹ đạo ⇒ PHẢI vào hash. `_next_cu_tru` quyết định id tương
+            # lai (tie-break) nên cũng vào, nhưng đặt TRONG khối này chứ KHÔNG nhét vào
+            # state["ids"] (nhét vào `ids` là đổi layout ngay cả khi gate TẮT).
+            state["residence"] = {"cu_tru": self.cu_tru, "next_id": self._next_cu_tru}
+        if _di_san_bat(self):
+            # `di_san_xong` KHÔNG vào hash: estate ĐÃ ĐÓNG không ảnh hưởng quỹ đạo (kho lưu
+            # trữ chỉ observatory đọc). Ta cố ý KHÔNG bắt chước `hop_dong_xong` — nó đang nằm
+            # trong hash ở trên; ghi rõ ra đây để reviewer bắt bẻ được, không giấu.
+            state["estate"] = {"mo": self.di_san, "next_id": self._next_di_san}
+        from engine.quotes import _bao_gia_bat
+
+        if _bao_gia_bat(self):
+            state["commerce"] = {
+                "quotes": self.bao_gia,
+                "next_quote_id": self._next_bao_gia,
+            }
+        from engine.projects import _du_an_bat
+
+        if _du_an_bat(self):
+            state["projects"] = {
+                "active_and_closed": self.du_an,
+                "next_project_id": self._next_du_an,
+            }
         return state
 
     def world_hash(self) -> str:
@@ -611,8 +762,19 @@ class World:
         # Checkpoint phải tự đủ để tiếp tục đúng scenario cả khi caller không còn nhớ overlay.
         # run.py vẫn kiểm manifest/digest trước resume; snapshot này chủ yếu bảo vệ API trực tiếp
         # và test/review khỏi vô tình nạp base world.yaml cho một run spatial.
+        #
+        # KHÔNG `sort_keys`: engine CÓ chỗ duyệt dict config theo THỨ TỰ CHÈN — `economy.
+        # food_equivalence` (`engine/economy.py:43`) đọc `khong_gian.vu_dong.cay` rồi
+        # `consumption.an_va_suc_khoe` (`engine/consumption.py:60`) ăn theo đúng thứ tự đó.
+        # Snapshot sắp xếp khóa ⇒ ăn `khoai` trước `ngo` thay vì `ngo` trước `khoai` ⇒ world
+        # nạp bằng fallback snapshot đi một QUỸ ĐẠO KHÁC world của chính run đó, dù
+        # `config_digest` và `world_hash` (đã canonical-sort) đều KHỚP. Đo được trên
+        # `mock60_spatial`: liên tục vs nạp-ck90-bằng-snapshot lệch hash ngay tick 94.
+        # `world_hash` KHÔNG đổi vì `_canonical_state` vốn sort — đây chỉ là sửa artifact.
+        # (Hazard gốc — engine phụ thuộc thứ tự khóa config — vẫn OPEN, xem
+        #  docs/reviews/P0.2-engine-surgeon.md §Findings F-P02-2.)
         with open(thu_muc / "config_snapshot.json", "w", encoding="utf-8") as f:
-            json.dump(self.cfg.raw(), f, ensure_ascii=False, sort_keys=True)
+            json.dump(self.cfg.raw(), f, ensure_ascii=False, sort_keys=False)
         return duong_dan
 
     @staticmethod
@@ -636,6 +798,14 @@ class World:
         # migration: checkpoint trước khi có mau_mo_goc → đất không bao giờ hồi màu
         for p in w.parcels.values():
             p.mau_mo_goc = p.mau_mo_goc or p.mau_mo
+        # P2 migration: only a checkpoint predating the stock fields is initialized from the
+        # versioned scenario. An existing zero is a real depleted forest and MUST NOT regrow
+        # magically on load.
+        from engine.forest import khoi_tao_parcel
+
+        for p in w.parcels.values():
+            if not hasattr(p, "sinh_khoi") or not hasattr(p, "tan_rung"):
+                khoi_tao_parcel(w, p)
         # migration: checkpoint trước khi có trữ lượng cá / ký ức đời
         if not hasattr(w, "ca_ton"):
             w.ca_ton = _ca_suc_chua(w) * float(w.cfg.get("danh_ca.ty_le_ton_ban_dau"))
@@ -670,6 +840,14 @@ class World:
             w.poverty_streak = {}
         if not hasattr(w, "settlement_fail_tick"):
             w.settlement_fail_tick = 0
+        # P4 observation migration. Old checkpoints do not have an invented
+        # exposure history; their first resumed tick starts a fresh window.
+        if not hasattr(w, "nhan_khau_tick"):
+            w.nhan_khau_tick = {}
+        if not hasattr(w, "nhan_khau_lich_su"):
+            w.nhan_khau_lich_su = []
+        if not hasattr(w, "tu_vong_sinh_no_tick"):
+            w.tu_vong_sinh_no_tick = set()
         if not hasattr(w, "canh_tick"):
             w.canh_tick = set()
         if not hasattr(w, "thu_hoach_cay_tick"):
@@ -685,6 +863,36 @@ class World:
         for p in w.parcels.values():
             if not hasattr(p, "bo"):
                 p.bo = None
+        # migration ADR 0007: cư trú + di sản. Checkpoint cũ (gate OFF) nạp lại ⇒ dict RỖNG ⇒
+        # key "residence"/"estate" VẪN không xuất hiện trong behavioral_state (gate vẫn OFF)
+        # ⇒ world_hash y nguyên ⇒ resume run cũ không gãy. `_cu_tru_idx`/`_cu_tru_ver` là chỉ
+        # mục derived (ngoài hash), dựng lại từ `cu_tru`.
+        if not hasattr(w, "cu_tru"):
+            w.cu_tru = {}
+        if not hasattr(w, "_next_cu_tru"):
+            w._next_cu_tru = 0
+        if not hasattr(w, "bien_co_ho"):
+            w.bien_co_ho = {}
+        if not hasattr(w, "di_san"):
+            w.di_san = {}
+        if not hasattr(w, "di_san_xong"):
+            w.di_san_xong = {}
+        if not hasattr(w, "_next_di_san"):
+            w._next_di_san = 0
+        # Quote/escrow migration. OFF checkpoint stays hash-neutral because the commerce key is
+        # omitted; ON legacy checkpoint gets an empty book, not an invented trade history.
+        if not hasattr(w, "bao_gia"):
+            w.bao_gia = {}
+        if not hasattr(w, "_next_bao_gia"):
+            w._next_bao_gia = 0
+        # Generic project/work-order migration. Old checkpoints get an empty
+        # registry; no past material or labour is inferred.
+        if not hasattr(w, "du_an"):
+            w.du_an = {}
+        if not hasattr(w, "_next_du_an"):
+            w._next_du_an = 0
+        w._cu_tru_ver = getattr(w, "_cu_tru_ver", 0) + 1  # ép dựng lại chỉ mục
+        w._cu_tru_idx = None
         return w
 
 
@@ -764,8 +972,18 @@ def _ga_rung_suc_chua(w: World) -> float:
 
     if not _ga_rung_bat(w):
         return 0.0
+    k_o = float(w.cfg.get("khong_gian.ga_rung.suc_chua_moi_o"))
+    from engine.forest import _rung_bat
+
+    if _rung_bat(w) and bool(w.cfg.get("khong_gian.ga_rung.k_theo_tan_che", True)):
+        # Canopy-weighted habitat: logging can reduce K without changing the discrete parcel
+        # label, which is the causal feedback required by spatial_livelihood_v2.
+        return sum(
+            max(0.0, min(1.0, float(getattr(p, "tan_rung", 0.0))))
+            for p in w.parcels.values() if p.loai == "rung"
+        ) * k_o
     so_o = sum(1 for p in w.parcels.values() if p.loai == "rung")
-    return so_o * float(w.cfg.get("khong_gian.ga_rung.suc_chua_moi_o"))
+    return so_o * k_o
 
 
 def _endowment_t0_kg(cfg: Config, la_nguoi_lon: bool) -> float:
@@ -786,6 +1004,11 @@ def _endowment_t0_kg(cfg: Config, la_nguoi_lon: bool) -> float:
 
 def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> World:
     """Khởi tạo thế giới t0: bản đồ + người lớn độc thân (tham số mục khoi_tao), 0 đất."""
+    from engine.household import khoi_tao_cu_tru, kiem_tra_cau_hinh
+
+    # Fail-closed TRƯỚC khi có world nào tồn tại (ADR 0007 §D.6/§G.2): cấu hình route di sản
+    # về một sink không có drain thì DỪNG, không có nhánh "chạy tạm rồi tính sau".
+    kiem_tra_cau_hinh(cfg)
     rng = RngTree(seed)
     w = World(cfg=cfg, seed=seed, rng=rng, events=EventLog(events_path))
     dang_ky_flows(w.ledger)
@@ -831,4 +1054,7 @@ def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> Wor
         endow = _endowment_t0_kg(cfg, w.agents[aid].truong_thanh(tuoi_tt))
         w.ledger.sinh(aid, "thoc", endow, "khoi_tao", "tài sản khởi đầu", tick=0)
         w.events.ghi(0, "sinh", id=aid, ten=w.agents[aid].ten, khoi_tao=True)
+    # Cư trú t0 (no-op khi gate TẮT): mỗi agent một hộ riêng — dân số t0 toàn người lớn độc
+    # thân; id cấp theo sorted(w.agents) ⇒ tất định.
+    khoi_tao_cu_tru(w)
     return w

@@ -26,6 +26,25 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# Mọi file chứa CODE RENDER PROMPT. Băm một file là không đủ: sau P0.1, thân hàm render
+# (`_gt_xay`, `mo_ta_cong_thuc`, …) sống ở `minds/capabilities.py`, trong khi
+# `capability_catalog_hash` chỉ băm *khai báo* + bảng render, KHÔNG băm thân hàm. Sửa một thân
+# hàm sẽ đổi prompt của MỌI agent trong khi cả hai hash đứng yên ⇒ resume/replay không phát hiện.
+FILE_RENDER_PROMPT = ("prompts.py", "capabilities.py")
+
+
+def prompt_template_hash() -> str | None:
+    """sha256 của TOÀN BỘ code render prompt (một nguồn sự thật cho run.py + tools/replay.py).
+
+    Hai nơi tự tính riêng thì identity check sẽ so hai con số khác nhau và luôn báo lệch.
+    """
+    goc = ROOT / "minds"
+    phan = [sha256_file(goc / ten) for ten in FILE_RENDER_PROMPT if (goc / ten).exists()]
+    if not phan:
+        return None
+    return hashlib.sha256("".join(phan).encode("utf-8")).hexdigest()
+
+
 def git_revision() -> str | None:
     """Đọc commit hiện tại nếu git khả dụng; không làm run thất bại khi không có git."""
     try:
@@ -82,12 +101,23 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
                    scenario: str | None, treatments: list[str] | None = None,
                    policy: dict | None = None, prompt_template_hash: str | None = None,
                    model_snapshot: list[str] | None = None,
-                   temperature: Any = None, calendar: dict[str, Any] | None = None) -> dict[str, Any]:
+                   temperature: Any = None, calendar: dict[str, Any] | None = None,
+                   run_uuid: str | None = None,
+                   capability_catalog_hash: str | None = None) -> dict[str, Any]:
     """Tạo metadata đủ để phân biệt hai run có cùng seed nhưng khác giả định.
 
     ``prompt_template_hash`` (sha256 của minds/prompts.py), ``model_snapshot`` (danh sách
     provider/model dùng) và ``temperature`` biến prompt/model từ hộp đen thành *treatment
     có version* (P1 reproducibility) — kwarg optional, không phá chữ ký cũ.
+
+    ``capability_catalog_hash`` (ADR 0006 §A.2) băm NỘI DUNG KHAI BÁO của catalog (không băm
+    file) ⇒ refactor thuần không đổi hash, đổi interface thì đổi. Cùng với
+    ``prompt_template_hash`` nó biến "prompt identity" từ niềm tin thành phép so hash: replay
+    chỉ hợp lệ khi code hiện tại quảng cáo ĐÚNG tập action mà run gốc đã quảng cáo.
+
+    ``run_uuid`` (ADR 0006 §C.2) nối manifest với ``checkpoints/journal_manifest.json`` và
+    với từng dòng transcript. Nó là **metadata thuần**: CẤM đưa vào RNG/prompt/``world_hash``
+    (INV-J7) — nếu không, hai run cùng seed sẽ khác hash chỉ vì khác uuid.
     """
     scope: dict[str, Any] | None = None
     scenario_files: dict[str, str] = {}
@@ -113,6 +143,7 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
             "mode": mode,
             "seed": seed,
             "ticks_requested": ticks_requested,
+            "run_uuid": run_uuid,
         },
         "reproducibility": {
             "config_sha256": config_digest,
@@ -123,6 +154,7 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
             "scenario_scope": scope,
             "scenario_files_sha256": scenario_files,
             "prompt_template_hash": prompt_template_hash,
+            "capability_catalog_hash": capability_catalog_hash,
             "model_snapshot": list(model_snapshot) if model_snapshot is not None else None,
             "temperature": temperature,
             # Calendar thực chạy tách khỏi mô tả scope chung: scenario có thể có overlay

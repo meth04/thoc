@@ -1,8 +1,13 @@
-"""Ánh xạ hai chiều KeHoach ↔ QuyetDinh (15 nguyên tố hành động, SPEC 5).
+"""Ánh xạ hai chiều KeHoach ↔ QuyetDinh — dispatch qua capability registry (ADR 0006 §A).
 
 - PersonaBot nghĩ bằng KeHoach → xuất QuyetDinh JSON (như một LLM thật sẽ trả).
 - Validator nhận QuyetDinh (đã sửa JSON) → dựng lại KeHoach cho engine.
 Tham số sai / loại lạ → bỏ + ghi unrecognized, KHÔNG lỗi (điều luật #3).
+
+Module này KHÔNG còn chứa bảng elif: mọi hành động được khai báo MỘT LẦN ở
+`minds/capabilities.py` (`to_kehoach` / `from_kehoach` / `thu_tu_phat`). Thứ tự phát JSON
+là WIRE CONTRACT (chợ khớp theo thứ tự danh sách lệnh khi giá bằng nhau) nên do
+`thu_tu_phat` quyết định, không do thứ tự khai báo trong file.
 """
 
 from __future__ import annotations
@@ -11,131 +16,21 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from engine.contracts import HopDong
 from engine.intents import KeHoach
-from engine.market import Lenh
+from minds.capabilities import ap_dung_hanh_dong, hanh_dong_tu_ke_hoach
 from minds.schemas import LOAI_HANH_DONG, HanhDong, QuyetDinh
+
+__all__ = [
+    "LOAI_HANH_DONG",
+    "ke_hoach_thanh_quyet_dinh",
+    "quyet_dinh_thanh_ke_hoach",
+]
 
 
 def ke_hoach_thanh_quyet_dinh(kh: KeHoach, patch: dict | None = None,
                               ly_do: str = "") -> dict[str, Any]:
     """KeHoach → dict QuyetDinh (sẵn sàng serialize JSON)."""
-    hd_list: list[dict[str, Any]] = []
-    pbc: dict[str, Any] = {}
-    if kh.canh_thua:
-        pbc["canh_thua"] = list(kh.canh_thua)
-    if kh.gop_cong_cho:
-        pbc["gop_cong_cho"] = kh.gop_cong_cho
-    if kh.cong_khai_go:
-        pbc["khai_go_cong"] = kh.cong_khai_go
-    if kh.cong_khai_quang:
-        pbc["khai_quang_cong"] = kh.cong_khai_quang
-    if kh.hoc:
-        pbc["hoc"] = True
-    if kh.day_cho:
-        pbc["day_cho"] = list(kh.day_cho)
-    if pbc:
-        hd_list.append({"loai": "phan_bo_cong", **pbc})
-    if kh.che_tao_cong_cu:
-        hd_list.append({"loai": "xay", "mon": "che_tac", "so_luong": kh.che_tao_cong_cu})
-    if kh.xay_nha:
-        hd_list.append({"loai": "xay", "mon": "nha", "so_luong": kh.xay_nha})
-    if kh.xay_may:
-        hd_list.append({"loai": "xay", "mon": "may", "so_luong": kh.xay_may})
-    if kh.duc_xu:
-        hd_list.append({"loai": "xay", "mon": "xu", "so_luong": kh.duc_xu})
-    for ma, sl in sorted(kh.che_hang.items()):
-        hd_list.append({"loai": "xay", "mon": ma, "so_luong": sl})
-    if kh.nghien_cuu:
-        lv, cong, thoc = kh.nghien_cuu
-        hd_list.append({"loai": "nghien_cuu", "linh_vuc": lv, "cong": cong, "thoc": thoc})
-    for thua, cay in kh.canh_vu_dong:
-        hd_list.append({"loai": "canh_vu_dong", "thua": thua, "cay": cay})
-    for tre in kh.cham_tre_cho:
-        hd_list.append({"loai": "cham_tre", "tre": tre})
-    if kh.lap_phap_nhan:
-        hd_list.append({"loai": "lap_phap_nhan", **kh.lap_phap_nhan})
-    for eid, kh_con in kh.quyet_dinh_entity:
-        qd_con = ke_hoach_thanh_quyet_dinh(kh_con)
-        hd_list.append({"loai": "quyet_dinh_entity", "entity": eid,
-                        "hanh_dong_con": qd_con["hanh_dong"]})
-    if kh.viet_di_chuc:
-        hd_list.append({"loai": "viet_di_chuc", **kh.viet_di_chuc})
-    if kh.di_cu:
-        hd_list.append({"loai": "di_cu"})
-    for thua in kh.khai_hoang:
-        hd_list.append({"loai": "khai_hoang", "thua": thua})
-    if kh.bat_ga_cong or kh.giet_ga:
-        hd_list.append({"loai": "chan_nuoi", "bat_ga_cong": kh.bat_ga_cong,
-                        "giet_ga": kh.giet_ga})
-    for den, ts, sl in kh.bieu:
-        hd_list.append({"loai": "bieu", "den": den, "tai_san": ts, "so_luong": sl})
-    if kh.danh_ca_cong:
-        hd_list.append({"loai": "danh_ca", "cong": kh.danh_ca_cong})
-    if kh.mo_tiec:
-        hd_list.append({"loai": "mo_tiec", "thoc": kh.mo_tiec[0], "thit": kh.mo_tiec[1]})
-    if kh.trom:
-        hd_list.append({"loai": "trom", "muc_tieu": kh.trom[0], "tai_san": kh.trom[1],
-                        "so_luong": kh.trom[2]})
-    for den, noi_dung in kh.nhan_tin:
-        hd_list.append({"loai": "nhan_tin", "den": den, "noi_dung": noi_dung})
-    for hd, den in kh.de_nghi_hop_dong:
-        hd_list.append({
-            "loai": "de_nghi_hop_dong",
-            "den": den,
-            "hop_dong": hd.model_dump(exclude={"id", "trang_thai", "tick_ky",
-                                               "huy_bao_truoc_tu"}),
-        })
-    for ref, tl in kh.tra_loi_de_nghi.items():
-        muc = {"loai": "tra_loi_hop_dong", "ref": ref}
-        if tl == "chap_nhan" or tl == "tu_choi":
-            muc["tra_loi"] = tl
-        elif isinstance(tl, HopDong):
-            muc["tra_loi"] = "mac_ca"
-            muc["sua_doi"] = tl.model_dump(exclude={"id", "trang_thai", "tick_ky"})
-        hd_list.append(muc)
-    for ref in kh.don_phuong_pha_vo:
-        hd_list.append({"loai": "don_phuong_pha_vo", "ref": ref})
-    # báo hủy hợp đồng vô hạn (getattr: không vỡ nếu engine chưa thêm field KeHoach)
-    for ref in getattr(kh, "bao_huy", None) or []:
-        hd_list.append({"loai": "bao_huy", "ref": ref})
-    for le in kh.dat_lenh:
-        if le.lang is not None:  # lệnh gửi chợ làng khác = buôn chuyến (giữ lang)
-            hd_list.append({"loai": "buon_chuyen", "chieu": le.chieu,
-                            "tai_san": le.tai_san, "sl": le.so_luong, "gia": le.gia,
-                            "thanh_toan": le.thanh_toan, "lang": le.lang})
-        else:
-            hd_list.append({"loai": "dat_lenh", "chieu": le.chieu, "tai_san": le.tai_san,
-                            "sl": le.so_luong, "gia": le.gia, "thanh_toan": le.thanh_toan})
-    for thua, gia in kh.niem_yet_dat:
-        hd_list.append({"loai": "niem_yet", "tai_san": f"thua:{thua}", "gia": gia})
-    for thua, gia in kh.tra_gia_dat:
-        hd_list.append({"loai": "tra_gia_dat", "thua": thua, "gia": gia})
-    for ref, sl in kh.yeu_cau_rut.items():
-        hd_list.append({"loai": "yeu_cau_hoan_tra", "ref": ref, "so_luong": sl})
-    if kh.cau_hon:
-        hd_list.append({"loai": "cau_hon", "den": kh.cau_hon})
-    for tu, dong_y in kh.tra_loi_cau_hon.items():
-        hd_list.append({"loai": "tra_loi_cau_hon", "cua": tu, "dong_y": dong_y})
-    # ---- chính trị (getattr: không vỡ nếu engine chưa thêm field KeHoach) ----
-    if getattr(kh, "ung_cu", False):
-        hd_list.append({"loai": "ung_cu"})
-    if getattr(kh, "bo_phieu", None):
-        hd_list.append({"loai": "bo_phieu", "cho": kh.bo_phieu})
-    if getattr(kh, "ban_hanh_luat", None):
-        hd_list.append({"loai": "ban_hanh_luat", "luat": kh.ban_hanh_luat})
-    if getattr(kh, "hoi_lo", None):
-        den, thoc = kh.hoi_lo
-        hd_list.append({"loai": "hoi_lo", "den": den, "thoc": thoc})
-    if getattr(kh, "gia_nhap_nghiep_doan", False):
-        hd_list.append({"loai": "nghiep_doan", "gia_nhap": True})
-    if getattr(kh, "dinh_cong", False):
-        hd_list.append({"loai": "dinh_cong"})
-    if getattr(kh, "bao_dong", False):
-        hd_list.append({"loai": "bao_dong"})
-    if getattr(kh, "keu_goi", None):
-        hd_list.append({"loai": "keu_goi", "noi_dung": kh.keu_goi})
-    qd: dict[str, Any] = {"id": kh.id, "hanh_dong": hd_list, "ly_do": ly_do}
+    qd: dict[str, Any] = {"id": kh.id, "hanh_dong": hanh_dong_tu_ke_hoach(kh), "ly_do": ly_do}
     if patch:
         qd["the_chinh_sach"] = patch
     return qd
@@ -161,218 +56,9 @@ def quyet_dinh_thanh_ke_hoach(w, qd: QuyetDinh,
     return kh
 
 
-def _chuan_hoa_luat(luat: Any) -> dict[str, Any]:
-    """Chuẩn hóa AN TOÀN một đạo luật do agent đề xuất (điều luật #3 — input LLM
-    không tin được). Bắt buộc là dict; tham số số ép về float ≥0 (thuế suất, mức
-    lương...), còn lại ép về str. Không phải dict → raise để rơi thùng intent lạ.
-    Ví dụ: {"loai":"thue","suat":0.1} hoặc {"loai":"luong_toi_thieu","muc":2.0}.
-    """
-    if not isinstance(luat, dict):
-        raise ValueError("luật phải là dict")
-    ra: dict[str, Any] = {}
-    for k, v in luat.items():
-        if isinstance(v, bool):
-            ra[str(k)] = v
-        elif isinstance(v, int | float):
-            ra[str(k)] = max(0.0, float(v))
-        else:
-            ra[str(k)] = str(v)
-    return ra
-
-
 def _mot_hanh_dong(w, kh: KeHoach, hd: HanhDong, thung: list | None = None) -> None:
-    d = hd.model_dump()
-    loai = d.get("loai")
-    if loai not in LOAI_HANH_DONG:
-        if thung is not None:
-            thung.append((kh.id, d, "loại hành động lạ"))
-        else:
-            w.ghi_unrecognized(kh.id, str(loai), "loại hành động lạ")
-        return
-    if loai == "phan_bo_cong":
-        # NGUYÊN TỬ: parse hết vào biến cục bộ trước, chỉ mutate kh khi mọi
-        # conversion thành công (tránh áp nửa vời rồi lại bị dịch-intent áp lần hai)
-        canh_thua = [str(x) for x in d.get("canh_thua", [])][:10]
-        gop_cong_cho = str(d["gop_cong_cho"]) if d.get("gop_cong_cho") else None
-        cong_khai_go = max(0.0, float(d.get("khai_go_cong", 0) or 0))
-        cong_khai_quang = max(0.0, float(d.get("khai_quang_cong", 0) or 0))
-        hoc = bool(d.get("hoc", False))
-        day_cho = [str(x) for x in d.get("day_cho", [])]
-        kh.canh_thua = canh_thua
-        if gop_cong_cho is not None:
-            kh.gop_cong_cho = gop_cong_cho
-        kh.cong_khai_go = cong_khai_go
-        kh.cong_khai_quang = cong_khai_quang
-        kh.hoc = hoc
-        kh.day_cho = day_cho
-    elif loai == "khai_hoang":
-        thua = str(d.get("thua", ""))
-        if thua and thua not in kh.khai_hoang:
-            kh.khai_hoang.append(thua)
-    elif loai == "canh_vu_dong":
-        thua = str(d.get("thua", ""))
-        cay = str(d.get("cay", ""))
-        if thua and cay and (thua, cay) not in kh.canh_vu_dong:
-            kh.canh_vu_dong.append((thua, cay))
-    elif loai == "cham_tre":
-        tre = str(d.get("tre", ""))
-        if tre and tre not in kh.cham_tre_cho:
-            kh.cham_tre_cho.append(tre)
-    elif loai == "xay":
-        mon = d.get("mon", d.get("nha", "nha"))
-        sl = int(d.get("so_luong", 1))
-        if mon in ("che_tac", "cong_cu"):
-            kh.che_tao_cong_cu += max(0, sl)
-        elif mon == "nha":
-            kh.xay_nha += max(0, sl)
-        elif mon == "may":
-            kh.xay_may += max(0, sl)
-        elif mon == "xu":
-            kh.duc_xu += max(0, sl)
-        elif isinstance(mon, str) and mon in w.ten_hang:
-            kh.che_hang[mon] = kh.che_hang.get(mon, 0) + max(0, sl)
-        elif thung is not None:
-            thung.append((kh.id, d, f"món lạ: {mon}"))
-        else:
-            w.ghi_unrecognized(kh.id, "xay", f"món lạ: {mon}")
-    elif loai == "de_nghi_hop_dong":
-        hop_dong = HopDong(**d["hop_dong"])
-        den = d.get("den")
-        kh.de_nghi_hop_dong.append((hop_dong, str(den) if den else None))
-    elif loai == "tra_loi_hop_dong":
-        ref = str(d["ref"])
-        tl = d.get("tra_loi", "tu_choi")
-        if tl == "mac_ca" and d.get("sua_doi"):
-            kh.tra_loi_de_nghi[ref] = HopDong(**d["sua_doi"])
-        elif tl in ("chap_nhan", "tu_choi"):
-            kh.tra_loi_de_nghi[ref] = tl
-    elif loai == "don_phuong_pha_vo":
-        kh.don_phuong_pha_vo.append(str(d["ref"]))
-    elif loai == "bao_huy":
-        # báo trước để thoát hợp đồng vô hạn KHÔNG chịu phạt (khác don_phuong_pha_vo)
-        ref = str(d["ref"])
-        hien_co = getattr(kh, "bao_huy", None)
-        if hien_co is None:
-            kh.bao_huy = hien_co = []  # engine chưa có field → gắn động, tick đọc getattr
-        if ref not in hien_co:
-            hien_co.append(ref)
-    elif loai == "dat_lenh":
-        chieu = d.get("chieu", d.get("mua_ban"))
-        if chieu not in ("mua", "ban"):
-            raise ValueError(f"chiều lạ: {chieu}")
-        tai_san = str(d["tai_san"])
-        thanh_toan = str(d.get("thanh_toan", "thoc"))
-        if tai_san == thanh_toan:
-            raise ValueError(f"lệnh {chieu} {tai_san} trả bằng chính {thanh_toan} "
-                             f"là vô nghĩa — hãy thanh toán bằng tài sản khác")
-        kh.dat_lenh.append(Lenh(kh.id, chieu, tai_san, float(d["sl"]),
-                                float(d["gia"]), thanh_toan))
-    elif loai == "niem_yet":
-        ts = str(d["tai_san"])
-        if ts.startswith("thua:"):
-            kh.niem_yet_dat.append((ts.split(":", 1)[1], float(d["gia"])))
-        else:
-            kh.dat_lenh.append(Lenh(kh.id, "ban", ts, float(d.get("sl", 1)), float(d["gia"])))
-    elif loai == "tra_gia_dat":
-        kh.tra_gia_dat.append((str(d["thua"]), float(d["gia"])))
-    elif loai == "yeu_cau_hoan_tra":
-        kh.yeu_cau_rut[str(d["ref"])] = float(d["so_luong"])
-    elif loai == "cau_hon":
-        kh.cau_hon = str(d["den"])
-    elif loai == "tra_loi_cau_hon":
-        kh.tra_loi_cau_hon[str(d["cua"])] = bool(d["dong_y"])
-    elif loai == "nghien_cuu":
-        kh.nghien_cuu = (str(d["linh_vuc"]), float(d.get("cong", 0)), float(d.get("thoc", 0)))
-    elif loai == "lap_phap_nhan":
-        kh.lap_phap_nhan = {
-            "ten": str(d.get("ten", "")),
-            "co_phan": {str(k): float(v) for k, v in dict(d.get("co_phan", {})).items()},
-            "von_gop": {
-                str(k): {str(t): float(s) for t, s in dict(v).items()}
-                for k, v in dict(d.get("von_gop", {})).items()
-            },
-        }
-    elif loai == "quyet_dinh_entity":
-        eid = str(d["entity"])
-        con = d.get("hanh_dong_con", [])
-        kh_con = KeHoach(id=eid)
-        for hd_con in con if isinstance(con, list) else []:
-            try:
-                _mot_hanh_dong(w, kh_con, HanhDong.model_validate(hd_con))
-            except Exception:  # noqa: BLE001 — hành động con hỏng thì bỏ riêng nó
-                w.ghi_unrecognized(eid, "hanh_dong_con", "hành động con hỏng")
-        kh.quyet_dinh_entity.append((eid, kh_con))
-    elif loai == "viet_di_chuc":
-        kh.viet_di_chuc = {
-            "phan_bo": {str(k): float(v) for k, v in dict(d.get("phan_bo", {})).items()},
-            "gia_huan": str(d.get("gia_huan", ""))[:400],
-        }
-    elif loai == "di_cu":
-        kh.di_cu = True
-    elif loai == "chan_nuoi":
-        # NGUYÊN TỬ: parse cả hai trước rồi mới cộng dồn (giet_ga rác không được
-        # để lại bat_ga_cong đã áp nửa vời)
-        bat_ga_cong = max(0.0, float(d.get("bat_ga_cong", 0) or 0))
-        giet_ga = max(0, int(d.get("giet_ga", 0) or 0))
-        kh.bat_ga_cong += bat_ga_cong
-        kh.giet_ga += giet_ga
-    elif loai == "bieu":
-        kh.bieu.append((str(d["den"]), str(d.get("tai_san", "thoc")),
-                        float(d["so_luong"])))
-    elif loai == "danh_ca":
-        kh.danh_ca_cong += max(0.0, float(d.get("cong", d.get("so_cong", 0)) or 0))
-    elif loai == "mo_tiec":
-        kh.mo_tiec = (max(0.0, float(d.get("thoc", 0) or 0)),
-                      max(0.0, float(d.get("thit", 0) or 0)))
-    elif loai == "trom":
-        kh.trom = (str(d["muc_tieu"]), str(d.get("tai_san", "thoc")),
-                   max(0.0, float(d.get("so_luong", 50) or 0)))
-    elif loai == "nhan_tin":
-        den = str(d.get("den", ""))
-        noi = str(d.get("noi_dung", d.get("noi_dong", "")))[:300]
-        if den and noi:
-            kh.nhan_tin.append((den, noi))
-    elif loai == "buon_chuyen":
-        chieu = d.get("chieu", "ban")
-        if chieu in ("mua", "ban"):
-            tai_san = str(d["tai_san"])
-            thanh_toan = str(d.get("thanh_toan", "thoc"))
-            if tai_san == thanh_toan:
-                raise ValueError(f"buôn chuyến {chieu} {tai_san} trả bằng chính "
-                                 f"{thanh_toan} là vô nghĩa")
-            # thiếu "lang" → mặc định chợ làng mình (không raise mất cả chuyến hàng)
-            lang = d.get("lang")
-            if lang is None:
-                a = w.agents.get(kh.id)
-                lang = a.lang if a is not None else 0
-            kh.dat_lenh.append(Lenh(kh.id, chieu, tai_san, float(d["sl"]),
-                                    float(d["gia"]), thanh_toan, lang=int(lang)))
-    elif loai == "ung_cu":
-        kh.ung_cu = True
-    elif loai == "bo_phieu":
-        cho = str(d["cho"])  # thiếu ứng viên → KeyError → rơi thùng (điều luật #3)
-        if cho:
-            kh.bo_phieu = cho
-    elif loai == "ban_hanh_luat":
-        # luat PHẢI là dict; tham số số bị ép về float ≥0 (không tin dữ liệu LLM)
-        kh.ban_hanh_luat = _chuan_hoa_luat(d.get("luat"))
-    elif loai == "hoi_lo":
-        den = str(d["den"])
-        thoc = max(0.0, float(d.get("thoc", 0) or 0))
-        if den:
-            kh.hoi_lo = (den, thoc)
-    elif loai == "nghiep_doan":
-        kh.gia_nhap_nghiep_doan = bool(d.get("gia_nhap", True))
-    elif loai == "dinh_cong":
-        kh.dinh_cong = True
-    elif loai == "bao_dong":
-        kh.bao_dong = True
-    elif loai == "keu_goi":
-        noi = str(d.get("noi_dung", d.get("noi_dong", "")))[:300]
-        if noi:
-            kh.keu_goi = noi
-    else:
-        if thung is not None:
-            thung.append((kh.id, d, "nguyên tố chưa mở ở phase hiện tại"))
-        else:
-            w.ghi_unrecognized(kh.id, str(loai), "nguyên tố chưa mở ở phase hiện tại")
+    """Một hành động đã validate schema → mutate KeHoach (qua descriptor trong catalog).
+
+    Giữ nguyên chữ ký cũ (minds/real.py bộ phiên dịch intent lạ gọi trực tiếp).
+    """
+    ap_dung_hanh_dong(w, kh, hd.model_dump(), thung)

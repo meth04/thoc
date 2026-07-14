@@ -3,6 +3,11 @@
 Ví dụ:
   python run.py --mode rulebot --years 300 --seed 42 --run-name rb300
   python run.py --mode rulebot --ticks 100 --seed 42 --run-name t100 --resume
+
+Resume (ADR 0006 §C): checkpoint tick N chỉ hợp lệ khi MỌI journal cũng được đưa về đúng
+trạng thái tick N. Điểm cắt duy nhất hợp lệ là byte-offset ghi TẠI checkpoint (sau
+flush+fsync) — xem ``engine/journal.py``. Sai lệch bất kỳ ⇒ **fail-closed**, không có nhánh
+"bỏ qua cho chạy".
 """
 
 from __future__ import annotations
@@ -16,6 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from engine.config import load_config
+from engine.events import EventLog
+from engine.journal import JournalIdentity, LoiJournal, RunJournals
 from engine.tick import chay_mot_tick
 from engine.world import World, tao_the_gioi
 
@@ -58,10 +65,9 @@ def lay_mind_fn(mode: str, w: World, args: argparse.Namespace):
 
 def _repro_llm_meta(cfg, mode: str):
     """(prompt_template_hash, model_snapshot, temperature) cho manifest (P1)."""
-    from tools.experiments import sha256_file
+    from tools.experiments import prompt_template_hash
 
-    prompts_py = Path(__file__).resolve().parent / "minds" / "prompts.py"
-    ph = sha256_file(prompts_py) if prompts_py.exists() else None
+    ph = prompt_template_hash()
     if mode == "mock":
         return ph, ["mock/personabot"], {"mock": None}
     models: list[str] = []
@@ -132,7 +138,63 @@ def chay_smoke(args) -> int:
     return 0
 
 
-def main() -> int:
+def _nap_journal_resume(run_dir: Path, run_name: str, identity: JournalIdentity,
+                        tick_ck: int, args) -> RunJournals:
+    """Resume protocol (ADR 0006 §C.4) — FAIL-CLOSED, không mutate byte nào khi sai lệch.
+
+    (i) đọc journal_manifest; (ii) verify prefix/offset/identity tại tick N;
+    (iii) restore = truncate-with-quarantine; (iv) segment_id += 1.
+
+    Thiếu manifest / prefix hash lệch / file ngắn hơn offset / prompt_template_hash khác ⇒
+    ``SystemExit`` có mã lỗi. **Không có nhánh "bỏ qua cho chạy".** Escape hatch duy nhất là
+    ``--recover-journal``, và nó hạ artifact xuống ``diagnostic_only_unreplayable`` VĨNH VIỄN.
+    """
+    try:
+        journals = RunJournals.nap(run_dir)
+        journals.restore(tick_ck, identity=identity)
+        rec = journals.manifest.recoveries[-1]
+        print(f"[recovery] cắt {rec.journals.get('events', {}).get('records_removed', 0)} event / "
+              f"{rec.journals.get('transcript', {}).get('records_removed', 0)} transcript / "
+              f"supersede {rec.journals.get('llm_calls', {}).get('rows_superseded', 0)} llm_call "
+              f"sau tick {tick_ck}; bằng chứng giữ ở {rec.quarantine_dir}/")
+        return journals
+    except LoiJournal as e:
+        if not args.recover_journal:
+            raise SystemExit(
+                f"{e}\n\nRUN DỪNG (fail-closed). Không byte nào bị sửa.\n"
+                f"  1) chạy run mới (khuyến nghị — giữ artifact cũ nguyên vẹn); hoặc\n"
+                f"  2) python run.py ... --resume --recover-journal  ⇒ QUARANTINE toàn bộ "
+                f"journal, chạy tiếp từ tick {tick_ck}, artifact bị đánh dấu "
+                f"diagnostic_only_unreplayable VĨNH VIỄN (không bao giờ qua cổng replay)."
+            ) from e
+        journals = RunJournals.doc_manifest(run_dir)
+        if journals is None:
+            js = RunJournals.tao_de_recover(run_dir, run_name=run_name, identity=identity,
+                                            tick=tick_ck, ly_do=e.ma)
+        else:
+            js = RunJournals.nap(run_dir)
+            js.recover_toan_bo(tick_ck, identity=identity, ly_do=e.ma)
+        rec = js.manifest.recoveries[-1]
+        print(f"[--recover-journal] {e.ma}: toàn bộ journal đã QUARANTINE vào "
+              f"{rec.quarantine_dir}/. Artifact này VĨNH VIỄN là "
+              f"diagnostic_only_unreplayable — nó KHÔNG qua được cổng replay.")
+        return js
+
+
+def _ghi_metrics(run_dir: Path, w) -> None:
+    ticks = [int(m["tick"]) for m in w.metrics_lich_su]
+    if ticks != list(range(1, len(ticks) + 1)):
+        raise SystemExit(
+            "[E-JM-10] World.metrics_lich_su không liên tục/duy nhất "
+            f"(n={len(ticks)}, đầu={ticks[:3]}, cuối={ticks[-3:]}). Checkpoint hoặc resume "
+            "đã làm hỏng lịch sử metric — KHÔNG ghi metrics.jsonl nửa vời."
+        )
+    with open(run_dir / "metrics.jsonl", "w", encoding="utf-8") as f:
+        for m in w.metrics_lich_su:
+            f.write(json.dumps(m, ensure_ascii=False) + "\n")
+
+
+def _tao_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="THÓC — mô phỏng 300 năm kinh tế tự phát")
     ap.add_argument("--mode", choices=["rulebot", "mock", "real"], default="rulebot")
     ap.add_argument("--years", type=int, default=None)
@@ -157,10 +219,41 @@ def main() -> int:
     ap.add_argument("--policy", default="rulebot",
                     help="tên BehaviorPolicy Lớp-4 (mode rulebot): rulebot | feasible_random | "
                          "subsistence | adaptive (ADR 0002)")
-    args = ap.parse_args()
+    ap.add_argument("--recover-journal", action="store_true",
+                    help="escape hatch CÓ GIÁ (ADR 0006 §C.4): resume một run không có "
+                         "journal_manifest hợp lệ. Toàn bộ journal hiện có bị QUARANTINE và "
+                         "artifact bị hạ VĨNH VIỄN xuống diagnostic_only_unreplayable. "
+                         "Nó KHÔNG BAO GIỜ làm một run xanh trở lại.")
+    return ap
 
+
+def main(argv: list[str] | None = None) -> int:
+    args = _tao_parser().parse_args(argv)
     if args.smoke:
         return chay_smoke(args)
+    return chay_run(args)
+
+
+def _dong_journals(w, mind_fn) -> None:
+    """Đóng MỌI writer journal (best-effort) — dùng trên đường crash.
+
+    Không được raise: nó chạy trong ``except`` và không được che lỗi gốc.
+    """
+    for dong in (
+        lambda: w.events.dong(),
+        lambda: mind_fn.transcript.dong(),
+        lambda: mind_fn.log.dong(),
+    ):
+        try:
+            dong()
+        except Exception:  # noqa: BLE001, S110 — best-effort; lỗi gốc quan trọng hơn
+            pass
+
+
+def chay_run(args, *, mind_factory=None) -> int:
+    """Thân run — seam để test resume trong-process (không subprocess/kill, bất định trên
+    Windows). ``mind_factory(mode, w, args) -> mind_fn``; mặc định ``lay_mind_fn``."""
+    mind_factory = mind_factory or lay_mind_fn
     run_name = args.run_name or f"{args.mode}_{args.seed}"
     run_dir = DATA_DIR / run_name
     ck_dir = run_dir / "checkpoints"
@@ -190,11 +283,16 @@ def main() -> int:
     prompt_template_hash = model_snapshot = temperature = None
     if args.mode in ("mock", "real"):
         prompt_template_hash, model_snapshot, temperature = _repro_llm_meta(cfg, args.mode)
+    # Catalog hash (ADR 0006 §A.2) ghi cho MỌI mode: rulebot cũng phát intent qua cùng bộ
+    # action, nên tập action hợp lệ là một phần của identity run, không riêng của nhánh LLM.
+    from minds.capabilities import catalog_hash
+
     manifest = build_manifest(
         run_name=run_name, mode=args.mode, seed=args.seed, ticks_requested=tong_tick,
         config_digest=cfg.digest(), config_overlays=overlays, scenario=args.scenario,
         treatments=["permute_personas"] if args.permute_personas else [],
         policy=policy_meta, prompt_template_hash=prompt_template_hash,
+        capability_catalog_hash=catalog_hash(),
         model_snapshot=model_snapshot, temperature=temperature,
         calendar={
             "months_per_tick": float(cfg.get("thoi_gian.thang_moi_tick")),
@@ -202,7 +300,20 @@ def main() -> int:
             "seasons": cfg.raw().get("thoi_gian", {}).get("lich_mua"),
         },
     )
+    from tools.experiments import git_revision
+
+    # ADR 0006 §C.2: identity của segment có BỐN trường. `capability_catalog_hash` là trường
+    # THỨ BA và nó KHÔNG suy ra được từ `prompt_template_hash`: menu hành động/asset/
+    # LOAI_HANH_DONG sống ở `minds/capabilities.py`, còn prompt hash băm `minds/prompts.py`.
+    # Thiếu nó ⇒ đổi tập action giữa hai segment mà resume vẫn xanh (A-06/F-P03-1).
+    identity = JournalIdentity(config_sha256=cfg.digest(),
+                               prompt_template_hash=prompt_template_hash,
+                               capability_catalog_hash=catalog_hash(),
+                               git_revision=git_revision())
+
     ck_moi_nhat = ck_dir / "checkpoint_moi_nhat.json"
+    if args.recover_journal and not args.resume:
+        raise SystemExit("--recover-journal chỉ dùng kèm --resume.")
     if args.resume and ck_moi_nhat.exists():
         manifest_path = run_dir / "experiment_manifest.json"
         if manifest_path.exists():
@@ -219,11 +330,23 @@ def main() -> int:
             # phải có provenance cho phần quỹ đạo còn lại.
             write_manifest(run_dir, manifest)
         meta = json.loads(ck_moi_nhat.read_text(encoding="utf-8"))
-        w = World.nap_checkpoint(ck_dir / f"checkpoint_{meta['tick']:04d}.pkl", events_path,
-                                 cfg=cfg)
-        print(f"[resume] từ tick {w.tick} (hash {meta['world_hash'][:12]})")
+        tick_ck = int(meta["tick"])
+        journals = _nap_journal_resume(run_dir, run_name, identity, tick_ck, args)
+        counters = journals.counters()
+        # events phải được truncate XONG rồi mới mở handle "a" (offset đúng của segment mới)
+        w = World.nap_checkpoint(ck_dir / f"checkpoint_{tick_ck:04d}.pkl", None, cfg=cfg)
+        w.events = EventLog(events_path, start_seq=counters["events"],
+                            segment_id=journals.manifest.segment_id)
+        print(f"[resume] từ tick {w.tick} (hash {meta['world_hash'][:12]}) "
+              f"segment {journals.manifest.segment_id} · event seq tiếp {counters['events'] + 1}")
     else:
-        run_dir.mkdir(parents=True, exist_ok=True)
+        if args.resume:
+            print("[resume] không có checkpoint — chạy mới từ tick 0.")
+        # RunJournals.moi() quarantine journal cũ cùng run-name TRƯỚC khi EventLog mở "a":
+        # append chồng lên quỹ đạo cũ đúng là bệnh của real60 (event trùng, call_id lặp).
+        journals = RunJournals.moi(run_dir, run_name=run_name, identity=identity)
+        counters = journals.counters()
+        manifest["run"]["run_uuid"] = journals.manifest.run_uuid
         write_manifest(run_dir, manifest)
         w = tao_the_gioi(cfg, args.seed, events_path)
         if args.permute_personas:
@@ -232,7 +355,16 @@ def main() -> int:
             permute_personas(w)
     w.unrecognized_path = run_dir / "unrecognized_intents.jsonl"
 
-    mind_fn = lay_mind_fn(args.mode, w, args)
+    mind_fn = mind_factory(args.mode, w, args)
+    seg = journals.manifest.segment_id
+    tr = getattr(mind_fn, "transcript", None)
+    if tr is not None:
+        tr.rebase(start_call_id=counters["transcript"],
+                  run_uuid=journals.manifest.run_uuid, segment_id=seg)
+    log = getattr(mind_fn, "log", None)
+    if log is not None and hasattr(log, "dat_segment"):
+        log.dat_segment(seg)
+    journals.gan_writers(events=w.events, transcript=tr, llm_log=log)
     tong_thua = len(w.parcels)
     ck_moi_n = int(cfg.get("minds.checkpoint_moi_n_tick"))
 
@@ -245,35 +377,46 @@ def main() -> int:
     signal.signal(signal.SIGINT, bat_sigint)
 
     t0 = time.time()
-    while w.tick < tong_tick and not ngat["flag"]:
-        m = chay_mot_tick(w, mind_fn, tong_thua)
-        # telemetry LLM theo tick vào metrics.jsonl (m là chính dict đã lưu lịch sử)
-        st = getattr(mind_fn, "stats_tick", None)
-        if st:
-            m["llm"] = {k: st.get(k, 0) for k in
-                        ("call", "tok_in", "tok_out", "fallback", "latency_ms")}
-        if getattr(mind_fn, "het_ngan_sach", False):
-            print(f"[budget] hết ngân sách: {getattr(mind_fn, 'ly_do_dung', '')} "
-                  f"— checkpoint và dừng êm (không degrade).")
-            break
-        if w.tick % ck_moi_n == 0:
-            w.luu_checkpoint(ck_dir)
-            w.events.flush()
-        buoc_in = 5 if args.mode == "real" else 50
-        if w.tick % buoc_in == 0 or w.tick == tong_tick:
-            print(
-                f"tick {w.tick:4d} (năm {m['nam']:3d}) | dân {m['dan_so']:4d} | "
-                f"thóc/người {m['thoc_moi_nguoi']:7.1f} | gini đất {m['gini_dat']:.2f} | "
-                f"biết chữ {m['ty_le_biet_chu']:.0%} | {time.time() - t0:6.1f}s"
-            )
+    try:
+        while w.tick < tong_tick and not ngat["flag"]:
+            m = chay_mot_tick(w, mind_fn, tong_thua)
+            # telemetry LLM theo tick vào metrics.jsonl (m là chính dict đã lưu lịch sử)
+            st = getattr(mind_fn, "stats_tick", None)
+            if st:
+                m["llm"] = {k: st.get(k, 0) for k in
+                            ("call", "tok_in", "tok_out", "fallback", "latency_ms")}
+            if getattr(mind_fn, "het_ngan_sach", False):
+                print(f"[budget] hết ngân sách: {getattr(mind_fn, 'ly_do_dung', '')} "
+                      f"— checkpoint và dừng êm (không degrade).")
+                break
+            if w.tick % ck_moi_n == 0:
+                # THỨ TỰ BẮT BUỘC (cũ: luu_checkpoint RỒI MỚI flush ⇒ offset ghi trước flush
+                # ⇒ SAI): flush+fsync journal → capture offset → pickle → manifest → con trỏ.
+                journals.checkpoint(w)
+            buoc_in = 5 if args.mode == "real" else 50
+            if w.tick % buoc_in == 0 or w.tick == tong_tick:
+                print(
+                    f"tick {w.tick:4d} (năm {m['nam']:3d}) | dân {m['dan_so']:4d} | "
+                    f"thóc/người {m['thoc_moi_nguoi']:7.1f} | gini đất {m['gini_dat']:.2f} | "
+                    f"biết chữ {m['ty_le_biet_chu']:.0%} | {time.time() - t0:6.1f}s"
+                )
+    except BaseException:
+        # Crash giữa run: ĐÓNG writer trước khi thoát. Một process bị kill thật thì OS đóng fd
+        # hộ, nhưng một exception bắt được ở tầng trên (driver script, test seam, notebook) để
+        # writer SỐNG SÓT với buffer chưa flush. Nếu sau đó `--resume` truncate journal về
+        # checkpoint, writer cũ vẫn có thể flush buffer của nó vào file VỪA BỊ CẮT ⇒ **hồi sinh
+        # bản ghi mồ côi SAU dữ liệu của segment mới** (đo được: 60 seq trùng + 1 tick lùi).
+        # Đóng ở đây làm ngữ nghĩa in-process khớp ngữ nghĩa process-chết.
+        _dong_journals(w, mind_fn)
+        raise
 
-    w.luu_checkpoint(ck_dir)
-    w.events.flush()
+    journals.checkpoint(w)
+    journals.ket_thuc(w.tick)
     w.events.dong()
-    # metrics ra file
-    with open(run_dir / "metrics.jsonl", "w", encoding="utf-8") as f:
-        for m in w.metrics_lich_su:
-            f.write(json.dumps(m, ensure_ascii=False) + "\n")
+    # metrics.jsonl là journal DẪN XUẤT (Class B): ghi đè cuối run từ World.metrics_lich_su
+    # (nằm trong pickle) ⇒ resume KHÔNG tạo dup, không cần truncate. Nhưng phải kiểm chứng
+    # chứ không tin: tick duy nhất + liên tục 1..M, nếu không thì fail-closed.
+    _ghi_metrics(run_dir, w)
     meta = {
         "run_name": run_name,
         "mode": args.mode,
@@ -284,6 +427,9 @@ def main() -> int:
         "config_sha256": cfg.digest(),
         "scenario": args.scenario,
         "policy": policy_meta,
+        "run_uuid": journals.manifest.run_uuid,
+        "segment_id": journals.manifest.segment_id,
+        "replay_complete": journals.manifest.replay_complete,
     }
     if args.mode in ("mock", "real"):
         meta["p_malformed"] = mind_fn.p_malformed
@@ -303,9 +449,15 @@ def main() -> int:
         # telemetry LLM chi tiết từ llm_calls.sqlite → reports/telemetry.{md,json}
         from tools.telemetry import sinh_bao_cao
         tele = sinh_bao_cao(run_dir, cfg.get("models.gia_token"))
-        meta["so_call"] = int(tele.get("tong_call", 0))
-        meta["so_fallback"] = int(tele.get("fallback", 0))
-        meta["fallback_rate"] = float(tele.get("fallback_rate", 0.0))
+        # ADR 0006 §C.1: hai đại lượng KHÁC NHAU. `so_call` (quỹ đạo) là số đi vào bảng kết
+        # quả; `so_call_billed` (mọi row, gồm cả segment bị bỏ) là chi phí ĐÃ TRẢ THẬT — không
+        # được làm đẹp bằng cách xóa row.
+        meta["so_call"] = int(tele.get("call_effective", tele.get("tong_call", 0)))
+        meta["so_call_billed"] = int(tele.get("call_burned", tele.get("tong_call", 0)))
+        meta["so_call_superseded"] = int(tele.get("call_superseded", 0))
+        meta["so_fallback"] = int(tele.get("fallback_effective", tele.get("fallback", 0)))
+        meta["fallback_rate"] = float(
+            tele.get("fallback_rate_effective", tele.get("fallback_rate", 0.0)))
         meta["tok_in"] = int(tele.get("tok_in", 0))
         meta["tok_out"] = int(tele.get("tok_out", 0))
         meta["luot_cong_cu"] = int(tele.get("luot_cong_cu", 0))

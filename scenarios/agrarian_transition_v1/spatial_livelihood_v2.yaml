@@ -1,0 +1,119 @@
+# spatial_livelihood_v2.yaml — overlay HỘ GIA ĐÌNH (ADR 0007). KHÔNG bật mặc định.
+#
+# Áp CHỒNG LÊN spatial_v1.yaml (thứ tự overlay có ý nghĩa):
+#   run.py --config-overlay scenarios/agrarian_transition_v1/spatial_v1.yaml \
+#          --config-overlay scenarios/agrarian_transition_v1/spatial_livelihood_v2.yaml
+#
+# KHÔNG sửa spatial_v1.yaml (sửa là chết hash pin SPATIAL_ON) và KHÔNG thêm key `ho:` vào base
+# config/world.yaml (giữ cfg.digest() base bất biến). Engine đọc mọi cờ dưới đây qua
+# cfg.get("ho....", False) ⇒ config cũ thiếu block và config mới `bat:false` có CÙNG transition
+# function ⇒ world_hash legacy bất biến.
+#
+# Bật overlay này = một THÍ NGHIỆM KHÁC (world-hash + config-digest khác) — đúng chủ đích.
+# preindustrial_closed_v1: TẮT VĨNH VIỄN (legacy regression, charter §6).
+#
+# ⚠️ CLAIM BOUNDARY (ADR 0007 §E.2): `ho.di_san.che_do` là `institutional_assumption` /
+# `experimental_treatment` — KHÔNG phải "định chế tự phát". Nó trượt điều kiện #2 của cổng
+# charter §5 (chi phí thừa kế = 0: không công chứng, không tranh chấp, không phí chuyển
+# nhượng). CẤM mọi phát biểu kiểu "thừa kế nổi lên nội sinh trong THÓC". Mọi kết quả phụ thuộc
+# nó PHẢI báo kèm ablation `che_do: tan_ra` (null treatment).
+
+ho:
+  bat: true                 # cờ tổng — tắt cờ này ⇒ mọi path no-op ⇒ hash + hành vi về legacy
+
+  # §A/§C — membership BỀN. Sửa F-18: trưởng thành KHÔNG còn đẩy người ra khỏi hộ cha mẹ.
+  cu_tru_ben_vung: true
+  quy_tac_cap: nhu_cau_deu  # quy tắc phân bổ trong hộ; quy tắc KHÁC là một định chế phân phối
+                            # ⇒ phải qua cổng charter §5 ⇒ PENDING, ngoài P1 (fail-closed)
+
+  # §B — provisioning: chuyen(người-cấp → người-ăn) + event `cap_luong_thuc` trước huy(...,"an").
+  # ⚠️ ADR §B.3 tuyên bố cờ này HASH-NEUTRAL (INVARIANT P-1). SAI Ở MỨC BIT (finding F-P1-1):
+  # số dư cuối tick bằng nhau về GIÁ TRỊ (|Δ| ≤ 1e-9) nhưng KHÔNG bằng nhau từng BIT — cộng dồn
+  # IEEE-754 không kết hợp: legacy áp một delta `-tru`, provisioning áp `-x₁,-x₂,…`. Đo được:
+  # base seed 11 tick 4, ('A0042','thoc') lệch 1 ULP (1.14e-13). ⇒ KHÔNG dùng trục này làm
+  # "kiểm tra harness" trong ablation §G.4; giữ nó CỐ ĐỊNH (ON) qua mọi ô của ma trận.
+  cap_luong_thuc: true
+
+  # §C transition 5 — tách hộ TƯỜNG MINH (intent, có event, có hệ quả). Không có intent "xin
+  # vào hộ người khác" (chống parasitism); trục xuất `duoi_khoi_ho` là PENDING, ngoài P1.
+  tach_ho:
+    bat: true
+
+  # §D — estate lifecycle: `DI_SAN:<aid>` là chủ thể ledger CÓ HẠN, không phải ví vĩnh viễn.
+  di_san:
+    bat: true
+    claim_han_tick: 3       # tick | design_assumption | KHÔNG có provenance (= 1 năm ở calendar
+                            # 3 mùa của spatial_v1)
+    che_do: kin             # "kin" | "chia_deu_lang" | "tan_ra"   ("dau_gia" = PENDING/P2)
+    het_han: chia_deu_lang  # đích khi hết hạn mà KHÔNG ai nhận.
+                            # "cong" BỊ CHẶN fail-closed (household.kiem_tra_cau_hinh):
+                            # chinh_tri.bat=false trong scenario này ⇒ politics.thu_thue_va_chia
+                            # return sớm ⇒ CONG_QUY không có drain ⇒ đó là SINK ĐỔI TÊN (F-36),
+                            # pass E1 cũ nhưng vi phạm E1′.
+
+# P2 — rừng là stock vật lý; không còn lấy gỗ vô hạn chỉ vì một ô mang nhãn `rung`.
+# Các số là design assumptions có nhãn trong provenance.csv, không phải hiệu chuẩn lịch sử.
+khong_gian:
+  ga_rung:
+    # Treatment P2: K phụ thuộc canopy thay vì chỉ nhãn ô. Tắt cờ này là ablation cơ chế.
+    k_theo_tan_che: true
+  rung:
+    bat: true
+    sinh_khoi_toi_da_moi_o: 80.0
+    ty_le_ton_ban_dau: 0.80
+    tai_sinh_moi_tick: 0.1026
+    ty_le_go_thu_hoi_khai_hoang: 0.60
+    trong_rung:
+      bat: true
+      cong_moi_thua: 40.0
+      ty_le_sinh_khoi_khoi_dau: 0.10
+
+# P3 — báo giá song phương có ký quỹ ledger. Chợ call-auction/contract board cũ vẫn là
+# alternatives; engine không áp giá hay ép ai mở quote.
+thuong_mai:
+  bao_gia:
+    bat: true
+    het_han_tick: 3
+
+# P1 — generic work-order primitive.  It holds contributed materials in an
+# auditable ledger escrow and records labour across ticks; no wage is minted by
+# the project itself.  The registry is intentionally data-driven so a later
+# scenario can add another structure without a special engine path.
+du_an:
+  bat: true
+  toi_da_moi_chu: 2
+  han_tick: 12
+  cong_trinh:
+    nha:
+      recipe: nha
+      tai_san_ra: nha
+      so_luong_ra: 1
+      luong_vat_lieu: xay
+      luong_san_pham: xay
+      can_thua: true
+    thuyen:
+      recipe: thuyen
+      tai_san_ra: thuyen
+      so_luong_ra: 1
+      luong_vat_lieu: xay
+      luong_san_pham: dong_thuyen
+      can_thua: false
+
+# P4 — only-observation demographic surface. These are disclosed design choices,
+# not calibrated historical facts. A rate is null, never silently zero, when its
+# stated denominator is too small.
+quan_sat:
+  nhan_khau:
+    bat: true
+    cua_so_tick: 12
+    min_person_tick: 20
+    min_woman_tick: 8
+    min_n_tu_vong: 2
+    tuoi_nghi: 60
+    bang_song:
+      min_person_tick_moi_band: 8
+      bands:
+        - {nhan: "0-15", tu: 0, den: 16}
+        - {nhan: "16-49", tu: 16, den: 50}
+        - {nhan: "50-64", tu: 50, den: 65}
+        - {nhan: "65+", tu: 65, den: null}

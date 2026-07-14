@@ -10,11 +10,11 @@ Chứng minh prompt render THẬT:
 from __future__ import annotations
 
 from minds.prompts import (
-    LUAT_VAT_LY,
-    MUC_HANH_DONG,
     build_agent_prompt,
     build_user_chung,
     build_user_rieng,
+    luat_vat_ly,
+    muc_hanh_dong,
 )
 from tests.helpers import the_gioi_test
 
@@ -54,7 +54,8 @@ def test_prompt_co_du_y_dinh_chinh_tri():
 
 def test_menu_chinh_tri_trung_lap_va_dung_hop_dong_schema():
     """Menu chính trị dùng đúng tên schema chốt và mô tả trung lập (không xúi)."""
-    menu = "\n".join(MUC_HANH_DONG)
+    # ADR 0006 §B: menu render từ catalog + World.cfg ⇒ cần một world thật (base config).
+    menu = "\n".join(muc_hanh_dong(the_gioi_test(seed=42, giu_lai=6, thoc_moi_nguoi=2000)))
     # đúng hợp đồng giao diện
     assert '"loai":"bo_phieu","cho":' in menu
     assert '"loai":"ban_hanh_luat","luat":{"loai":"thue","suat"' in menu
@@ -69,12 +70,14 @@ def test_menu_chinh_tri_trung_lap_va_dung_hop_dong_schema():
 
 def test_luat_vat_ly_co_su_kien_nha_nuoc():
     """Luật vật lý nêu SỰ KIỆN nhà nước làng — thuần vật lý, không định hướng."""
-    thap = LUAT_VAT_LY.lower()
+    # ADR 0006 §B: luật vật lý render TỪ World.cfg ⇒ cần một world thật (base config).
+    van_ban = luat_vat_ly(the_gioi_test(seed=42, giu_lai=6, thoc_moi_nguoi=2000))
+    thap = van_ban.lower()
     for cot_moc in ("trưởng làng", "công quỹ", "gini", "sung công",
                     "nghiệp đoàn", "đình công"):
         assert cot_moc in thap, f"luật vật lý thiếu sự kiện: {cot_moc}"
     for tu in TU_MOM:
-        assert tu not in LUAT_VAT_LY.lower(), f"luật vật lý lộ từ mớm ý: {tu!r}"
+        assert tu not in thap, f"luật vật lý lộ từ mớm ý: {tu!r}"
 
 
 def test_can_tinh_giai_cap_dau_khoi_rieng():

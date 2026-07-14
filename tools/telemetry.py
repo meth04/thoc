@@ -27,18 +27,41 @@ def _gia_model(model: str, bang_gia: dict) -> dict:
 
 
 def phan_tich(sqlite_path: Path, bang_gia: dict | None = None) -> dict[str, Any]:
+    """Đọc-only. Sau ADR 0006 §C.1, một row có thể bị ``superseded=1`` (đoạn quỹ đạo bị bỏ
+    khi resume) — row đó **vẫn đã tốn tiền thật** nên KHÔNG bị xóa và vẫn vào chi phí.
+
+    Hai đại lượng phải phân biệt:
+    - ``call_burned`` = MỌI row  → chi phí/quota đã tiêu (ngữ nghĩa cũ của ``tong_call``);
+    - ``call_effective`` = ``COALESCE(superseded,0)=0`` → số call trên quỹ đạo được công bố.
+
+    DB cũ không có cột ``superseded`` ⇒ ``PRAGMA table_info`` guard, coi mọi row là effective.
+    Read path KHÔNG BAO GIỜ ``ALTER TABLE``.
+    """
     bang_gia = bang_gia or {"mac_dinh": {"vao": 0.0, "ra": 0.0}}
     conn = sqlite3.connect(sqlite_path)
     conn.row_factory = sqlite3.Row
+    cot = {r[1] for r in conn.execute("PRAGMA table_info(llm_calls)")}
+    sup = "COALESCE(superseded,0)" if "superseded" in cot else "0"
     rows = list(conn.execute(
         "SELECT tick, tier, provider, model, key_hash, tok_in, tok_out, latency_ms,"
-        " retries, fallback FROM llm_calls"))
+        f" retries, fallback, {sup} AS superseded FROM llm_calls"))  # noqa: S608
     conn.close()
     if not rows:
-        return {"tong_call": 0}
+        return {"tong_call": 0, "call_burned": 0, "call_effective": 0}
 
+    hieu_luc = [r for r in rows if not int(r["superseded"] or 0)]
     tong = {"tong_call": len(rows), "tok_in": 0, "tok_out": 0, "fallback": 0,
-            "luot_cong_cu": 0, "chi_phi_usd": 0.0}
+            "luot_cong_cu": 0, "chi_phi_usd": 0.0,
+            # chi phí = mọi row (điều luật #6: không làm đẹp chi phí);
+            # quỹ đạo = row chưa bị supersede (số đi vào bảng kết quả khoa học)
+            "call_burned": len(rows), "call_effective": len(hieu_luc),
+            "call_superseded": len(rows) - len(hieu_luc),
+            "fallback_effective": sum(int(r["fallback"] or 0) for r in hieu_luc),
+            "fallback_rate_effective": (
+                round(sum(int(r["fallback"] or 0) for r in hieu_luc) / len(hieu_luc), 4)
+                if hieu_luc else 0.0),
+            "tok_in_effective": sum(int(r["tok_in"] or 0) for r in hieu_luc),
+            "tok_out_effective": sum(int(r["tok_out"] or 0) for r in hieu_luc)}
     theo_tier: dict[str, dict] = {}
     theo_model: dict[str, dict] = {}
     theo_key: dict[str, dict[str, int]] = {}  # provider → {key_hash: call} (tách nhà cung cấp)
@@ -103,6 +126,11 @@ def viet_md(kq: dict, run_name: str) -> str:
     d.append(f"- **Tổng call:** {kq['tong_call']:,} · fallback {kq['fallback_rate']:.2%} "
              f"({kq['fallback']}) · retry/lượt-công-cụ {kq['luot_cong_cu']:,} "
              f"(cột retries: MCP tắt = số retry; MCP bật = số lượt gọi công cụ)")
+    if kq.get("call_superseded"):
+        d.append(f"- **Chi phí vs quỹ đạo** (ADR 0006 §C.1): `call_burned` "
+                 f"{kq['call_burned']:,} (đã trả tiền, KHÔNG xóa) · `call_effective` "
+                 f"{kq['call_effective']:,} (trên quỹ đạo) · superseded "
+                 f"{kq['call_superseded']:,} (đoạn bị bỏ khi resume)")
     d.append(f"- **Token:** vào {kq['tok_in']:,} + ra {kq['tok_out']:,} = "
              f"**{kq['tok_tong']:,}** · ước tính **${kq['chi_phi_usd']:.4f}** (giá xấp xỉ, cấu hình được)")
     lm = kq["latency_ms"]

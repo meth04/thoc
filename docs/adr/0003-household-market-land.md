@@ -67,6 +67,22 @@ nền này, không viết lại.
 
 ### A. Household model — chốt (giữ nguyên ownership cá nhân, không pantry)
 
+> **⚠️ SUPERSEDED (MỘT PHẦN) — 2026-07-13, bởi `docs/adr/0007-residence-household-estate.md` §A.**
+> **Chỉ mục A.1 (membership = derived view từ huyết thống) bị thay thế.** Tiền đề của A.1 —
+> *"quan hệ huyết thống suy ra được đồng-cư-trú"* — là **SAI**: sinh nhật thứ 16 **không phải một
+> biến cố quan hệ** (không event, không quyết định, không bút toán) nhưng nó **đổi membership**
+> trong `ho_cua()` (`engine/world.py:455`) ⇒ đổi ai được ăn (`engine/consumption.py:50`) ⇒ đổi ai
+> sống. Bằng chứng policy-independent: **159/168 (94.6%)** agent sinh-trong-sim của `mock60_spatial`
+> (PersonaBot heuristic, KHÔNG LLM) có event `an_doi` **đầu tiên** trong ±1 tick quanh đúng tick
+> trưởng thành. ADR 0007 §A thay A.1 bằng **state bền World-level `w.cu_tru`** (KHÔNG thêm field
+> vào dataclass `Agent` — hash trap `engine/world.py:515`), scenario-gated `ho.cu_tru_ben_vung`,
+> mặc định TẮT ⇒ hành vi + `world_hash` legacy **bất biến**.
+>
+> **VẪN CÒN HIỆU LỰC (không bị thay):** A.2 (KHÔNG pantry chung — ADR 0007 §B chọn phương án (B)
+> "tài sản cá nhân + transfer tường minh" đúng theo yêu cầu này), A.3 (bốn khoản không lẫn),
+> B (accounting identity), C (undefined thay vì 0 giả), D, E, F. Lịch sử được giữ nguyên, không xóa
+> chữ nào.
+
 1. **Membership = `economy.households(w)`** là single source of truth cho "hộ". Head = id nhỏ nhất
    (ổn định qua sort). Đây là **derived view trên state cá nhân** (`Agent`), KHÔNG là một object
    `Household` có state riêng ⇒ không có state field mới cần hash/checkpoint, không có lifecycle

@@ -37,6 +37,15 @@ class KeHoach:
     niem_yet_dat: list = field(default_factory=list)  # [(thua, gia_ask)]
     tra_gia_dat: list = field(default_factory=list)  # [(thua, gia)]
     yeu_cau_rut: dict[str, float] = field(default_factory=dict)  # hd_id → số lượng
+    # ---- P3: báo giá song phương versioned (escrow + exact-once settlement trong quotes.py) ----
+    dang_bao_gia: list[dict] = field(default_factory=list)
+    chap_nhan_bao_gia: list[dict] = field(default_factory=list)
+    huy_bao_gia: list[str] = field(default_factory=list)
+    # ---- P1: generic multi-tick projects/work orders (scenario-gated) ----
+    tao_du_an: list[dict] = field(default_factory=list)
+    gop_vat_lieu_du_an: list[dict] = field(default_factory=list)
+    gop_cong_du_an: list[dict] = field(default_factory=list)
+    huy_du_an: list[str] = field(default_factory=list)
     # ---- Phase 4: pháp nhân, R&D, máy, xu, di chúc, di cư ----
     xay_may: int = 0
     duc_xu: int = 0  # số mẻ đúc (1 quặng + 5 công → 10 xu)
@@ -52,6 +61,8 @@ class KeHoach:
     qua_song: tuple | None = None  # khách xin qua: (den_bo, tai_san_tra, phi_chap_nhan)
     # khai hoang (ADR 0005 §4.1): vỡ rừng/đồi CÔNG thành ruộng (tốn công, homestead qua canh)
     khai_hoang: list[str] = field(default_factory=list)  # thửa rừng/đồi công muốn vỡ hoang
+    # ecology v2: trồng lại rừng trên đồi có thể tới; công thật, stock khởi đầu theo config
+    trong_rung: list[str] = field(default_factory=list)
     # vụ đông (scenario-gated): [(thửa, "ngo"|"khoai")], chỉ canh mùa khô
     canh_vu_dong: list[tuple[str, str]] = field(default_factory=list)
     # chăm trẻ: id trẻ mà người này tự nguyện chăm trong tick (kin hoặc có gop_cong trả công)
@@ -77,3 +88,10 @@ class KeHoach:
     dinh_cong: bool = False  # đình công tick này
     bao_dong: bool = False  # tham gia bạo động (vật lý sung công khi đủ số đông + Gini cao)
     keu_goi: str | None = None  # vận động townhall — thông tin thuần, không dịch chuyển tài sản
+    # ---- Hộ gia đình (ADR 0007 §C/§D) ----
+    # Hai field dưới đây có descriptor tương ứng trong `minds.capabilities`; không được thêm
+    # action hộ mới chỉ ở một phía, vì CAP-2 sẽ coi đó là field mồ côi. Engine đọc chúng ở
+    # bước 9b/9c SAU nhân khẩu: tách hộ là transition explicit, claim di sản không tạo transfer
+    # ngay mà ghi yêu cầu vào lifecycle estate.
+    tach_ho: bool = False
+    yeu_cau_di_san: list[str] = field(default_factory=list)

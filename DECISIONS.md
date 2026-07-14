@@ -321,3 +321,92 @@
 | 2026-07-13 | Overlay `spatial_v1` bật vụ đông ngô/khoai, commons gà rừng logistic và time-cost chăm trẻ. Chăm trẻ trả công tái dùng contract `gop_cong` + payment; không tạo class nghề/định chế mới. | Mở lựa chọn sinh kế theo mùa và vòng đời mà vẫn bảo toàn công/tài sản, scenario-gated và có ablation. |
 | 2026-07-13 | Checkpoint không pickle lại `ledger._lich_su` của các tick đã đóng sổ; giữ balances/flow totals/metrics/config snapshot. | Journal cũ không điều khiển future tick nhưng lặp trong mọi checkpoint tạo artifact O(tick²). Resume vẫn audit/replay state đúng và checkpoint tự nạp đúng overlay. |
 | 2026-07-13 | Supersede riêng calendar của `spatial_v1`: 2 tick/năm → 3 mùa 4 tháng `[lua_1,lua_2,dong]`; base/legacy không nạp overlay giữ nguyên 2 tick. | Yêu cầu mô hình nghĩa đen hai vụ lúa + một vụ đông. Chuyển đổi minh bạch `World.tick_moi_nam`, tuổi (+2/3 nửa-năm/mùa), annual mortality, weather/year, reports/manifest và flow per-tick; regression chứng minh legacy calendar/hash path không đổi. |
+
+## 2026-07-13 — ADR 0006: capability catalog, prompt-from-config, run journal (P0 của Report_v2)
+
+- **ADR 0006** (`docs/adr/0006-capability-catalog-and-run-journal.md`, Accepted-design) chốt luật nền
+  cho P0 **trước** khi production code đổi: (§A) capability descriptor registry ở `minds/capabilities.py`
+  là single source of truth cho một action, với invariant test-enforced **không có capability mồ côi**
+  (CAP-1..4) — bắt được `dong_thuyen`/`rao_do`/`qua_song` vốn có handler (`engine/spatial.py:112`) mà
+  không có đường LLM (`minds/schemas.py:14`, `minds/translate.py:183`, `minds/prompts.py:169`);
+  (§B) `LUAT_VAT_LY` (`minds/prompts.py:241`) thành renderer đọc `w.cfg` — prompt hiện nói sai luật
+  cho run spatial (6 tháng/90kg/180 công vs overlay 4 tháng/60kg/120 công); (§C) `RunJournalManifest`
+  + **truncate tail an toàn** khi resume, fail-closed, và transcript replay thành **hard gate cho mode
+  real** (bỏ nhánh skip ở `tools/verify_research_run.py:200`).
+- Bằng chứng buộc phải sửa (audit chỉ đọc `data/runs/real60_spatial/`): events có **230 dòng trùng** +
+  1 tick-regression 117→106 (resume từ checkpoint 105 không truncate tail); transcript 1595 dòng nhưng
+  chỉ 1192 `call_id` distinct (**403 lặp** — `TranscriptWriter._n=0`, `minds/transcript.py:52`);
+  transcript(1595) ≠ llm_calls(1589). ⇒ `real60_spatial` giữ nhãn **`diagnostic_only_unreplayable`**;
+  artifact **không bị sửa/retcon**, nhãn chỉ nằm ở output `verify_research_run` +
+  `docs/reviews/artifact_ledger.md` + dòng này.
+- ADR 0006 **không đụng** `world_hash` struct (journal ngoài hash) ⇒ mọi replay/hash legacy phải vẫn
+  xanh; `prompt_template_hash` đổi cho run MỚI (rulebot không dùng prompt nên hash bất biến).
+  Ranh giới thật thà: transcript cũ **không** replay được bằng code mới (khóa theo `prompt_hash`) —
+  tool phải fail loud `skipped_version_mismatch`, không im lặng PASS.
+- **Route sang ADR 0007 (PENDING, điều kiện tiên quyết của P1):** mâu thuẫn ADR 0003 §A.2 ("KHÔNG thêm
+  pantry chung, cần ADR riêng") vs Report_v2 §4.2 (residence/household provisioning + estate có ledger)
+  do `household-demography-specialist` + `model-architect` quyết trong ADR 0007. ADR 0006 **không tự
+  quyết P1** và cấm P0 đụng `ho_cua`/`households`/`VO_THUA_NHAN`.
+- Tàn dư calendar trong ADR 0005 §17/§18 ("Vụ đông GIỮ 2 tick/năm") được đánh **SUPERSEDED tại chỗ**
+  (không xóa chữ) — §8 bản 2026-07-13 (3 mùa cho `spatial_v1`, legacy 2 tick) là contract hiện hành.
+
+## 2026-07-13 — ADR 0007 (residence / household provisioning / estate lifecycle), tiền điều kiện P1
+
+Nguồn: `docs/adr/0007-residence-household-estate.md` (model-architect), design input
+`docs/reviews/P1-household-demography-design.md` (household-demography-specialist). Route đến từ
+ADR 0006 §D.3. **DESIGN ONLY** — chưa engine change nào.
+
+- **Supersede ADR 0003 §A.1 tại chỗ** (banner đã thêm, **không xóa chữ nào**): tiền đề "huyết thống
+  suy ra được hộ" SAI — *sinh nhật không phải biến cố quan hệ, nhưng lại đổi membership* ⇒
+  adult-orphaning (`world.py:455` + `consumption.py:50`), tái lập **159/168 = 94.6%** dưới PersonaBot
+  phi-LLM. **GIỮ NGUYÊN ADR 0003 §A.2** (không pantry chung), §A.3, §B, §C, §E, §F.
+- **Residence = state bền World-level `w.cu_tru`** (KHÔNG thêm field vào dataclass `Agent` — hash
+  trap `world.py:515` + `_canonical_state` duyệt `fields()`); key `"residence"` **chỉ chèn vào
+  `behavioral_state()` khi gate ON** ⇒ OFF cho JSON y hệt ⇒ ba hash pin bất biến.
+- **Provisioning chọn phương án (B)** (tài sản cá nhân + `chuyen` tường minh trước `huy("an")` +
+  event `cap_luong_thuc`), KHÔNG pantry. Tính chất chốt: **bật riêng `ho.cap_luong_thuc` là
+  HASH-NEUTRAL** (FlowRegistry khóa `(tai_san, luong)` không theo chủ thể, `chuyen` là bút toán cân,
+  transaction journal ngoài hash) ⇒ tách bạch "cái gì đổi quỹ đạo" (membership) khỏi "cái gì chỉ
+  thêm sổ sách" (provisioning) ⇒ ablation sạch. INVARIANT P-1, test T-14.
+- **INVARIANT R2: KHÔNG age-based orphaning.** Membership chỉ đổi bởi
+  `{sinh, cuoi(+tái hôn), tach_ho, cuu_mang, di_cu, chet}` (+ `tan_ho` là hệ quả). Single-writer
+  `household.buoc_cu_tru` chèn ở `tick.py` 9b (sau `cuu_mang_mo_coi`); `estate.buoc_di_san` 9c.
+  **KHÔNG hoán vị thứ tự bước tick** (hoán vị bước 7/9 sẽ đổi quỹ đạo cả khi gate OFF).
+- **Estate `DI_SAN:<aid>` là chủ thể ledger CÓ HẠN**; bậc 0–3 (mở → chủ nợ → di chúc → kin +
+  đồng-cư-trú) chạy **NGUYÊN TỬ trong chính tick chết** (để audit không có tick "tạm lệch", để đất
+  không phải về công rồi cấp lại — `audit.py:30` **không được nới**, và để không double-pay nghĩa vụ
+  bước 7). Claim window chỉ áp cho trường hợp **không có người nhận nào**. Nghĩa vụ tính bằng khuôn
+  đã có `entities.thanh_ly` (`entities.py:218-244`), **không phát minh đại số nợ mới**; `dinh_ky`
+  không thời hạn ⇒ chấm dứt + event `nghia_vu_cham_dut` (không bịa discount rate).
+- **CORRECTION đối với design input (memo §4.3 bậc 4):** `het_han: "cong"` (→ `CONG_QUY`) **BỊ CHẶN**.
+  Bằng chứng: `politics.thu_thue_va_chia` return sớm khi `chinh_tri.bat` false (`politics.py:194-195`)
+  và `agrarian_transition_v1/parameters.yaml:16` đặt `chinh_tri.bat: false`; ngay cả khi ON,
+  `_chia_deu` chỉ rebate `tong_thu` của tick đó và **chỉ `"thoc"`**. ⇒ route estate → `CONG_QUY` chỉ
+  **đổi tên cái sink** (F-19 đội tên khác) mà vẫn PASS invariant E1 cũ. Mặc định mới:
+  **`het_han: "chia_deu_lang"`** (escheat per-capita cho người lớn còn sống của làng; nguyên chiếc ⇒
+  round-robin `sorted`); biến thể `dau_gia` (phải kèm route phân phối tiền — cấm "auction vào hư
+  không") và `tan_ra` (null-treatment, sink đăng ký). Config `"cong"` không có drain ⇒ **SystemExit**
+  khi `tao_the_gioi` (fail-closed).
+- **INVARIANT E1′ (no absorbing sink, mạnh hơn E1):** ∀tick, ∀terminal subject S ∈ {`VO_THUA_NHAN`,
+  `DI_SAN:*`, `CONG_QUY`}, ∀`ts`: `so_du(S, ts) == 0` **hoặc** S có drain đã khai báo **đang BẬT**
+  phủ đúng `ts`. Thêm chủ thể ledger mới mà quên khai báo drain ⇒ test FAIL (T-16).
+- **Cổng định chế (charter §5):** *cơ chế* estate (chủ thể có hạn + closure "đúng một đích") là
+  **Lớp-1/2** (sửa lỗi kế toán, không cần cổng). *Chế độ truyền thừa* (`ho.di_san.che_do`) **là định
+  chế có tên** và **RỚT điều kiện #2 (cost = 0 — thừa kế miễn phí)** ⇒ theo charter §5 nó được giữ
+  như **`institutional_assumption` / `experimental_treatment` tường minh**, KHÔNG được gọi là "tự
+  phát nội sinh", và **bắt buộc** có ablation `tan_ra` với dấu pre-registered. Nếu P4 thấy nó chi
+  phối kết quả ⇒ phải thêm chi phí thừa kế thật trước khi nâng tier (**không bịa chi phí bây giờ chỉ
+  để cho qua checklist**).
+- **INV-M1 (metrics):** TUYỆT ĐỐI không đặt key `life_expectancy`/`tuoi_tho` từ tuổi người **SỐNG**;
+  `song.tuoi_tb` ≠ `chet.tuoi_tb_khi_chet`; period rate dùng **person-ticks**; mẫu nhỏ ⇒ `None`
+  (không 0 giả). Grep hiện tại 0 match ⇒ đây là **phòng ngừa**, không phải sửa lỗi. Cấm tính
+  death/birth rate bằng cách đọc lại `events.jsonl` (F-21: `real60_spatial` có hai lịch sử phản-thực
+  ở tick 106–117).
+- **Gate cứng P1:** overlay hộ TẮT ⇒ rulebot 20 tick phải ra **đúng ba hash pin** (đã verify lại tại
+  commit `db8e4fb` + working tree P0: `4ba32e51…0292b` seed 11 base, `f1f8cd4b…d153` seed 42 base,
+  `afc5b09e…5745` seed 11 + `spatial_v1`). Lệch một ký tự = FAIL. Không thêm key `ho:` vào base
+  `config/world.yaml` (giữ `cfg.digest()` base bất biến); overlay MỚI
+  `scenarios/agrarian_transition_v1/spatial_livelihood_v2.yaml`.
+- PENDING (ngoài P1, ghi để không ai tưởng đã dọn sạch): blueprint mồ côi giữ tên người chết
+  (`demography.py:296-300`) vẫn là ghost-owner; `duoi_khoi_ho`; `quy_tac_cap` khác `nhu_cau_deu`
+  (là định chế phân phối, cần cổng đầy đủ); nợ truyền đời; pantry.

@@ -46,11 +46,27 @@ decision-maker on feasibility, welfare-regret, action-diversity, and (for LLMs) 
 simpler policies and a real LLM produce none. (4) A **reproducible, non-network artifact** with a
 claim-tier gate that refuses "empirical/validated" labels without data.
 
-## 2. Related work (to expand)
+## 2. Related work
 
-LLM agent societies (generative-agent simulations, economic LLM-ABMs); classical ABM in economics
-and the identification critique; reproducibility and benchmarking for LLM agents. Key contrast: we
-treat the LLM as a *treatment* with measurable error, not as ground-truth behavior (cf. REVIEW.md).
+*(Thematic positioning; real citations to be inserted by the author — placeholders `[CITE: …]` are
+NOT fabricated references.)*
+
+- **LLM agent societies / generative agents** `[CITE: generative-agent simulations; LLM economic
+  agents; multi-agent LLM societies]` — report emergent social/economic behavior; typically one
+  decision-maker, few seeds, no ground-truth benchmark, no controlled decision-maker comparison. We
+  add exactly those.
+- **Agent-based computational economics** `[CITE: ACE surveys; artificial markets]` and the
+  **identification/over-parameterization critique of ABMs** `[CITE: ABM validation/identification]` —
+  we operationalize the critique: hold environment fixed, vary the decision-maker, and quantify the gap.
+- **Reproducibility & benchmarking for LLM agents** `[CITE: agent benchmarks; LLM eval reproducibility;
+  tool-use/agent harnesses]` — we contribute a ground-truth micro-task benchmark and, notably,
+  bit-exact **transcript replay of a real LLM run** (§7), closing a reproducibility gap.
+- **Constraint/accounting in simulation** `[CITE: double-entry / stock-flow-consistent models;
+  action grammars/compilers]` — our ledger + action-validation is the mechanism that both prevents
+  hallucinated wealth and enables controlled decision-maker swaps.
+
+Key stance (cf. our design charter): the LLM is a *treatment with measurable error* (prompt/model/
+temperature are versioned, hashed, replayable), not ground-truth human behavior.
 
 ## 3. System
 

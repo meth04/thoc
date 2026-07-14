@@ -14,8 +14,10 @@ from engine import (
     education,
     market,
     metrics,
+    metrics_demography,
     metrics_research,
     production,
+    projects,
 )
 from engine.intents import KeHoach
 from engine.market import Lenh, NiemYetDat
@@ -28,6 +30,13 @@ MindFn = Callable[[World], dict[str, KeHoach]]
 def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     w.tick += 1
 
+    # Observation-only provenance is reset before the mind runs. A custom
+    # mind that does not record an origin is reported as `external` below,
+    # rather than silently counted as an LLM decision.
+    from minds.provenance import reset_tick as reset_decision_provenance
+
+    reset_decision_provenance(w)
+
     # 1. bat_dau: tuổi tiến đúng một khoảng lịch; ``tuoi_tick`` được lưu theo nửa-năm
     # để legacy 2-tick/năm không đổi, còn calendar 3 mùa/năm tăng 2/3 mỗi mùa.
     buoc_tuoi = 2.0 / w.tick_moi_nam()
@@ -36,12 +45,20 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     for a in w.agents.values():
         if a.con_song:
             a.tuoi_tick += buoc_tuoi
+    # P4: capture person-time before any birth/death this tick. The metric is
+    # derived from engine state, never reconstructed from an event journal.
+    metrics_demography.bat_dau_tick(w)
     loai_tt, _ = w.thoi_tiet(w.tick)
     if w.dau_nam():
         w.events.ghi(w.tick, "thoi_tiet", kieu=loai_tt)
 
     # 2+3. trigger + quyết định
     ke_hoach = mind_fn(w)
+    from minds.provenance import record_plan
+
+    for aid in sorted(ke_hoach):
+        if aid not in w.decision_provenance_tick.get("plans", {}):
+            record_plan(w, aid, "external")
 
     # 3b. lập pháp nhân + di chúc + di cư (trước bảng rao để entity ký được ngay)
     from engine import entities as entities_mod
@@ -100,6 +117,14 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
             if dn is not None and (dn.den is None or dn.den == aid) and dn.tu != aid:
                 dn.tra_loi[aid] = tl
     board.khop_bang_rao(w)
+    # Versioned P3 commerce: escrow is locked before production/market can spend the same
+    # inventory. Gate OFF is a no-op, preserving all legacy tick ordering.
+    from engine import quotes
+
+    quotes.buoc_bao_gia(w, ke_hoach)
+    # A work order is only registered here. Its inputs/labour are handled after
+    # the current tick has issued labour and any ferry crossing has occurred.
+    projects.dang_ky_du_an(w, ke_hoach)
     for aid in sorted(ke_hoach):
         for hd_id in ke_hoach[aid].don_phuong_pha_vo:
             hd = w.hop_dong.get(hd_id)
@@ -145,6 +170,13 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     from engine import spatial
 
     spatial.buoc_qua_song(w, ke_hoach)
+    projects.buoc_du_an(w, ke_hoach)
+    # P2 ecology: biomass regenerates before extraction; optional reforestation uses actual
+    # labor before all other production. Both functions are strict no-ops outside v2.
+    from engine import forest
+
+    forest.tai_sinh_rung(w)
+    forest.trong_rung_dat(w, ke_hoach)
     production.thi_hanh_san_xuat(w, ke_hoach)
     # thuế SAU thu hoạch: thu theo suất trên sản lượng gặt → công quỹ → chia đều đầu người
     politics.thu_thue_va_chia(w)
@@ -220,6 +252,9 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
 
     # 7. thi_hanh_hop_dong: clause định kỳ, đáo hạn, vi phạm, cưỡng chế
     contracts.thi_hanh_hop_dong_tick(w, chet_tick=w.chet_tick_truoc)
+    # Future-dated quote fills settle only at their declared due tick, after other contractual
+    # obligations but before consumption/demography. Spot fills already settled in phase 4.
+    quotes.giao_hang_den_han(w)
     # entity: chia lợi nhuận + kiểm tra mất khả năng thanh toán → thanh lý
     from engine.entities import chia_loi_nhuan_dinh_ky, kiem_tra_pha_san
 
@@ -234,6 +269,13 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     cn_mod.buoc_chan_nuoi(w)
     cn_mod.hao_thit(w)
     consumption.hao_hut_kho(w)
+    # Hao kho tác động lên MỌI chủ thể ledger — kể cả chủ thể ký quỹ (`KY_QUY:*`, `DU_AN:*`).
+    # Sổ khai báo của báo giá/dự án phải bám theo sổ cái, nếu không audit E1′ thấy
+    # `sổ=23.5176 khai=24.0` và dừng run. Ký quỹ KHÔNG được miễn hao: miễn hao là tặng agent
+    # một kho lưu trữ miễn phí (gửi thóc vào một báo giá không ai nhận để né hao mòn) — đúng
+    # loại exploit sẽ bóp méo chính câu hỏi mô hình đang đo.
+    quotes.dong_bo_ky_quy(w)
+    projects.dong_bo_ky_quy(w)
     consumption.an_va_suc_khoe(w)
     consumption.dich_benh(w)
 
@@ -244,6 +286,19 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
         aid for aid, a in w.agents.items() if not a.con_song
     } - truoc
     xa_hoi.cuu_mang_mo_coi(w)  # trẻ mồ côi cả cha lẫn mẹ được cưu mang ngay tick này
+
+    # 9b/9c (ADR 0007 §C.2). Vị trí này thỏa hai ràng buộc CỨNG: (a) TRƯỚC
+    # `audit.kiem_toan_the_gioi` ⇒ không có tick nào "tạm lệch rồi cân sau"; (b) SAU
+    # `cuu_mang_mo_coi` ⇒ trẻ mồ côi đã có giám hộ trước khi tính hộ. ADR KHÔNG hoán vị thứ tự
+    # bước tick (đảo demography lên trước contracts sẽ đổi quỹ đạo của MỌI run, kể cả gate
+    # TẮT) — F-20 được sửa bằng cách THÊM 9c, không phải hoán vị 7/9. Cả hai no-op khi TẮT.
+    from engine import estate, household
+
+    for aid in sorted(ke_hoach):
+        for ds_id in getattr(ke_hoach[aid], "yeu_cau_di_san", ()):
+            estate.yeu_cau_di_san(w, aid, str(ds_id))
+    household.buoc_cu_tru(w, ke_hoach)  # 9b — MỌI mutation membership ở đây, và CHỈ ở đây
+    estate.buoc_di_san(w)  # 9c — chủ nợ → di chúc → kin → hết hạn → đóng
 
     # 10. giao_duc
     education.buoc_giao_duc(w, ke_hoach)
@@ -268,9 +323,11 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     # đủ ăn. KHÔNG vào world_hash (engine không đọc lại → không đụng determinism). Head mới
     # → bắt đầu 0; head biến mất (hộ tan/chết) → dọn khỏi dict. Giá trị research surface phản
     # ánh streak tới HẾT tick TRƯỚC (lag 1 tick — đúng bản chất state đóng sổ cuối ket_toan).
+    # ADR 0007 §F.3: khi cư trú bền BẬT, streak được re-key theo `rid` thay vì head-id ⇒ sửa
+    # luôn giới hạn ADR 0003 §E ("head đổi ⇒ streak gãy"). Vẫn NGOÀI world_hash.
     heads_song: set[str] = set()
     for row in sorted(economy.household_snapshot(w), key=lambda r: r["head"]):
-        head = str(row["head"])
+        head = str(row.get("rid") or row["head"])
         heads_song.add(head)
         if float(row["food_security"]) < 1.0:
             w.poverty_streak[head] = w.poverty_streak.get(head, 0) + 1
@@ -370,4 +427,9 @@ def _di_cu(w: World, aid: str) -> None:
     for p in gan_tam:
         p.lang = vid
     w.agents[aid].lang = vid
+    # ADR 0007 §C.3 transition 6: hộ mới ở làng mới có hiệu lực CUỐI tick (bước 9b) — người di
+    # cư ĐÃ ăn với hộ cũ trong tick này. Đó là hành vi KHAI BÁO, không phải bug.
+    from engine import household
+
+    household.ghi_bien_co(w, "di_cu", nguoi=aid, lang=vid)
     w.events.ghi(w.tick, "di_cu", id=aid, lang=vid)

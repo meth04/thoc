@@ -213,15 +213,23 @@ def gia_tri_thi_truong(w, tai_san: str, so_luong: float) -> float:
     return so_luong * gia if gia is not None else 0.0
 
 
-def xiet_the_chap(w, hd: HopDong, chu_no: str, con_no: str, no_con_lai_thoc: float) -> None:
-    """Xiết thế chấp theo giá chợ gần nhất; thừa hoàn lại (SPEC 3.2)."""
+def xiet_the_chap(w, hd: HopDong, chu_no: str, con_no: str, no_con_lai_thoc: float,
+                  chu_dat: str | None = None) -> None:
+    """Xiết thế chấp theo giá chợ gần nhất; thừa hoàn lại (SPEC 3.2).
+
+    ``chu_dat`` (ADR 0007 §D.3): chủ thửa thế chấp có thể KHÁC ``con_no`` khi con nợ đã chết —
+    tài sản ĐỘNG nằm ở ``DI_SAN:<aid>`` còn ĐẤT vẫn đứng tên người mất (đất không vào estate vì
+    ``audit`` cấm chủ thửa không hoạt động). Mặc định ``None`` ⇒ ``con_no`` ⇒ hành vi legacy
+    KHÔNG đổi một ký tự.
+    """
+    chu_dat = chu_dat or con_no
     for tc in hd.the_chap:
         if no_con_lai_thoc <= 1e-9:
             break
         loai_tc, gia_tri = tc.split(":", 1)
         if loai_tc == "thua":
             p = w.parcels.get(gia_tri)
-            if p is None or p.chu != con_no:
+            if p is None or p.chu != chu_dat:
                 continue
             gia_dat = w.gia_gan_nhat(f"dat:{gia_tri}") or w.gia_gan_nhat("dat") or 0.0
             p.chu = chu_no
@@ -317,6 +325,36 @@ def dot_vi_the(w, hd: HopDong) -> None:
         sl = w.ledger.so_du(chu, ts)
         if sl > 0:
             w.ledger.huy(chu, ts, sl, "het_hd", f"hết hợp đồng {hd.id}", w.tick)
+
+
+def _chan_no_chet_theo_con_no(w, hd: HopDong, _r) -> None:
+    """F-20 fail-loud (ADR 0007 §D.4).
+
+    LEGACY (estate TẮT): ``if dao_han or ben_chet: trang_thai="huy"`` + ``dot_vi_the`` — KHÔNG
+    settlement ⇒ **nợ chết theo con nợ**, chủ nợ mất trắng. Nhánh này được ĐÓNG BĂNG CÓ GHI CHÚ.
+
+    Khi ``ho.di_san.bat`` BẬT, nhánh ``ben_chet`` cho một **agent** trở thành KHÔNG THỂ xảy ra:
+    ``estate.buoc_di_san`` đã settle + đóng hợp đồng đó ở bước 9c của CHÍNH tick chết, trước khi
+    bước 7 của tick sau chạy. Gặp nó ở đây ⇒ estate đã BỎ SÓT một hợp đồng ⇒ bug thật ⇒ DỪNG
+    (điều luật #1), không được im lặng hủy nợ. Nhánh vẫn được GIỮ cho ``_ben_mat`` do vị thế vô
+    thừa nhận / entity biến mất — đó là trường hợp khác.
+    """
+    from engine.estate import _di_san_bat
+
+    if not _di_san_bat(w):
+        return
+    xau = sorted({
+        _r(b) for b in hd.cac_ben
+        if _r(b) in w.agents and not w.agents[_r(b)].con_song
+    })
+    if xau:
+        from engine.audit import LoiBaoToan
+
+        raise LoiBaoToan(
+            f"[tick {w.tick}] F-20: hợp đồng {hd.id} còn hiệu lực với người CHẾT {xau} khi "
+            "ho.di_san.bat BẬT ⇒ estate đã bỏ sót nó ở bước 9c ⇒ nợ sắp bị hủy KHÔNG "
+            "settlement. Dừng, không hủy êm."
+        )
 
 
 def thi_hanh_hop_dong_tick(w, chet_tick: set[str] | None = None) -> None:
@@ -421,6 +459,8 @@ def thi_hanh_hop_dong_tick(w, chet_tick: set[str] | None = None) -> None:
             dot_vi_the(w, hd)
             continue
         if dao_han or ben_chet:
+            if ben_chet:
+                _chan_no_chet_theo_con_no(w, hd, _r)
             hd.trang_thai = "hoan_thanh" if not ben_chet else "huy"
             w.events.ghi(w.tick, "huy_hd" if ben_chet else "hoan_thanh_hd", hd=hd.id)
             if not ben_chet:

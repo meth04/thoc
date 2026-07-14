@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections import deque
 from pathlib import Path
 
@@ -43,13 +44,38 @@ def bam_prompt(prompt: str) -> str:
 
 
 class TranscriptWriter:
-    """Ghi transcript.jsonl append-only: mỗi call một dòng JSON đã che key."""
+    """Ghi transcript.jsonl append-only: mỗi call một dòng JSON đã che key.
 
-    def __init__(self, path: Path):
+    ``call_id`` phải DUY NHẤT TOÀN RUN. Trước P0.2, writer mở ``"a"`` nhưng đặt ``_n = 0``
+    ⇒ mỗi process mới đếm lại từ 1 ⇒ ``real60_spatial`` có **403 call_id bị dùng lại**
+    (`docs/reviews/Report_v2-ledger.md` F-05). ``start_call_id`` được gieo lại từ
+    ``record_count`` của checkpoint đang nạp (``engine/journal.py``).
+
+    ``run_uuid``/``segment_id`` là metadata forensic (phân biệt bản ghi giữa file live và
+    file quarantine). **Khóa replay VẪN là ``prompt_hash``** — không đổi.
+    """
+
+    def __init__(self, path: Path, *, start_call_id: int = 0,
+                 run_uuid: str | None = None, segment_id: int = 0):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._f = open(self.path, "a", encoding="utf-8")  # noqa: SIM115 — giữ mở suốt run
-        self._n = 0
+        self._n = int(start_call_id)
+        self.run_uuid = run_uuid
+        self.segment_id = int(segment_id)
+
+    def rebase(self, *, start_call_id: int, run_uuid: str | None = None,
+               segment_id: int = 0) -> None:
+        """Gieo lại counter/identity sau khi run.py nạp journal manifest (mind được dựng
+        trước khi biết segment). Chỉ hợp lệ trước call đầu tiên của phiên."""
+        self._n = int(start_call_id)
+        self.run_uuid = run_uuid
+        self.segment_id = int(segment_id)
+
+    @property
+    def so_ghi(self) -> int:
+        """call_id cao nhất đã ghi (toàn run)."""
+        return self._n
 
     def ghi(self, tick: int, tier: str, provider: str, model: str, temperature,
             prompt: str, response_raw: str, tok_in: int, tok_out: int,
@@ -64,6 +90,8 @@ class TranscriptWriter:
         is_error = error_type is not None or provider == "loi"
         self._f.write(json.dumps({
             "call_id": self._n,
+            "run_uuid": self.run_uuid,
+            "segment_id": self.segment_id,
             "tick": int(tick),
             "tier": tier,
             "provider": provider,
@@ -79,12 +107,23 @@ class TranscriptWriter:
             "tok_out": int(tok_out),
         }, ensure_ascii=False) + "\n")
 
+    # ``flush``/``fsync``/``dong`` là IDEMPOTENT (như ``EventLog`` và ``LLMCallLog``): trên
+    # đường crash, ``run.chay_run`` đóng writer để không có handle mồ côi nào flush buffer ĐÈ
+    # vào journal vừa bị truncate lúc resume; caller (test seam, driver) có thể đóng lần nữa.
+    # Đóng hai lần phải là no-op, không phải ``ValueError: I/O operation on closed file``.
     def flush(self) -> None:
-        self._f.flush()
+        if not self._f.closed:
+            self._f.flush()
+
+    def fsync(self) -> None:
+        if not self._f.closed:
+            self._f.flush()
+            os.fsync(self._f.fileno())
 
     def dong(self) -> None:
-        self._f.flush()
-        self._f.close()
+        if not self._f.closed:
+            self._f.flush()
+            self._f.close()
 
 
 class TranscriptReader:

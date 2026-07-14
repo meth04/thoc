@@ -86,6 +86,10 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         if p.loai == "rung" and (not dung_pool or co_the_o_bo(w, aid, p.bo))
     ]
     if not rung_toi_duoc:
+        if dung_pool:
+            from engine.production import _ghi_su_co
+
+            _ghi_su_co(w, aid, "bắt gà không thành: không có habitat rừng tới được")
         return
     cong_co = min(so_cong, w.ledger.so_du(aid, "cong"))
     if cong_co <= 0:
@@ -97,6 +101,9 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         suc_chua = _ga_rung_suc_chua(w)
         ton = max(0.0, float(getattr(w, "ga_rung_ton", 0.0) or 0.0))
         if suc_chua <= 0 or ton <= 1e-9:
+            from engine.production import _ghi_su_co
+
+            _ghi_su_co(w, aid, "bắt gà không thành: habitat đã cạn")
             return
         dinh_muc = float(pool_cfg["cong_moi_con"])
         mat_do = min(1.0, ton / suc_chua)
@@ -198,11 +205,21 @@ def tai_sinh_ga_rung(w: World) -> None:
     if not _ga_rung_bat(w):
         return
     suc_chua = _ga_rung_suc_chua(w)
+    ton_cu = max(0.0, float(getattr(w, "ga_rung_ton", 0.0) or 0.0))
     if suc_chua <= 0:
         w.ga_rung_ton = 0.0
+        if ton_cu > 1e-9:
+            w.events.ghi(w.tick, "ga_rung_suc_chua_giam", ton_truoc=round(ton_cu, 9),
+                         suc_chua=0.0, mat=round(ton_cu, 9))
         return
     cfg = w.cfg.get("khong_gian.ga_rung")
     ton = float(getattr(w, "ga_rung_ton", suc_chua * float(cfg["ty_le_ton_ban_dau"])))
+    # Logging/clearing can lower K below the surviving stock. This is an ecological loss,
+    # not a ledger burn, but it must be explicit in the run journal rather than silently
+    # clamping a commons pool.
+    if ton > suc_chua + 1e-9:
+        w.events.ghi(w.tick, "ga_rung_suc_chua_giam", ton_truoc=round(ton, 9),
+                     suc_chua=round(suc_chua, 9), mat=round(ton - suc_chua, 9))
     ton = min(max(0.0, ton), suc_chua)
     r = float(cfg["tai_sinh_moi_tick"])
     w.ga_rung_ton = min(suc_chua, ton + r * ton * (1.0 - ton / suc_chua))

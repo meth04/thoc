@@ -35,8 +35,17 @@ def an_va_suc_khoe(w: World) -> None:
     td = w.cfg.raw()["tieu_dung"]
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
     from engine.economy import food_equivalence
+    from engine.household import _cap_luong_thuc_bat, cap_va_an, rid_cua
 
     food_assets = food_equivalence(w)
+    # ADR 0007 §B: khi BẬT, mỗi kg vượt ranh giới cá nhân đi qua `ledger.chuyen(người-cấp →
+    # người-ăn)` + event `cap_luong_thuc` TRƯỚC `huy(người-ăn, "an")`. Hôm nay engine đốt thóc
+    # của thành viên khác trong hộ mà KHÔNG để lại bất kỳ dấu vết nào về ai nuôi ai — đó là
+    # đúng cái lỗ mà Report_v2 §4.2 nêu. Quy tắc phân bổ giữ NGUYÊN semantics: `nhu_cau_deu`
+    # (mỗi người được cấp đúng nhu cầu của mình), nguồn rút vẫn "kho lớn nhất gánh trước",
+    # thiếu vẫn chia đều theo tỷ lệ ở mức HỘ (`ty_le_no`). KHÔNG nhân dịp này thêm luật ưu
+    # tiên trẻ em/người già — đó là một treatment riêng, phải qua cổng, ngoài P1.
+    cap = _cap_luong_thuc_bat(w)
 
     # Ăn theo hộ: gom nhu cầu, ăn từ kho các thành viên (chủ hộ trước).
     # Dedup bằng da_xu_ly tại thành viên ĐẦU TIÊN gặp theo thứ tự sorted —
@@ -54,6 +63,8 @@ def an_va_suc_khoe(w: World) -> None:
             for m in ho
         }
         tong_nhu_cau = sum(nhu_cau_tung_nguoi.values())
+        con_thieu = dict(nhu_cau_tung_nguoi)  # nhu cầu CHƯA được cấp của từng người (quy thóc)
+        rid = (rid_cua(w, aid) or ho[0]) if cap else ""
         # Ăn lúa trước rồi ngô/khoai; mỗi thứ có quy đổi dinh dưỡng công khai. Cây vụ
         # đông không bị tự đổi thành thóc, chỉ trực tiếp nuôi hộ khi còn trong kho.
         thieu = tong_nhu_cau
@@ -66,7 +77,10 @@ def an_va_suc_khoe(w: World) -> None:
                     break
                 tru = min(ton_kho[m], thieu / quy_doi)
                 if tru > 0:
-                    w.ledger.huy(m, ts, tru, "an", f"ăn {ts}", w.tick)
+                    if cap:
+                        cap_va_an(w, ho, m, ts, tru, quy_doi, con_thieu, rid)
+                    else:
+                        w.ledger.huy(m, ts, tru, "an", f"ăn {ts}", w.tick)
                     thieu -= tru * quy_doi
         an_duoc = tong_nhu_cau - max(0.0, thieu)
         # thiếu lương thực thực vật → ăn THỊT rồi CÁ (đậm dinh dưỡng hơn thóc, mau hỏng)
@@ -80,7 +94,10 @@ def an_va_suc_khoe(w: World) -> None:
                     if co <= 0 or thieu <= 1e-9:
                         continue
                     an_them = min(co, thieu / quy_doi)
-                    w.ledger.huy(m, ts, an_them, "an", f"ăn {ts}", w.tick)
+                    if cap:
+                        cap_va_an(w, ho, m, ts, an_them, quy_doi, con_thieu, rid)
+                    else:
+                        w.ledger.huy(m, ts, an_them, "an", f"ăn {ts}", w.tick)
                     thieu -= an_them * quy_doi
             an_duoc = tong_nhu_cau - max(0.0, thieu)
         ty_le_no = an_duoc / tong_nhu_cau if tong_nhu_cau > 0 else 1.0

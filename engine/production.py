@@ -156,9 +156,19 @@ def khai_hoang_dat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 continue
             ghi_cong_dung(w, "phi_nong", cong_moi)
             tu_loai = p.loai
+            # Only the versioned ecology treatment turns residual forest biomass into wood.
+            # Keep legacy event layout byte-for-byte when the P2 gate is off.
+            from engine.forest import _rung_bat, thu_hoi_go_khai_hoang
+
+            ecology = _rung_bat(w)
+            go_thu_hoi = thu_hoi_go_khai_hoang(w, aid, p) if ecology else 0.0
             p.loai = "ruong"
             p.mau_mo = p.mau_mo_goc = mau_mo
-            w.events.ghi(w.tick, "khai_hoang", id=aid, thua=pid, tu_loai=tu_loai)
+            if ecology:
+                w.events.ghi(w.tick, "khai_hoang", id=aid, thua=pid, tu_loai=tu_loai,
+                             go_thu_hoi=round(go_thu_hoi, 9))
+            else:
+                w.events.ghi(w.tick, "khai_hoang", id=aid, thua=pid, tu_loai=tu_loai)
             w.ghi_ky_uc(aid, f"tôi vỡ hoang thửa {pid} ({tu_loai}) thành ruộng", doi=True)
 
 
@@ -358,9 +368,23 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         ):
             if cong_xin <= 0:
                 continue
-            # quặng chỉ khai thác được nếu làng có ô mỏ; gỗ cần ô rừng
+            # Quặng cần mỏ, gỗ cần rừng. P2 versioned ecology also makes far-bank access a
+            # physical constraint; spatial_v1 remains a legacy control with its old path.
             loai_o = "mo_dong" if tai_san == "quang_dong" else "rung"
-            if not any(p.loai == loai_o for p in w.parcels.values()):
+            from engine.forest import _rung_bat, khai_thac_go
+            from engine.spatial import co_the_o_bo
+
+            ecology = _rung_bat(w)
+            if ecology:
+                co_nguon = any(
+                    p.loai == loai_o and co_the_o_bo(w, aid, p.bo)
+                    for p in w.parcels.values()
+                )
+            else:
+                co_nguon = any(p.loai == loai_o for p in w.parcels.values())
+            if not co_nguon:
+                if ecology:
+                    _ghi_su_co(w, aid, f"khai thác {tai_san} không thành: chưa tới nguồn")
                 continue
             cong_co = min(cong_xin, w.ledger.so_du(aid, "cong"))
             if cong_co <= 0:
@@ -368,10 +392,22 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             hieu_suat_kt = 1.0 if w.ledger.so_du(aid, "cong_cu") >= 1.0 else float(
                 kt["hieu_suat_khong_cong_cu"]
             )
-            w.ledger.huy(aid, "cong", cong_co, "dung", f"khai thác {tai_san}", w.tick)
-            ghi_cong_dung(w, "phi_nong", cong_co)
-            thu_duoc = cong_co * dinh_muc * hieu_suat_kt * he_so_may(w, aid)
-            w.ledger.sinh(aid, tai_san, thu_duoc, luong, f"khai thác {tai_san}", w.tick)
+            if tai_san == "go" and ecology:
+                thu_duoc, cong_dung = khai_thac_go(
+                    w,
+                    aid,
+                    cong_co,
+                    dinh_muc * hieu_suat_kt * he_so_may(w, aid),
+                )
+                if thu_duoc <= 1e-9:
+                    _ghi_su_co(w, aid, "khai thác gỗ không thành: rừng tới được đã cạn")
+                    continue
+                ghi_cong_dung(w, "phi_nong", cong_dung)
+            else:
+                w.ledger.huy(aid, "cong", cong_co, "dung", f"khai thác {tai_san}", w.tick)
+                ghi_cong_dung(w, "phi_nong", cong_co)
+                thu_duoc = cong_co * dinh_muc * hieu_suat_kt * he_so_may(w, aid)
+                w.ledger.sinh(aid, tai_san, thu_duoc, luong, f"khai thác {tai_san}", w.tick)
             if w.ledger.so_du(aid, "cong_cu") >= 1.0:
                 _hao_mon_cong_cu(w, aid)
 

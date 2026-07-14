@@ -48,6 +48,46 @@ def test_cong_cu_ten_la_khong_raise():
     assert "loi" in kq
 
 
+def test_fact_cards_local_include_visible_quote_and_project_without_mutating_state():
+    from pathlib import Path
+
+    from engine import projects, quotes
+    from engine.intents import KeHoach
+    from engine.world import tao_the_gioi
+
+    root = Path(__file__).resolve().parents[1]
+    spatial = root / "scenarios" / "agrarian_transition_v1" / "spatial_v1.yaml"
+    livelihood = root / "scenarios" / "agrarian_transition_v1" / "spatial_livelihood_v2.yaml"
+    w = tao_the_gioi(load_config(overlays=[spatial, livelihood]), 91, events_path=None)
+    owner, buyer = sorted(w.agents)[:2]
+    site = next(p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None)
+    site.chu = owner
+    w.tick = 1
+    w.ledger.sinh(owner, "go", 20.0, "khai_thac", "fixture", w.tick)
+    w.ledger.sinh(buyer, "thoc", 100.0, "khoi_tao", "fixture", w.tick)
+    projects.dang_ky_du_an(w, {
+        owner: KeHoach(id=owner, tao_du_an=[{"loai_du_an": "nha", "thua": site.id}]),
+    })
+    quotes.buoc_bao_gia(w, {
+        owner: KeHoach(id=owner, dang_bao_gia=[{
+            "chieu": "ban", "tai_san": "go", "so_luong": 4.0, "don_gia": 10.0,
+            "thanh_toan": "thoc", "doi_tac": None, "giao_tai": "ngay",
+        }]),
+    })
+
+    h0 = w.world_hash()
+    du_an = thuc_thi(w, owner, "xem_du_an", {})
+    bao_gia = thuc_thi(w, buyer, "xem_bao_gia", {})
+    co_hoi = thuc_thi(w, owner, "xem_co_hoi_san_xuat", {})
+    aggregate = thuc_thi(w, buyer, "get_phan_bo_cua_cai", {})
+
+    assert du_an["du_an"][0]["id"] == "DA00001"
+    assert bao_gia["bao_gia"][0]["id"] == "BG00001"
+    assert isinstance(co_hoi["co_hoi"], list)
+    assert aggregate["so_dan"] >= 1
+    assert w.world_hash() == h0
+
+
 def _fake_transport_vong_cong_cu(dem: dict):
     """Gemini giả: lượt 1 gọi công cụ xem_thoi_tiet; lượt 2 trả quyết định."""
 

@@ -22,6 +22,7 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
     tt = cfg.get("nhan_khau.tuoi_truong_thanh")
     nc = cfg.raw()["nhu_cau"]
     sx = cfg.raw()["san_xuat"]
+    cong_moi_tick = float(nc["ngay_cong_moi_tick"])
     kh = KeHoach(id=aid)
     kh.y_dinh_sinh_con = the.y_dinh_sinh_con
 
@@ -46,13 +47,19 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
 
     if w.mua_mua():
         thieu = max(0.0, muc_du_tru * 2 - thoc_ho)
-        so_thua_can = max(1, min(the.canh_toi_da, round(thieu / sx["san_luong_goc_kg"] + 0.5)))
+        so_thua_can = max(
+            1,
+            min(the.canh_toi_da, int(sx["thua_toi_da_tu_canh"]),
+                round(thieu / sx["san_luong_goc_kg"] + 0.5)),
+        )
         cong_thue_vao = bc.cong_thue_vao.get(aid, 0.0)
         if cong_thue_vao > 0:
             so_thua_can = max(so_thua_can, len(bc.ruong_cua.get(aid, ())))
-        toi_da_cong = int((180.0 * (a.health / 100.0) + cong_thue_vao) // sx["cong_moi_thua"])
+        toi_da_cong = int(
+            (cong_moi_tick * (a.health / 100.0) + cong_thue_vao) // sx["cong_moi_thua"]
+        )
         toi_da_giong = int(max(0, thoc_ho - nhu_cau_tick) // sx["giong_kg_moi_thua"])
-        so_thua = min(so_thua_can, toi_da_giong, max(toi_da_cong, 1))
+        so_thua = min(so_thua_can, toi_da_giong, toi_da_cong)
         if so_thua > 0:
             kh.canh_thua = _chon_thua_canh(bc, aid, so_thua, da_nham)
     else:
@@ -61,13 +68,13 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
         # nhà 240 công: một người không đủ — cần vợ/chồng góp công hoặc công thuê vào
         vc = w.agents.get(a.vo_chong) if a.vo_chong else None
         vc_lon = vc is not None and vc.con_song and vc.truong_thanh(tt)
-        cong_du_kien = (180.0 * (a.health / 100.0) + bc.cong_thue_vao.get(aid, 0.0)
-                        + (180.0 * (vc.health / 100.0) if vc_lon else 0.0))
+        cong_du_kien = (cong_moi_tick * (a.health / 100.0) + bc.cong_thue_vao.get(aid, 0.0)
+                        + (cong_moi_tick * (vc.health / 100.0) if vc_lon else 0.0))
         if not co_nha and go_co >= sx["recipe"]["nha"]["go"]:
             if cong_du_kien >= float(sx["recipe"]["nha"]["cong"]):
                 kh.xay_nha = 1
         elif not co_nha and the.khai_go_khi_ranh and an_ninh > 0.4:
-            kh.cong_khai_go = 120.0
+            kh.cong_khai_go = cong_moi_tick
         # vợ/chồng (id lớn hơn) góp công cho người dựng nhà cùng hộ
         if (not co_nha and a.vo_chong and aid > a.vo_chong and vc is not None
                 and vc.con_song and w.ledger.so_du(a.vo_chong, "go")
@@ -84,9 +91,10 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
         ]
 
     # mua bán theo ngưỡng thẻ
-    if the.mua_cong_cu_khi_hong and w.ledger.so_du(aid, "cong_cu") < 1 and thoc_ho > 500:
+    if the.mua_cong_cu_khi_hong and w.ledger.so_du(aid, "cong_cu") < 1:
         gia_cu = gia_ky_vong(w, aid, "cong_cu")
-        kh.dat_lenh.append(Lenh(aid, "mua", "cong_cu", 1.0, round(gia_cu * 1.05, 0)))
+        if thoc_ho > muc_du_tru + gia_cu * 1.05:
+            kh.dat_lenh.append(Lenh(aid, "mua", "cong_cu", 1.0, round(gia_cu * 1.05, 0)))
     if the.ban_go_nguong is not None:
         go_co = w.ledger.so_du(aid, "go")
         if go_co > the.ban_go_nguong:
@@ -108,8 +116,10 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
         for pid in (a.cha, a.me):
             if pid and pid in w.agents:
                 cu = w.agents[pid]
-                if cu.con_song and cu.tuoi_nam > 60 and w.ledger.so_du(pid, "thoc") < 120:
-                    kh.bieu.append((pid, "thoc", 120.0))
+                if (cu.con_song
+                        and cu.tuoi_nam > float(cfg.get("lao_dong_theo_tuoi.tuoi_giam_suc"))
+                        and w.ledger.so_du(pid, "thoc") < nc["nguoi_lon_kg_tick"]):
+                    kh.bieu.append((pid, "thoc", float(nc["nguoi_lon_kg_tick"])))
     # heuristic sinh tồn tự động — chỉ chạy khi thẻ BẬT an_toan_sinh_ton
     # (LLM tắt được bằng patch: giữ nguyên tắc "thẻ do agent tự đặt", check.md D5)
     if the.an_toan_sinh_ton:
@@ -119,7 +129,7 @@ def thi_hanh_the(w: World, aid: str, the: TheChinhSach, bc, da_nham: set[str]) -
             kh.giet_ga = max(kh.giet_ga, 2)
         # túng mà không ruộng → ra sông đánh cá (sinh kế không cần vốn)
         if an_ninh < 0.9 and not bc.ruong_cua.get(aid) and not kh.canh_thua:
-            kh.danh_ca_cong = max(kh.danh_ca_cong, 120.0)
+            kh.danh_ca_cong = max(kh.danh_ca_cong, cong_moi_tick)
         if so_ga > 12:
             gia_ga = gia_ky_vong(w, aid, "ga")
             kh.dat_lenh.append(Lenh(aid, "ban", "ga", round(so_ga - 8, 0),

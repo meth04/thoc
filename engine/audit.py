@@ -32,6 +32,18 @@ def kiem_toan_the_gioi(w, tong_thua_ban_dau: int) -> None:
     tong_cong = w.ledger.tong_tai_san("cong")
     if abs(tong_cong) > DUNG_SAI:
         loi.append(f"Công không bốc hơi hết cuối tick: còn {tong_cong}")
+    # INVARIANT E1′ (ADR 0007 §D.6) — NO ABSORBING SINK / NO RENAMED SINK. Nhánh GATED: chỉ
+    # chạy khi `ho.di_san.bat`. Legacy vẫn được phép giữ `VO_THUA_NHAN` (đóng băng có ghi chú),
+    # nhưng khi estate BẬT thì mọi terminal subject phải có số dư 0 HOẶC có một drain đã khai
+    # báo và ĐANG BẬT phủ đúng loại tài sản đó. E1′ bắt được cả trò "đổi tên sink" (F-36) mà
+    # E1 gốc (`so_du(VO_THUA_NHAN)==0`) không bắt được.
+    from engine.estate import kiem_e1_prime
+    from engine.projects import kiem_tra_ky_quy as kiem_tra_du_an
+    from engine.quotes import kiem_tra_ky_quy
+
+    loi.extend(kiem_e1_prime(w))
+    loi.extend(kiem_tra_ky_quy(w))
+    loi.extend(kiem_tra_du_an(w))
     if loi:
         raise LoiBaoToan(f"[tick {w.tick}] Vi phạm bảo toàn thế giới:\n  " + "\n  ".join(loi))
 

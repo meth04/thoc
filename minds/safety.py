@@ -12,6 +12,7 @@ from __future__ import annotations
 from engine.economy import household_food_equivalent, household_food_need, households
 from engine.intents import KeHoach
 from engine.world import World
+from minds.provenance import record_action
 
 
 def ap_dung_san_an_toi_thieu(w: World, ke_hoach: dict[str, KeHoach], bc,
@@ -56,6 +57,8 @@ def ap_dung_san_an_toi_thieu(w: World, ke_hoach: dict[str, KeHoach], bc,
             continue
         plan = ke_hoach.setdefault(farmer, KeHoach(id=farmer))
         plan.canh_thua = [*plan.canh_thua, *parcels]
+        record_action(w, farmer, "phan_bo_cong", "survival_floor",
+                      detail="minimum_food_security")
         da_nham.update(parcels)
         da_bao_ve += 1
         w.events.ghi(w.tick, "san_an_toi_thieu", ho=members[0], nguoi_canh=farmer,

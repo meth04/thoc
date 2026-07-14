@@ -2,6 +2,9 @@
 
 LLM chỉ trả JSON theo schema này; engine validate whitelist rồi mới thi hành.
 Trường lạ / loại lạ → bỏ qua + ghi unrecognized (điều luật #3).
+
+`LOAI_HANH_DONG` KHÔNG còn là danh sách chép tay ("15 nguyên tố" của SPEC 5 đã lỗi thời —
+catalog hiện có 38 action): nó được DERIVED từ `minds/capabilities.py` (ADR 0006 §A.1).
 """
 
 from __future__ import annotations
@@ -10,18 +13,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# 15 nguyên tố hành động (SPEC 5)
-LOAI_HANH_DONG = {
-    "de_nghi_hop_dong", "tra_loi_hop_dong", "don_phuong_pha_vo", "bao_huy",
-    "lap_phap_nhan",
-    "quyet_dinh_entity", "niem_yet", "dat_lenh", "tra_gia_dat", "phan_bo_cong",
-    "khai_hoang", "canh_vu_dong", "cham_tre", "xay", "nghien_cuu", "buon_chuyen", "cau_hon", "tra_loi_cau_hon",
-    "viet_di_chuc", "di_cu", "yeu_cau_hoan_tra", "chan_nuoi", "bieu",
-    "danh_ca", "mo_tiec", "trom", "nhan_tin",
-    # chính trị (bầu cử, lập pháp, nghiệp đoàn, đình công, bạo động, vận động)
-    "ung_cu", "bo_phieu", "ban_hanh_luat", "hoi_lo", "nghiep_doan",
-    "dinh_cong", "bao_dong", "keu_goi",
-}
+from minds.capabilities import cac_ten_cong_khai
+
+# Whitelist nguyên tố hành động — DERIVED từ capability registry (ADR 0006 §A.1), không
+# còn là danh sách chép tay. Thêm/bớt action = sửa `minds/capabilities.py`; mọi chỗ khác
+# (schema, translate, menu prompt, test) tự theo. Giữ nguyên TÊN PUBLIC `LOAI_HANH_DONG`
+# để không phá import hiện có (minds/translate.py).
+LOAI_HANH_DONG: frozenset[str] = cac_ten_cong_khai()
 
 
 class TheChinhSach(BaseModel):

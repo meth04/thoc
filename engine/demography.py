@@ -6,6 +6,7 @@ import math
 
 import numpy as np
 
+from engine import household
 from engine.intents import KeHoach
 from engine.types import Agent, Persona
 from engine.world import VO_THUA_NHAN, World
@@ -63,6 +64,10 @@ def xu_ly_cau_hon(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         if tra_loi:
             a.vo_chong, b.vo_chong = den, tu
             w.cong_quan_he(tu, den, 1.0)
+            # ADR 0007 §C: cưới (kể cả TÁI HÔN — không phải code path riêng, chỉ là `cuoi` áp
+            # lên người goá) là một trong sáu biến cố ĐƯỢC PHÉP đổi membership. Ở đây chỉ KHAI
+            # BÁO; `household.buoc_cu_tru` (bước 9b) là single-writer duy nhất của `w.cu_tru`.
+            household.ghi_bien_co(w, "cuoi", a=tu, b=den)
             w.events.ghi(w.tick, "cuoi", vo=den if b.gioi_tinh == "nu" else tu,
                          chong=tu if a.gioi_tinh == "nam" else den)
             w.ghi_ky_uc(tu, f"tôi kết hôn với {b.ten} ({den})", doi=True)
@@ -145,6 +150,9 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             rui_ro *= max(san, 1.0 - duoc_ap_dung(w, thay_thuoc, "y_te"))
         if g.random() < rui_ro:
             me.health = 0.0  # tử vong sinh nở — xử lý ở bước chết
+            from engine import metrics_demography
+
+            metrics_demography.danh_dau_tu_vong_sinh_no(w, aid)
             w.events.ghi(w.tick, "tu_vong_sinh_no", id=aid)
         cid = w.id_moi()
         pa, pb = cha.persona.as_dict(), me.persona.as_dict()
@@ -169,6 +177,10 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         w.agents[cid] = con
         cha.con.append(cid)
         me.con.append(cid)
+        from engine import metrics_demography
+
+        metrics_demography.ghi_sinh(w)
+        household.ghi_bien_co(w, "sinh", tre=cid, me=me.id, cha=cha.id)
         w.events.ghi(w.tick, "sinh", id=cid, cha=cha.id, me=me.id)
         w.ghi_ky_uc(cha.id, f"vợ chồng tôi sinh con {con.ten} ({cid})", doi=True)
         w.ghi_ky_uc(me.id, f"vợ chồng tôi sinh con {con.ten} ({cid})", doi=True)
@@ -215,7 +227,17 @@ def cai_chet(w: World) -> list[str]:
                 yeu = a.health < float(sk["nguong_phan_loai_chet_doi"])
                 ly_do = "chet_doi" if (vua_doi and yeu) else "tuoi_gia"
         if ly_do:
+            from engine import metrics_demography, projects, quotes
+
+            ly_do_metric = (
+                "tu_vong_sinh_no" if metrics_demography.la_tu_vong_sinh_no(w, aid) else ly_do
+            )
+            metrics_demography.ghi_chet(w, a.tuoi_nam, ly_do_metric)
             a.con_song = False
+            # Refund a deceased participant's still-held project materials
+            # before the estate path distributes their ledger balance.
+            projects.xu_ly_nguoi_chet(w, aid)
+            quotes.xu_ly_nguoi_chet(w, aid)
             chet.append(aid)
             w.events.ghi(w.tick, "chet", id=aid, tuoi=round(a.tuoi_nam, 1), ly_do=ly_do)
             # người thân khắc tang vào ký ức
@@ -324,7 +346,18 @@ def thua_ke_mac_dinh(w: World, aid: str) -> None:
 
 
 def buoc_nhan_khau(w: World, ke_hoach: dict[str, KeHoach]) -> None:
+    from engine import estate
+
     xu_ly_cau_hon(w, ke_hoach)
     sinh_con(w, ke_hoach)
+    di_san_bat = estate._di_san_bat(w)
     for aid in cai_chet(w):
-        thua_ke_mac_dinh(w, aid)
+        if di_san_bat:
+            # ADR 0007 §D: tài sản người chết vào chủ thể ledger CÓ HẠN `DI_SAN:<aid>` (bậc 0).
+            # Bậc 1–3 (chủ nợ → di chúc → kin) chạy TRỌN VẸN ở bước 9c của CHÍNH tick này —
+            # không có tick nào "tạm lệch rồi cân sau" (điều luật #1).
+            estate.mo_di_san(w, aid)
+        else:
+            # LEGACY (đóng băng có ghi chú, ADR §D.8): của rơi vào `VO_THUA_NHAN` — một chủ
+            # thể KHÔNG hoạt động, không ai lấy ra được (F-19). Không retcon.
+            thua_ke_mac_dinh(w, aid)

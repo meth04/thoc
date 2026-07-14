@@ -540,6 +540,10 @@ Không nới assertion, không hard-code seed/%, không skip để gate xanh (TA
 - **Gà rừng STOCK/K/regen** (`w.ga_rung_ton`) — bắt theo mật độ, overhunting có hậu quả (CHƯA CÓ).
 - Endowment một-năm-food-equivalent theo tuổi/calendar (thay 200 kg phẳng), `design_assumption`.
 - Vụ đông (ngô/khoai) mùa khô — GIỮ 2 tick/năm (không đổi đơn vị thời gian).
+  > **SUPERSEDED (2026-07-13, ADR 0006 §D.2).** Dòng này là tàn dư của bản thiết kế đầu và mâu
+  > thuẫn với §8 hiện hành. Contract đang chạy: overlay `spatial_v1` dùng **3 mùa × 4 tháng**
+  > `[lua_1, lua_2, dong]` (`scenarios/agrarian_transition_v1/spatial_v1.yaml:14-16`); base/legacy
+  > không nạp overlay vẫn đúng 2 tick/năm. Giữ nguyên chữ làm lịch sử thiết kế.
 - Chăm trẻ có trả công / thân tộc (care-labor trade-off, INVASIVE lõi công) — pha cuối.
 - Policy phát-hiện-thuê-đất + `SpatialSurvivalPolicy` thứ tự ưu tiên (Lớp-4).
 - Metric §10 (`metrics_spatial.py`) + event `bo` + nhãn observatory.
@@ -555,6 +559,10 @@ Không nới assertion, không hard-code seed/%, không skip để gate xanh (TA
   merge). Ledger-based (§11.1); flows §12.4; migration §11.3; **KHÔNG** đưa `Parcel.bo`/pool vào
   hash-struct; **KHÔNG** food/xu-mint sau t0; **KHÔNG** teleport (mọi qua-bờ qua `ben_kia_tick`).
   Policy/LLM không ghi field mới. Gà rừng theo đúng khuôn cá (§6). Vụ đông GIỮ 2 tick/năm (§8).
+  > **SUPERSEDED (2026-07-13, ADR 0006 §D.2).** Câu "Vụ đông GIỮ 2 tick/năm" không còn đúng: §8 đã
+  > được thay bằng calendar 3 mùa 4 tháng cho overlay `spatial_v1` (legacy giữ 2 tick/năm). Prompt
+  > và mọi consumer thời gian phải đọc `thoi_gian.thang_moi_tick`/`thoi_gian.lich_mua` từ config
+  > đang chạy (ADR 0006 §B), không giả định calendar nào.
 - `engine/spatial.py`/`metrics_spatial.py` là file MỚI (parallel); CẤM nhồi vào `economy.py`.
 
 **test-engineer (J, độc lập):**

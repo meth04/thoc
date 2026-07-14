@@ -32,10 +32,21 @@ class LLMResponse:
 
 
 class LLMCallLog:
-    """llm_calls.sqlite — mọi call kể cả mock: model, key-hash, token, latency, fallback."""
+    """llm_calls.sqlite — mọi call kể cả mock: model, key-hash, token, latency, fallback.
 
-    def __init__(self, duong_dan: Path | None):
+    ``segment_id``/``superseded`` (ADR 0006 §C.1 ngoại lệ): row của một đoạn quỹ đạo bị bỏ
+    (resume) vẫn là call **đã thực sự xảy ra, đã tiêu token/quota/USD**. Xóa chúng là làm
+    đẹp chi phí ⇒ **KHÔNG BAO GIỜ DELETE**, chỉ ``superseded=1``. Telemetry vì thế báo hai
+    số: ``call_burned`` (mọi row = chi phí) và ``call_effective`` (superseded=0 = quỹ đạo).
+
+    Migration ``ALTER TABLE`` chỉ chạy ở **write path** (run mới / resume), guard bằng
+    ``PRAGMA table_info`` để DB cũ vẫn mở được. Read path (telemetry/verify) KHÔNG BAO GIỜ
+    ALTER — nó chỉ dùng ``COALESCE(superseded,0)=0`` khi cột có mặt.
+    """
+
+    def __init__(self, duong_dan: Path | None, *, segment_id: int = 0):
         self._conn = None
+        self.segment_id = int(segment_id)
         # kiến trúc 1-to-1 real: log.ghi bị gọi từ nhiều worker thread (fan-out per-agent)
         # → check_same_thread=False; orchestrator serial hóa bằng khoá riêng.
         if duong_dan is not None:
@@ -46,20 +57,41 @@ class LLMCallLog:
                     call_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     tick INTEGER, tier TEXT, provider TEXT, model TEXT, key_hash TEXT,
                     batch_size INTEGER, tok_in INTEGER, tok_out INTEGER,
-                    latency_ms INTEGER, retries INTEGER, fallback INTEGER, raw TEXT
+                    latency_ms INTEGER, retries INTEGER, fallback INTEGER, raw TEXT,
+                    segment_id INTEGER, superseded INTEGER DEFAULT 0
                 )"""
             )
+            self._migrate()
+            self._conn.commit()
+
+    def _migrate(self) -> None:
+        """DB cũ (trước P0.2) thiếu hai cột → ADD COLUMN (SQLite không rewrite bảng)."""
+        cot = {r[1] for r in self._conn.execute("PRAGMA table_info(llm_calls)")}
+        if "segment_id" not in cot:
+            self._conn.execute("ALTER TABLE llm_calls ADD COLUMN segment_id INTEGER")
+        if "superseded" not in cot:
+            self._conn.execute(
+                "ALTER TABLE llm_calls ADD COLUMN superseded INTEGER DEFAULT 0")
+
+    def dat_segment(self, segment_id: int) -> None:
+        self.segment_id = int(segment_id)
+
+    def max_call_id(self) -> int:
+        if self._conn is None:
+            return 0
+        return int(self._conn.execute(
+            "SELECT COALESCE(MAX(call_id),0) FROM llm_calls").fetchone()[0])
 
     def ghi(self, tick: int, req: LLMRequest, resp: LLMResponse, fallback: bool) -> None:
         if self._conn is None:
             return
         self._conn.execute(
             "INSERT INTO llm_calls (tick, tier, provider, model, key_hash, batch_size,"
-            " tok_in, tok_out, latency_ms, retries, fallback, raw)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " tok_in, tok_out, latency_ms, retries, fallback, raw, segment_id, superseded)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
             (tick, req.tier, resp.provider, resp.model, resp.key_hash, len(req.batch_ids),
              resp.tok_in, resp.tok_out, int(resp.latency_s * 1000), resp.retries,
-             int(fallback), resp.text[:4000]),
+             int(fallback), resp.text[:4000], self.segment_id),
         )
 
     def flush(self) -> None:

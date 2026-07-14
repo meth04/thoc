@@ -30,6 +30,13 @@ def dang_de_nghi(w, tu: str, hd: HopDong, den: str | None = None, vong: int = 0)
     if tu not in hd.cac_ben:
         w.ghi_unrecognized(tu, "de_nghi_hop_dong", "người đăng không phải một bên")
         return None
+    # GHOST OFFER (ADR 0007 §D.5 / E4): người chết, `DI_SAN:*`, `VO_THUA_NHAN`, entity đã giải
+    # thể KHÔNG nhận đề nghị mới. `validate_hop_dong` đã chặn họ làm MỘT BÊN, nhưng người NHẬN
+    # đích danh (`den`) trước đây không được kiểm — một đề nghị gửi cho `DI_SAN:*` sẽ nằm trên
+    # bảng rao tới khi hết hạn. Không có chủ thể ma nào được nhận offer.
+    if den is not None and not w.chu_the_hoat_dong(den):
+        w.ghi_unrecognized(tu, "de_nghi_hop_dong", f"người nhận không hoạt động: {den}")
+        return None
     ly_do = validate_hop_dong(hd, w)
     if ly_do is not None:
         w.ghi_unrecognized(tu, "de_nghi_hop_dong", ly_do)
