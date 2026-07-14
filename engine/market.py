@@ -41,10 +41,10 @@ def _phi_buon_chuyen(w, le: Lenh, lang_cho: int, gia_tri_quy_thoc: float) -> Non
 
 def _khop_mot_so_lenh(
     w, tai_san: str, thanh_toan: str, mua: list[Lenh], ban: list[Lenh], lang: int = 0,
-) -> float:
+) -> tuple[float, float | None, dict[int, float]]:
     """Call auction một cặp: tìm p* tối đa khối lượng, khớp pro-rata tại biên."""
     if not mua or not ban:
-        return 0.0
+        return 0.0, None, {}
     gia_ung_vien = sorted({le.gia for le in mua} | {le.gia for le in ban})
 
     def khoi_luong(p: float) -> float:
@@ -54,7 +54,7 @@ def _khop_mot_so_lenh(
 
     kl_max = max(khoi_luong(p) for p in gia_ung_vien)
     if kl_max <= 1e-9:
-        return 0.0
+        return 0.0, None, {}
     ung_vien_tot = [p for p in gia_ung_vien if khoi_luong(p) >= kl_max - 1e-12]
     p_sao = float(ung_vien_tot[len(ung_vien_tot) // 2])  # giữa khoảng max-volume
 
@@ -68,6 +68,7 @@ def _khop_mot_so_lenh(
     he_so_ban = kl / cung if cung > 0 else 0.0
 
     tong_khop = 0.0
+    khop_theo_lenh: dict[int, float] = {}
     i, j = 0, 0
     con_mua = [le.so_luong * he_so_mua for le in mua_khop]
     con_ban = [le.so_luong * he_so_ban for le in ban_khop]
@@ -93,6 +94,12 @@ def _khop_mot_so_lenh(
                     )
                 )
                 tong_khop += khop
+                khop_theo_lenh[id(mua_khop[i])] = (
+                    khop_theo_lenh.get(id(mua_khop[i]), 0.0) + khop
+                )
+                khop_theo_lenh[id(ban_khop[j])] = (
+                    khop_theo_lenh.get(id(ban_khop[j]), 0.0) + khop
+                )
                 # `lang` = sổ lệnh (làng) khớp lệnh — cho phép observatory/analysis đo
                 # phân tán giá GIỮA LÀNG offline (ADR 0003 §D đường D1). Chỉ thêm field
                 # event journal; KHÔNG đụng world_hash/logic khớp/Lenh/gia_lich_su.
@@ -135,7 +142,7 @@ def _khop_mot_so_lenh(
             gia_tt = w.gia_gan_nhat(thanh_toan)
             if gia_tt is not None:
                 w.ghi_gia(tai_san, p_sao * gia_tt, tong_khop, thanh_toan)
-    return tong_khop
+    return tong_khop, p_sao, khop_theo_lenh
 
 
 def _lang_cua(w, aid: str) -> int:
@@ -165,24 +172,59 @@ def phien_cho(w, lenh_tick: list[Lenh]) -> float:
 
     Lệnh gửi sang làng khác = buôn chuyến: chịu phí 2%/khoảng cách trên giá trị khớp.
     """
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import order_target
+    from engine.action_journal import rejected as journal_rejected
+
     cap: dict[tuple[int, str, str], tuple[list[Lenh], list[Lenh]]] = {}
+    valid: list[Lenh] = []
     for le in lenh_tick:
+        action = "buon_chuyen" if le.lang is not None else "dat_lenh"
+        target = order_target(le)
         # NaN/inf từ intent hỏng phải bị chặn NGAY — một lệnh NaN treo cả phiên chợ
         if not (math.isfinite(le.so_luong) and math.isfinite(le.gia)):
+            journal_rejected(w, le.ai, action, "invalid_order", target=target)
             continue
-        if le.so_luong <= 0 or le.gia <= 0 or le.tai_san == le.thanh_toan:
+        if (le.chieu not in {"mua", "ban"} or le.so_luong <= 0 or le.gia <= 0
+                or le.tai_san == le.thanh_toan):
+            journal_rejected(w, le.ai, action, "invalid_order", target=target)
             continue
         lang = le.lang if le.lang is not None else _lang_cua(w, le.ai)
         if not (0 <= lang < len(w.villages)):
+            journal_rejected(w, le.ai, action, "market_not_found", target=target)
             continue
         if not _toi_duoc_cho(w, le.ai, lang):  # chợ bờ kia không đò ⇒ hàng kẹt bờ
+            journal_rejected(w, le.ai, action, "market_unreachable", target=target)
             continue
         mua, ban = cap.setdefault((lang, le.tai_san, le.thanh_toan), ([], []))
         (mua if le.chieu == "mua" else ban).append(le)
+        valid.append(le)
     tong = 0.0
+    khop_theo_lenh: dict[int, float] = {}
+    gia_theo_lenh: dict[int, float] = {}
     for (lang, ts, tt) in sorted(cap):
         mua, ban = cap[(lang, ts, tt)]
-        tong += _khop_mot_so_lenh(w, ts, tt, mua, ban, lang=lang)
+        khoi_luong, gia, fills = _khop_mot_so_lenh(w, ts, tt, mua, ban, lang=lang)
+        tong += khoi_luong
+        khop_theo_lenh.update(fills)
+        if gia is not None:
+            for le in [*mua, *ban]:
+                gia_theo_lenh[id(le)] = gia
+    for le in valid:
+        da_khop = khop_theo_lenh.get(id(le), 0.0)
+        action = "buon_chuyen" if le.lang is not None else "dat_lenh"
+        target = order_target(le)
+        if da_khop <= 1e-9:
+            journal_executed(w, le.ai, action, target=target, code="unfilled",
+                             detail="accepted by the market but matched zero quantity")
+            continue
+        code = "matched" if da_khop >= le.so_luong - 1e-9 else "partially_matched"
+        gia = gia_theo_lenh.get(id(le))
+        price_text = f" price={gia:g}" if gia is not None else ""
+        journal_executed(
+            w, le.ai, action, target=target, code=code,
+            detail=f"filled={da_khop:g}/{le.so_luong:g}{price_text}",
+        )
     return tong
 
 

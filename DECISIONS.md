@@ -410,3 +410,27 @@ ADR 0006 §D.3. **DESIGN ONLY** — chưa engine change nào.
 - PENDING (ngoài P1, ghi để không ai tưởng đã dọn sạch): blueprint mồ côi giữ tên người chết
   (`demography.py:296-300`) vẫn là ghost-owner; `duoi_khoi_ho`; `quy_tac_cap` khác `nhu_cau_deu`
   (là định chế phân phối, cần cổng đầy đủ); nợ truyền đời; pantry.
+
+## 2026-07-14 — V3 action-outcome funnel and agent feedback
+
+- Mỗi request trong treatment `spatial_livelihood_v3` phải kết thúc bằng một nhãn audit: engine
+  xác nhận `executed`, `rejected`, hoặc `pending`; chỉ đường legacy chưa có handler result mới bị
+  đóng là `unobserved`. `unobserved` **không phải** failure và không được hiện cho agent như một
+  fact kinh tế. Vì vậy metric tách `planned` (số request), `confirmed`, `unobserved`, `unresolved`
+  và `outcome_coverage`; cấm suy diễn execution từ số intent.
+- Các handler V3 đã ghi kết quả có target ổn định cho chợ (mỗi lệnh có order reference riêng),
+  bảng rao, chăm trẻ, nghiên cứu, đò, chăn nuôi/đánh cá, hôn nhân, học tập/sản xuất, xây dựng,
+  nhắn tin, di chúc và tiệc. Kết quả chợ `unfilled` là **lệnh hợp lệ nhưng khớp 0**, không phải
+  trade đã xảy ra và cũng không phải rejection.
+- Journal thô vẫn là observation state ngoài `world_hash`. Ngược lại, tối đa 8 kết quả
+  engine-confirmed chờ prompt của mỗi người (`World.action_feedback`) là behavioural input và chỉ
+  được đưa vào hash khi `minds.action_journal.bat=true` (overlay V3). Legacy/overlay tắt giữ layout
+  hash cũ. Queue được xoá khi chính agent đã được hỏi; người chưa được hỏi giữ feedback.
+- Bằng chứng offline, không provider: rulebot V3 24 tick seed 431 (`codex_v3_funnel3_s431`) có
+  5,437 request; 4,133 executed, 1,229 rejected, 75 pending, 0 unobserved, 0 unresolved;
+  `outcome_coverage=1.0`. Đây là kiểm định interface/audit, **không** là validation lịch sử hay
+  bằng chứng LLM tự chủ.
+- Sửa hồi quy hash phát hiện khi chạy `test_resume_journal`: policy-card parity (công/crop/sinh kế
+  đọc config) áp dụng cho treatment không gian/V3. Baseline một-bờ giữ các heuristic lịch sử đã pin
+  để mock seed 11 × 8 tick tiếp tục ra `f9afb079…`; vì base và spatial là control/treatment khác
+  nhau, không retcon control chỉ để dùng chung một policy surface.

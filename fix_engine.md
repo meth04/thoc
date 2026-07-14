@@ -100,6 +100,12 @@ Mọi Python command chạy bằng `conda run -n thoc-env python ...` với `THO
   claim.
 - Chạy full offline suite, ruff, verify_local, deterministic v3 mock/replay/audit probes.
 - **Commit:** `test: verify v3 engine remediation end to end`.
+- **Hoàn tất 2026-07-14:** `ruff check .` xanh; toàn bộ suite đã chạy theo các nhóm dưới giới
+  hạn terminal: **636 passed, 1 skipped** (`cnq2` không có integration artifact). Scenario
+  validation vẫn gắn nhãn `mechanism_benchmark`; smoke rulebot 20 tick seed 41 tái lập hash
+  `9f332a3f3977…` và `verify_research_run` trả `replay_verified`. Lệnh gộp
+  `tools.verify_local` vượt giới hạn 64 giây của terminal, nên từng bước tương đương của nó đã
+  được chạy riêng, cùng môi trường offline.
 
 ## 3. Acceptance matrix
 

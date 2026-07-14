@@ -7,6 +7,7 @@ from pathlib import Path
 
 from engine.config import Config, load_config
 from engine.intents import KeHoach
+from engine.market import Lenh
 from engine.tick import chay_mot_tick
 from engine.world import tao_the_gioi
 from minds.prompts import build_agent_prompt
@@ -76,6 +77,9 @@ def test_runtime_quote_failure_is_journaled_as_a_rejection():
     assert "insufficient_inventory" in w.agents[aid].su_co[-1]
     assert w.action_feedback[aid][-1]["status"] == "rejected"
     assert w.action_feedback[aid][-1]["code"] == "insufficient_inventory"
+    prompt = build_agent_prompt(w, aid, {aid: ["dinh_ky"]})
+    assert "KẾT QUẢ HÀNH ĐỘNG GẦN ĐÂY" in prompt
+    assert "insufficient_inventory" in prompt
     cumulative = w.metrics_lich_su[-1]["action_journal"]["cumulative"]
     assert cumulative["execution"]["rejected"] == 1
     assert cumulative["reason_codes"]["insufficient_inventory"] == 1
@@ -84,12 +88,14 @@ def test_runtime_quote_failure_is_journaled_as_a_rejection():
 def test_uninstrumented_path_is_closed_as_unobserved_not_a_fake_rejection():
     """The funnel must not leave terminal-tick requests labelled only planned."""
     w, aid = _world()
-    recipient = next(other for other in sorted(w.agents) if other != aid)
-    plan = KeHoach(id=aid, nhan_tin=[(recipient, "xin chào")])
+    # This legacy-compatible path deliberately has no dedicated V3 handler
+    # outcome yet. It emits a townhall statement, so calling it a rejection
+    # merely because the audit lacks a handler result would lie.
+    plan = KeHoach(id=aid, keu_goi="hãy cùng bàn việc làng")
 
     _run_one(w, aid, plan)
 
-    row = next(item for item in w.action_journal_tick if item["action"] == "nhan_tin")
+    row = next(item for item in w.action_journal_tick if item["action"] == "keu_goi")
     assert row["preflight"] == "ok"
     assert row["execution"] == "unobserved"
     assert row["reason_code"] == "no_confirmed_effect"
@@ -101,6 +107,33 @@ def test_uninstrumented_path_is_closed_as_unobserved_not_a_fake_rejection():
     cumulative = journal["cumulative"]
     assert cumulative["unresolved"] == 0
     assert cumulative["unobserved"] == 1
+
+
+def test_market_orders_are_matched_to_their_own_journal_rows():
+    """Two same-actor orders cannot inherit one another's market outcome."""
+    w, seller = _world()
+    buyer = next(
+        other for other in sorted(w.agents)
+        if other != seller and w.agents[other].truong_thanh(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+    )
+    w.ledger.sinh(seller, "go", 5.0, "khai_thac", "fixture", w.tick)
+    sell = Lenh(seller, "ban", "go", 2.0, 3.0)
+    buy = Lenh(buyer, "mua", "go", 2.0, 3.0)
+
+    chay_mot_tick(
+        w,
+        lambda _world: {
+            seller: KeHoach(id=seller, dat_lenh=[sell]),
+            buyer: KeHoach(id=buyer, dat_lenh=[buy]),
+        },
+        len(w.parcels),
+    )
+
+    rows = [row for row in w.action_journal_tick if row["action"] == "dat_lenh"]
+    assert len(rows) == 2
+    assert {row["execution"] for row in rows} == {"executed"}
+    assert {row["reason_code"] for row in rows} == {"matched"}
+    assert len({row["target"] for row in rows}) == 2
 
 
 def test_reforestation_requires_a_hill_not_an_existing_forest():

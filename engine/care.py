@@ -76,23 +76,33 @@ def buoc_cham_tre(w: World, ke_hoach: dict) -> None:
     ]
     remaining = {cid: labor_per_child for cid in sorted(children)}
     total_provided = paid_provided = kin_or_parent = 0.0
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
 
     # 1) Lựa chọn tự nguyện explicit: người chăm có thể là họ hàng, hàng xóm hay người
     # đã nhận gop_cong từ phụ huynh. Một child chỉ được trừ đúng nhu cầu còn lại.
     for carer in sorted(ke_hoach):
         person = w.agents.get(carer)
-        if person is None or not person.con_song or person.tuoi_nam < adult_age:
-            continue
         targets = list(dict.fromkeys(str(cid) for cid in ke_hoach[carer].cham_tre_cho))
+        if person is None or not person.con_song or person.tuoi_nam < adult_age:
+            for child in targets:
+                journal_rejected(w, carer, "cham_tre", "carer_unavailable", target=child)
+            continue
         for child in targets:
+            if child not in remaining:
+                journal_rejected(w, carer, "cham_tre", "child_unavailable", target=child)
+                continue
             need = remaining.get(child, 0.0)
             if need <= 1e-9:
+                journal_rejected(w, carer, "cham_tre", "care_already_covered", target=child)
                 continue
             household = _ho_tre(w, child)
             if not household or carer == child:
+                journal_rejected(w, carer, "cham_tre", "child_unavailable", target=child)
                 continue
             used, paid = _dung_cong(w, carer, child, need, household)
             if used <= 0:
+                journal_rejected(w, carer, "cham_tre", "insufficient_labor", target=child)
                 continue
             remaining[child] -= used
             total_provided += used
@@ -100,6 +110,8 @@ def buoc_cham_tre(w: World, ke_hoach: dict) -> None:
             kin_or_parent += used if not paid else 0.0
             w.events.ghi(w.tick, "cham_tre", carer=carer, tre=child,
                          cong=round(used, 3), paid=paid)
+            journal_executed(w, carer, "cham_tre", target=child, code="care_provided",
+                             detail=f"labor={used:g}")
 
     # 2) Không có người nhận chăm đủ: hộ tự phân công. Chọn người còn nhiều công nhất để
     # không ngầm ưu ái giới/ID, tie-break id giữ determinism.

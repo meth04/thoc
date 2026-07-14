@@ -16,6 +16,8 @@ _TROM_DUOC = {"thoc", "xu", "ga", "thit", "ca", "go", "quang_dong", "cong_cu"}
 
 def mo_tiec(w: World, aid: str, thoc: float, thit: float) -> None:
     """Mở tiệc khao xóm: đốt thóc/thịt thật, đổi lấy quan hệ + sức khỏe cho khách."""
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
     from engine.production import _ghi_su_co
 
     tc = w.cfg.raw()["tiec"]
@@ -23,11 +25,13 @@ def mo_tiec(w: World, aid: str, thoc: float, thit: float) -> None:
     thoc = min(max(0.0, thoc), w.ledger.so_du(aid, "thoc"))
     thit = min(max(0.0, thit), w.ledger.so_du(aid, "thit"))
     if thoc + thit * quy_doi < float(tc["chi_phi_toi_thieu_thoc"]):
+        journal_rejected(w, aid, "mo_tiec", "insufficient_feast_inputs")
         _ghi_su_co(w, aid, "tiệc quá đạm bạc (cỗ mỏng), không ai buồn đến")
         return
     khach = w.hang_xom_cua(aid, ban_kinh=int(tc["ban_kinh_moi"]),
                            toi_da=int(tc["khach_toi_da"]))
     if not khach:
+        journal_rejected(w, aid, "mo_tiec", "no_guests")
         _ghi_su_co(w, aid, "quanh nhà không có hàng xóm nào để mời tiệc")
         return
     if thoc > 0:
@@ -42,6 +46,7 @@ def mo_tiec(w: World, aid: str, thoc: float, thit: float) -> None:
     w.ghi_ky_uc(aid, f"tôi mở tiệc khao cả xóm ({len(khach)} khách) — nở mày nở mặt")
     w.events.ghi(w.tick, "mo_tiec", id=aid, thoc=round(thoc, 1), thit=round(thit, 1),
                  so_khach=len(khach), khach=list(khach))
+    journal_executed(w, aid, "mo_tiec", code="feast_held", detail=f"guests={len(khach)}")
 
 
 def trom(w: World, ke: str, muc_tieu: str, tai_san: str, so_luong: float) -> None:

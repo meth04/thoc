@@ -67,6 +67,7 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
 
     # 3b. lập pháp nhân + di chúc + di cư (trước bảng rao để entity ký được ngay)
     from engine import entities as entities_mod
+    from engine.action_journal import executed as journal_executed
 
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
@@ -81,6 +82,7 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
         if kh.viet_di_chuc:
             a.di_chuc = kh.viet_di_chuc
             w.events.ghi(w.tick, "viet_di_chuc", id=aid)
+            journal_executed(w, aid, "viet_di_chuc", code="will_recorded")
         if kh.di_cu:
             _di_cu(w, aid)
         # quyết định nhân danh entity (người điều hành >50% cổ phần)
@@ -98,29 +100,47 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     cong_lien_lac = float(w.cfg.get("quan_he.cong_moi_tuong_tac"))
     gui_toi_da = int(w.cfg.get("minds.p2p_gui_toi_da"))
     nhan_toi_da = int(w.cfg.get("minds.p2p_hom_thu_toi_da"))
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
+
     for aid in sorted(ke_hoach):
         if not w.chu_the_hoat_dong(aid):
             continue
         for den, noi_dung in ke_hoach[aid].nhan_tin[:gui_toi_da]:
             if not w.chu_the_hoat_dong(den) or den == aid:
+                journal_rejected(w, aid, "nhan_tin", "recipient_unavailable", target=den)
                 continue
             if len(hom_thu_moi.get(den, ())) >= nhan_toi_da:  # hòm thư đầy → bỏ (chống spam)
+                journal_rejected(w, aid, "nhan_tin", "mailbox_full", target=den)
                 continue
             hom_thu_moi.setdefault(den, []).append((aid, str(noi_dung)[:300], w.tick))
             w.cong_quan_he(aid, den, cong_lien_lac)
             w.events.ghi(w.tick, "nhan_tin", tu=aid, den=den)
+            journal_executed(w, aid, "nhan_tin", target=den, code="message_delivered")
 
     # 4. bang_rao: đăng đề nghị, trả lời, khớp; đơn phương phá vỡ
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
+
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
         if not w.chu_the_hoat_dong(aid):
             continue
         for hd, den in kh.de_nghi_hop_dong:
-            board.dang_de_nghi(w, aid, hd, den)
+            ref = board.dang_de_nghi(w, aid, hd, den)
+            if ref is None:
+                journal_rejected(w, aid, "de_nghi_hop_dong", "offer_rejected", target=den)
+            else:
+                journal_executed(w, aid, "de_nghi_hop_dong", target=den,
+                                 code="offer_listed", detail=f"ref={ref}")
         for ref, tl in sorted(kh.tra_loi_de_nghi.items()):
             dn = w.bang_rao.get(ref)
             if dn is not None and (dn.den is None or dn.den == aid) and dn.tu != aid:
                 dn.tra_loi[aid] = tl
+                journal_executed(w, aid, "tra_loi_hop_dong", target=ref,
+                                 code="response_submitted", pending=True)
+            else:
+                journal_rejected(w, aid, "tra_loi_hop_dong", "offer_not_available", target=ref)
     board.khop_bang_rao(w)
     # Versioned P3 commerce: escrow is locked before production/market can spend the same
     # inventory. Gate OFF is a no-op, preserving all legacy tick ordering.

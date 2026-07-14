@@ -99,6 +99,9 @@ def _ky_hop_dong(w, hd: HopDong) -> bool:
 
 def khop_bang_rao(w) -> None:
     """Bước 4 pipeline: xử lý trả lời trên bảng rao; khớp đầu tiên thắng."""
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
+
     g = w.rng.get("bang_rao", w.tick)
     toi_da_vong = int(w.cfg.get("hop_dong.mac_ca_toi_da_vong"))
     het_han = int(w.cfg.get("hop_dong.de_nghi_het_han_tick"))
@@ -109,6 +112,9 @@ def khop_bang_rao(w) -> None:
         # người đăng (hoặc người được mời đích danh) đã chết → gỡ khỏi bảng
         nguoi_lien_quan = [dn.tu] + ([dn.den] if dn.den else [])
         if any(x in w.agents and not w.agents[x].con_song for x in nguoi_lien_quan):
+            for ai in dn.tra_loi:
+                journal_rejected(w, ai, "tra_loi_hop_dong", "counterparty_unavailable",
+                                 target=dn_id)
             del w.bang_rao[dn_id]
             continue
         if not dn.tra_loi:
@@ -124,15 +130,20 @@ def khop_bang_rao(w) -> None:
             key=lambda ai: (-w.uy_tin(dn.tu, ai), g.random()),
         )
         khop_xong = False
+        nguoi_ky: str | None = None
         for ai in nguoi_tra_loi:
             tl = dn.tra_loi[ai]
             if tl == "tu_choi":
+                journal_executed(w, ai, "tra_loi_hop_dong", target=dn_id,
+                                 code="offer_declined")
                 continue
             if tl == "chap_nhan":
                 hd = dn.hd.model_copy(deep=True)
                 # người chấp nhận phải LÀ bên còn thiếu ("?") hoặc một bên đích danh —
                 # không được "ký hộ" hợp đồng ràng buộc người khác
                 if "?" not in hd.cac_ben and ai not in hd.cac_ben:
+                    journal_rejected(w, ai, "tra_loi_hop_dong", "not_authorized",
+                                     target=dn_id)
                     continue
                 # đề nghị công khai: người nhận thế chỗ "?"
                 hd.cac_ben = [ai if b == "?" else b for b in hd.cac_ben]
@@ -150,12 +161,30 @@ def khop_bang_rao(w) -> None:
                                 setattr(ck.phat_chuyen_giao, vai, ai)
                 if _ky_hop_dong(w, hd):
                     khop_xong = True
+                    nguoi_ky = ai
+                    journal_executed(w, ai, "tra_loi_hop_dong", target=dn_id,
+                                     code="contract_signed", detail=f"contract={hd.id}")
                     break
+                journal_rejected(w, ai, "tra_loi_hop_dong", "contract_not_executable",
+                                 target=dn_id)
             elif isinstance(tl, HopDong):  # mặc cả: gửi lại bản sửa cho người đăng
                 if dn.vong_mac_ca < toi_da_vong:
-                    dang_de_nghi(w, ai, tl, den=dn.tu, vong=dn.vong_mac_ca + 1)
-                    w.events.ghi(w.tick, "mac_ca", ref=dn.id, tu=ai, den=dn.tu)
+                    ref_moi = dang_de_nghi(w, ai, tl, den=dn.tu, vong=dn.vong_mac_ca + 1)
+                    if ref_moi is None:
+                        journal_rejected(w, ai, "tra_loi_hop_dong", "counteroffer_rejected",
+                                         target=dn_id)
+                    else:
+                        journal_executed(w, ai, "tra_loi_hop_dong", target=dn_id,
+                                         code="counteroffer_listed", detail=f"ref={ref_moi}")
+                        w.events.ghi(w.tick, "mac_ca", ref=dn.id, tu=ai, den=dn.tu)
+                else:
+                    journal_rejected(w, ai, "tra_loi_hop_dong", "counteroffer_limit",
+                                     target=dn_id)
         if khop_xong:
+            for ai, tl in dn.tra_loi.items():
+                if ai == nguoi_ky or tl == "tu_choi":
+                    continue
+                journal_rejected(w, ai, "tra_loi_hop_dong", "offer_taken", target=dn_id)
             del w.bang_rao[dn_id]
         else:
             dn.tra_loi.clear()

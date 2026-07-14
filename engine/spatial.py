@@ -94,19 +94,30 @@ def co_the_o_bo(w: Any, aid: str, bo: str | None) -> bool:
 
 def _dong_thuyen(w: Any, aid: str, so_luong: int) -> None:
     """Đóng thuyền: recipe công+gỗ NGUYÊN TỬ (thiếu ⇒ skip, không mất công) — như xay_nha."""
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
     from engine.production import _lam_nguyen_tu, ghi_cong_dung
 
     r = w.cfg.get("san_xuat.recipe.thuyen", {})
     if not r:
+        journal_rejected(w, aid, "dong_thuyen", "boat_recipe_unavailable")
         return
     cong, go = float(r["cong"]), float(r["go"])
+    da_dong = 0
     for _ in range(int(so_luong)):
         tieu = [("cong", cong, "dung"), ("go", go, "xay")]
         if not _lam_nguyen_tu(w, aid, "đóng thuyền", tieu,
                               [("thuyen", 1.0, "dong_thuyen")]):
+            if da_dong <= 0:
+                journal_rejected(w, aid, "dong_thuyen", "insufficient_inputs")
             break
         ghi_cong_dung(w, "phi_nong", cong)
+        da_dong += 1
         w.events.ghi(w.tick, "dong_thuyen", id=aid)
+    if da_dong > 0:
+        code = "boat_built" if da_dong >= int(so_luong) else "boat_build_partial"
+        journal_executed(w, aid, "dong_thuyen", code=code,
+                         detail=f"built={da_dong:g}/{int(so_luong):g}")
 
 
 def buoc_qua_song(w: Any, ke_hoach: dict) -> None:
@@ -119,6 +130,8 @@ def buoc_qua_song(w: Any, ke_hoach: dict) -> None:
     """
     if not _hai_bo_bat(w):
         return
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
     # 1) Đóng thuyền TRƯỚC vận hành (công đã sinh ở bước sinh_cong).
     for aid in sorted(ke_hoach):
         n = int(getattr(ke_hoach[aid], "dong_thuyen", 0) or 0)
@@ -137,18 +150,22 @@ def buoc_qua_song(w: Any, ke_hoach: dict) -> None:
         bo = _bo_cua(w, kid)  # phải cư trú bờ ĐỐI DIỆN đích (không tự "qua" về bờ mình)
         return bo is not None and den_bo in ("dan_cu", "hoang") and den_bo != bo
 
-    def _qua(operator: str, kid: str) -> None:
+    def _qua(operator: str, kid: str, den_bo: str) -> None:
         ben_kia.add(kid)
         dung_thuyen.add(operator)
         w.events.ghi(w.tick, "qua_song", operator=operator, khach=kid)
+        code = "self_crossing" if operator == kid else "ferry_crossing"
+        journal_executed(w, kid, "qua_song", target=den_bo, code=code,
+                         detail=f"operator={operator}")
 
     # 2) Chủ thuyền TỰ qua (sở hữu phương tiện) — không phí, chỉ hao mòn thuyền của mình.
     for kid in sorted(ke_hoach):
         req = getattr(ke_hoach[kid], "qua_song", None)
         if req is None or w.ledger.so_du(kid, "thuyen") < 1.0:
             continue
-        if _di_duoc(kid, str(req[0])):
-            _qua(kid, kid)
+        den_bo = str(req[0])
+        if _di_duoc(kid, den_bo):
+            _qua(kid, kid, den_bo)
 
     # 3) Khớp khách ↔ chủ đò: chủ niêm yết (phi, tài sản); khách chấp nhận (≥ phí, đúng tài
     #    sản, đúng bờ). Khách trả THÓC được ngay (chủ chấp nhận) — tiền tệ chưa cần.
@@ -157,9 +174,12 @@ def buoc_qua_song(w: Any, ke_hoach: dict) -> None:
         if offer is None or op not in w.agents or not w.agents[op].con_song:
             continue
         if w.ledger.so_du(op, "thuyen") < 1.0:
+            journal_rejected(w, op, "rao_do", "no_boat")
             continue
         phi, ts = float(offer[0]), str(offer[1])
-        ung_vien: list[tuple[float, str]] = []
+        journal_executed(w, op, "rao_do", code="ferry_offer_open",
+                         detail=f"fare={phi:g} {ts}")
+        ung_vien: list[tuple[float, str, str]] = []
         for kid in sorted(ke_hoach):
             if kid == op or kid in ben_kia:
                 continue
@@ -169,18 +189,29 @@ def buoc_qua_song(w: Any, ke_hoach: dict) -> None:
             den_bo, ts_tra, phi_tra = str(req[0]), str(req[1]), float(req[2])
             if ts_tra != ts or phi_tra + 1e-9 < phi or not _di_duoc(kid, den_bo):
                 continue
-            ung_vien.append((phi_tra, kid))
+            ung_vien.append((phi_tra, kid, den_bo))
         ung_vien.sort(key=lambda x: (-x[0], x[1]))  # sẵn lòng trả cao trước, tie-break id
         cho = 0
-        for _phi_tra, kid in ung_vien:
+        for _phi_tra, kid, den_bo in ung_vien:
             if cho >= cap:
                 break  # vượt capacity chuyến này ⇒ khách còn lại kẹt bờ
             try:
                 w.ledger.chuyen(kid, op, ts, phi, f"phí đò {op}", w.tick)
             except LoiSoKep:
                 continue  # khách không đủ phí ⇒ không qua, không âm sổ (kẹt/suy kiệt hợp lệ)
-            _qua(op, kid)
+            _qua(op, kid, den_bo)
             cho += 1
+
+    # A request not confirmed above reached the transport stage but did not
+    # move the person. This is a factual rejection (unlike missing handler
+    # instrumentation), so agents can react to it next time.
+    for kid in sorted(ke_hoach):
+        req = getattr(ke_hoach[kid], "qua_song", None)
+        if req is None or kid in ben_kia:
+            continue
+        den_bo = str(req[0])
+        code = "invalid_destination" if not _di_duoc(kid, den_bo) else "no_crossing"
+        journal_rejected(w, kid, "qua_song", code, target=den_bo)
 
     # 4) Hao mòn thuyền của mọi chủ vận hành tick này (SINK đã đăng ký, audit tự cân).
     for op in sorted(dung_thuyen):

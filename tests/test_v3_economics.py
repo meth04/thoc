@@ -6,7 +6,9 @@ from pathlib import Path
 
 from engine import consumption, demography, metrics_demography
 from engine.config import load_config
+from engine.tick import chay_mot_tick
 from engine.world import tao_the_gioi
+from minds.policies import tao_policy
 from minds.policy_cards import chon_vu_dong_theo_rang_buoc
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,3 +93,17 @@ def test_v3_young_baseline_death_is_not_mislabeled_old_age(monkeypatch):
 
     assert demography.cai_chet(w) == [aid]
     assert w.nhan_khau_tick["deaths"] == [{"tuoi": 30.0, "ly_do": "tu_vong_co_ban"}]
+
+
+def test_v3_rulebot_smoke_has_a_closed_action_outcome_funnel():
+    """Offline exercise: requests must not remain silently only "planned"."""
+    w = tao_the_gioi(load_config(overlays=[SPATIAL, V2, V3]), 431, events_path=None)
+    policy = tao_policy("rulebot")
+    for _ in range(12):
+        chay_mot_tick(w, policy, len(w.parcels))
+
+    journal = w.metrics_lich_su[-1]["action_journal"]["cumulative"]
+    assert journal["planned"] > 0
+    assert journal["unresolved"] == 0
+    assert journal["unobserved"] == 0
+    assert journal["outcome_coverage"] == 1.0

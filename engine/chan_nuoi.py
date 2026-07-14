@@ -77,6 +77,8 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
     commons tái tạo: CPUE giảm theo mật độ, không ai bắt quá stock và người ở bờ dân cư
     chỉ săn được habitat bờ hoang sau khi qua sông.
     """
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
     from engine.spatial import _ga_rung_bat, co_the_o_bo
 
     cn = w.cfg.raw()["chan_nuoi"]
@@ -86,6 +88,7 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         if p.loai == "rung" and (not dung_pool or co_the_o_bo(w, aid, p.bo))
     ]
     if not rung_toi_duoc:
+        journal_rejected(w, aid, "chan_nuoi", "no_reachable_habitat")
         if dung_pool:
             from engine.production import _ghi_su_co
 
@@ -93,6 +96,7 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         return
     cong_co = min(so_cong, w.ledger.so_du(aid, "cong"))
     if cong_co <= 0:
+        journal_rejected(w, aid, "chan_nuoi", "insufficient_labor")
         return
     if dung_pool:
         from engine.world import _ga_rung_suc_chua
@@ -101,6 +105,7 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         suc_chua = _ga_rung_suc_chua(w)
         ton = max(0.0, float(getattr(w, "ga_rung_ton", 0.0) or 0.0))
         if suc_chua <= 0 or ton <= 1e-9:
+            journal_rejected(w, aid, "chan_nuoi", "wild_chicken_depleted")
             from engine.production import _ghi_su_co
 
             _ghi_su_co(w, aid, "bắt gà không thành: habitat đã cạn")
@@ -115,11 +120,13 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         cong_dung = so_con * dinh_muc
         mat_do = None
     if so_con <= 1e-9:
+        journal_rejected(w, aid, "chan_nuoi", "no_catch")
         return
     try:
         w.ledger.huy(aid, "cong", cong_dung, "dung",
                       "bắt gà rừng", w.tick)
     except LoiSoKep:
+        journal_rejected(w, aid, "chan_nuoi", "insufficient_labor")
         return
     from engine.production import ghi_cong_dung
 
@@ -133,11 +140,16 @@ def bat_ga(w: World, aid: str, so_cong: float) -> None:
         payload["mat_do"] = round(mat_do, 4)
         payload["con_lai"] = round(float(w.ga_rung_ton), 4)
     w.events.ghi(w.tick, "bat_ga", **payload)
+    journal_executed(w, aid, "chan_nuoi", code="wild_chicken_caught",
+                     detail=f"caught={so_con:g}")
 
 
 def giet_ga(w: World, aid: str, so_con: int) -> None:
     """Giết gà lấy thịt — gà trưởng thành trước (8kg), túng lắm mới thịt gà con (3kg)."""
     cn = w.cfg.raw()["chan_nuoi"]
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
+
     so_con = int(so_con)
     if so_con <= 0:
         return
@@ -145,6 +157,7 @@ def giet_ga(w: World, aid: str, so_con: int) -> None:
     non = int(min(so_con - lon, w.ledger.so_du(aid, "ga_con")))
     thit = lon * float(cn["thit_moi_ga_kg"]) + non * float(cn["thit_moi_ga_con_kg"])
     if lon + non <= 0:
+        journal_rejected(w, aid, "chan_nuoi", "no_livestock")
         return
     if lon > 0:
         w.ledger.huy(aid, "ga", float(lon), "giet_thit", "giết gà", w.tick)
@@ -152,6 +165,8 @@ def giet_ga(w: World, aid: str, so_con: int) -> None:
         w.ledger.huy(aid, "ga_con", float(non), "giet_thit", "giết gà con", w.tick)
     w.ledger.sinh(aid, "thit", thit, "giet_thit", "thịt gà", w.tick)
     w.events.ghi(w.tick, "giet_ga", id=aid, so_con=lon + non)
+    journal_executed(w, aid, "chan_nuoi", code="chicken_slaughtered",
+                     detail=f"slaughtered={lon + non:g}")
 
 
 def hao_thit(w: World) -> None:
@@ -231,12 +246,15 @@ def danh_ca(w: World, aid: str, so_cong: float) -> None:
     Hiệu suất tỷ lệ mật độ đàn cá (CPUE ∝ S/K): cùng một buổi công, sông đầy
     cá bắt được nhiều, sông cạn về tay không — không thể săn bắt mãi.
     """
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
     from engine.production import _ghi_su_co, ghi_cong_dung
     from engine.world import _ca_suc_chua
 
     dc = w.cfg.raw()["danh_ca"]
     suc_chua = _ca_suc_chua(w)
     if suc_chua <= 0:
+        journal_rejected(w, aid, "danh_ca", "fishery_unavailable")
         _ghi_su_co(w, aid, "vùng này không có sông để đánh cá")
         return
     ton = float(getattr(w, "ca_ton", suc_chua))
@@ -246,6 +264,7 @@ def danh_ca(w: World, aid: str, so_cong: float) -> None:
     # cùng công đó, cá thưa thì bắt được ít — và không bao giờ vét quá phần còn lại
     kg = min((cong_co / cong_moi_kg) * mat_do, ton)
     if kg <= 1e-6:
+        journal_rejected(w, aid, "danh_ca", "fishery_depleted")
         _ghi_su_co(w, aid, "ra sông về tay không — cá đã bị đánh gần cạn (hoặc hết công)")
         return
     w.ledger.huy(aid, "cong", cong_co, "dung", "đánh cá", w.tick)
@@ -255,5 +274,6 @@ def danh_ca(w: World, aid: str, so_cong: float) -> None:
     w.ghi_thu_nhap(aid, "nong", kg * float(dc["ca_quy_doi_dinh_duong"]))
     w.events.ghi(w.tick, "danh_ca", id=aid, kg=round(kg, 1),
                  mat_do=round(mat_do, 2))
+    journal_executed(w, aid, "danh_ca", code="fish_caught", detail=f"kg={kg:g}")
     if mat_do < float(dc["nguong_mat_do_canh_bao"]) and aid in w.agents:
         _ghi_su_co(w, aid, f"sông thưa cá hẳn (chỉ được {kg:.0f}kg) — đánh mãi thì cạn")

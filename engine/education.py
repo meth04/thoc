@@ -17,6 +17,9 @@ def _phan_cong_mat(w: World, bac: int) -> float:
 
 def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     """Tiến độ học: cần thầy (Phase 1: cha mẹ dạy E1) hoặc tự học (gấp đôi tick)."""
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
+
     ngay_cong = w.cfg.get("nhu_cau.ngay_cong_moi_tick")
 
     # ai được thầy nào dạy tick này: học sinh → bậc E cao nhất của thầy
@@ -24,6 +27,7 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     # "trường" là thứ ai đó tự tổ chức bằng hợp đồng, không phải cơ chế engine)
     duoc_day: dict[str, int] = {}
     thay_cua: dict[str, str] = {}  # học sinh → thầy (bậc cao nhất) — ghi vào event
+    day_thanh_cong: set[str] = set()
     cong_qh = float(w.cfg.get("quan_he.cong_moi_tuong_tac"))
     for aid in sorted(ke_hoach):
         day_cho = ke_hoach[aid].day_cho
@@ -38,12 +42,22 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 if thay.e_bac > duoc_day.get(hid, 0):
                     duoc_day[hid] = thay.e_bac
                     thay_cua[hid] = aid
+                    day_thanh_cong.add(aid)
+                    journal_executed(w, aid, "phan_bo_cong", code="teaching_provided",
+                                     detail=f"student={hid}")
                 # tình thầy trò — dạy dỗ nuôi quan hệ (tối đa 1 lần/cặp/tick)
                 w.cong_quan_he_gioi_han(aid, hid, cong_qh)
+
+    for aid in sorted(ke_hoach):
+        if ke_hoach[aid].day_cho and aid not in day_thanh_cong:
+            journal_rejected(w, aid, "phan_bo_cong", "teaching_unavailable")
 
     for aid in sorted(w.agents):
         a = w.agents[aid]
         if not a.con_song:
+            kh = ke_hoach.get(aid)
+            if kh is not None and (kh.hoc or kh.day_cho):
+                journal_rejected(w, aid, "phan_bo_cong", "actor_died_before_education")
             continue
         kh = ke_hoach.get(aid)
         muon_hoc = (kh is not None and kh.hoc) or aid in duoc_day
@@ -53,6 +67,8 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         # bậc tối đa = số bậc E khai trong config giáo dục (E1..E4)
         e_toi_da = sum(1 for k in w.cfg.raw()["giao_duc"] if k.startswith("E"))
         if muc_tieu > e_toi_da:
+            if kh is not None and kh.hoc:
+                journal_rejected(w, aid, "phan_bo_cong", "education_maximum_reached")
             continue
         # bắt đầu khoá mới nếu chưa học
         if a.hoc_muc_tieu != muc_tieu:
@@ -73,8 +89,13 @@ def buoc_giao_duc(w: World, ke_hoach: dict[str, KeHoach]) -> None:
 
                 ghi_cong_dung(w, "phi_nong", cong_tra)
         except LoiSoKep:
+            if kh is not None and kh.hoc:
+                journal_rejected(w, aid, "phan_bo_cong", "insufficient_labor")
             continue
         a.hoc_tick_con -= 1
+        if kh is not None and kh.hoc:
+            journal_executed(w, aid, "phan_bo_cong", code="study_progress",
+                             detail=f"target=E{muc_tieu}")
         if a.hoc_tick_con <= 0:
             a.e_bac = muc_tieu
             a.hoc_muc_tieu = None

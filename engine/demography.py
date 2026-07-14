@@ -46,14 +46,22 @@ def can_huyet(w: World, a: str, b: str) -> bool:
 def xu_ly_cau_hon(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     """Cầu hôn là intent; bên kia trả lời TICK SAU (SPEC 2.7)."""
     tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
 
     # 1) Trả lời các đề nghị đã chờ từ tick trước
     con_cho: list[tuple[str, str, int]] = []
     for tu, den, tick_gui in w.cau_hon_cho:
         a, b = w.agents.get(tu), w.agents.get(den)
         if not a or not b or not a.con_song or not b.con_song:
+            kh = ke_hoach.get(den)
+            if kh is not None and tu in kh.tra_loi_cau_hon:
+                journal_rejected(w, den, "tra_loi_cau_hon", "proposal_unavailable", target=tu)
             continue
         if a.vo_chong or b.vo_chong:
+            kh = ke_hoach.get(den)
+            if kh is not None and tu in kh.tra_loi_cau_hon:
+                journal_rejected(w, den, "tra_loi_cau_hon", "marriage_unavailable", target=tu)
             continue
         kh = ke_hoach.get(den)
         tra_loi = kh.tra_loi_cau_hon.get(tu) if kh else None
@@ -72,8 +80,10 @@ def xu_ly_cau_hon(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                          chong=tu if a.gioi_tinh == "nam" else den)
             w.ghi_ky_uc(tu, f"tôi kết hôn với {b.ten} ({den})", doi=True)
             w.ghi_ky_uc(den, f"tôi kết hôn với {a.ten} ({tu})", doi=True)
+            journal_executed(w, den, "tra_loi_cau_hon", target=tu, code="married")
         else:
             w.ghi_ky_uc(tu, f"tôi cầu hôn {b.ten} ({den}) nhưng bị từ chối")
+            journal_executed(w, den, "tra_loi_cau_hon", target=tu, code="proposal_declined")
     w.cau_hon_cho = con_cho
 
     # 2) Nhận đề nghị mới từ kế hoạch tick này
@@ -84,15 +94,21 @@ def xu_ly_cau_hon(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         a = w.agents.get(aid)
         b = w.agents.get(kh.cau_hon)
         if not a or not b or not a.con_song or not b.con_song:
+            journal_rejected(w, aid, "cau_hon", "partner_unavailable", target=kh.cau_hon)
             continue
         if not a.truong_thanh(tt) or not b.truong_thanh(tt):
+            journal_rejected(w, aid, "cau_hon", "underage", target=kh.cau_hon)
             continue
         if a.vo_chong or b.vo_chong or a.gioi_tinh == b.gioi_tinh:
+            journal_rejected(w, aid, "cau_hon", "marriage_ineligible", target=kh.cau_hon)
             continue
         if can_huyet(w, aid, kh.cau_hon):
+            journal_rejected(w, aid, "cau_hon", "kinship_prohibited", target=kh.cau_hon)
             continue  # engine chặn cận huyết
         w.cau_hon_cho.append((aid, kh.cau_hon, w.tick))
         w.events.ghi(w.tick, "cau_hon", tu=aid, den=kh.cau_hon)
+        journal_executed(w, aid, "cau_hon", target=kh.cau_hon,
+                         code="proposal_sent", pending=True)
 
 
 def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:

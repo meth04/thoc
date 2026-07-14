@@ -39,13 +39,21 @@ def diem_nghien_cuu(w: World, aid: str, cong: float, thoc: float) -> float:
 
 def thi_hanh_nghien_cuu(w: World, aid: str, linh_vuc: str, cong: float, thoc: float) -> None:
     """Trả công/thóc để tích điểm nghiên cứu; roll blueprint ở buoc_nghien_cuu."""
+    from engine.action_journal import executed as journal_executed
+    from engine.action_journal import rejected as journal_rejected
+
     r = w.cfg.raw()["research"]
     if linh_vuc not in r["linh_vuc"]:
+        journal_rejected(w, aid, "nghien_cuu", "research_field_unknown", target=linh_vuc)
         w.ghi_unrecognized(aid, "nghien_cuu", f"lĩnh vực lạ: {linh_vuc}")
+        return
+    if cong < 0 or thoc < 0:
+        journal_rejected(w, aid, "nghien_cuu", "invalid_research_budget", target=linh_vuc)
         return
     cong = min(cong, w.ledger.so_du(aid, "cong"))
     thoc = min(thoc, w.ledger.so_du(aid, "thoc"))
     if cong <= 0 and thoc <= 0:
+        journal_rejected(w, aid, "nghien_cuu", "insufficient_research_inputs", target=linh_vuc)
         return
     try:
         if cong > 0:
@@ -56,12 +64,15 @@ def thi_hanh_nghien_cuu(w: World, aid: str, linh_vuc: str, cong: float, thoc: fl
         if thoc > 0:
             w.ledger.huy(aid, "thoc", thoc, "nghien_cuu", f"nghiên cứu {linh_vuc}", w.tick)
     except LoiSoKep:
+        journal_rejected(w, aid, "nghien_cuu", "insufficient_research_inputs", target=linh_vuc)
         return
     diem = diem_nghien_cuu(w, aid, cong, thoc)
     key = (aid, linh_vuc)
     w.diem_nc[key] = w.diem_nc.get(key, 0.0) + diem
     w.events.ghi(w.tick, "nghien_cuu", ai=aid, linh_vuc=linh_vuc,
                  diem=round(diem, 2), tich_luy=round(w.diem_nc[key], 2))
+    journal_executed(w, aid, "nghien_cuu", target=linh_vuc, code="research_contributed",
+                     detail=f"points={diem:g}")
 
 
 def _lang_cua_chu(w: World, cid: str) -> int:

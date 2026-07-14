@@ -137,8 +137,10 @@ def request(w: Any, aid: str, action: str, *, origin: str = "external",
     return row
 
 
-def _find(w: Any, aid: str, action: str, target: str | None = None) -> dict[str, Any] | None:
-    """Find the latest unsettled matching request, deterministically."""
+def _find(w: Any, aid: str, action: str, target: str | None = None, *,
+          include_terminal: bool = False) -> dict[str, Any] | None:
+    """Find a matching request, preferring an unsettled row deterministically."""
+    terminal: dict[str, Any] | None = None
     for row in reversed(_records(w)):
         if row.get("aid") != str(aid) or row.get("action") != str(action):
             continue
@@ -146,7 +148,9 @@ def _find(w: Any, aid: str, action: str, target: str | None = None) -> dict[str,
             continue
         if row.get("execution") in {"planned", "pending"}:
             return row
-    return None
+        if include_terminal and terminal is None:
+            terminal = row
+    return terminal
 
 
 def preflight_ok(w: Any, row: dict[str, Any] | None) -> None:
@@ -163,6 +167,16 @@ def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = N
     if not _enabled(w):
         return
     row = _find(w, aid, action, target)
+    if row is None:
+        # A legacy handler may call ``ghi_unrecognized`` after reporting the
+        # exact same outcome. Detect its terminal row rather than fabricating
+        # a second "external" request solely for that duplicate report.
+        row = _find(w, aid, action, target, include_terminal=True)
+        if row is not None:
+            # The first terminal engine result is the authoritative reason.
+            # In particular, do not overwrite it with the generic
+            # ``unrecognized_intent`` emitted by a legacy compatibility path.
+            return
     if row is None:
         row = request(w, aid, action, origin="external", target=target)
     if row is None:
@@ -189,6 +203,11 @@ def executed(w: Any, aid: str, action: str, *, target: str | None = None,
     if not _enabled(w):
         return
     row = _find(w, aid, action, target)
+    if row is None:
+        # Aggregate actions (for example one labour allocation cultivating
+        # several fields) can emit more than one confirmed sub-effect. Those
+        # effects belong to the original request, not to invented requests.
+        row = _find(w, aid, action, target, include_terminal=True)
     if row is None:
         row = request(w, aid, action, origin="external", target=target)
     if row is None:
@@ -225,7 +244,45 @@ def finalize_unresolved(w: Any) -> None:
         _emit(w, row, "finalize")
 
 
+def order_target(order: Any) -> str:
+    """Stable, human-auditable identity for one market order.
+
+    ``dat_lenh`` may appear many times in one plan, so matching by actor and
+    action alone would attach a fill to an arbitrary sibling order. The string
+    uses the exact declarative order fields and is shared by preflight and the
+    market handler; it is an audit reference, not a market identifier.
+    """
+    if isinstance(order, dict):
+        get = order.get
+    else:
+        def get(name: str, default: Any = None) -> Any:
+            return getattr(order, name, default)
+    chieu = str(get("chieu", get("mua_ban", "?")))
+    tai_san = str(get("tai_san", "?"))
+    thanh_toan = str(get("thanh_toan", "thoc"))
+    try:
+        so_luong = repr(float(get("sl", get("so_luong", 0.0))))
+    except (TypeError, ValueError):
+        so_luong = repr(get("sl", get("so_luong", "?")))
+    try:
+        gia = repr(float(get("gia", get("don_gia", 0.0))))
+    except (TypeError, ValueError):
+        gia = repr(get("gia", get("don_gia", "?")))
+    lang = get("lang", None)
+    lang_text = "local" if lang is None else str(lang)
+    return f"order:{chieu}:{tai_san}/{thanh_toan}:{so_luong}@{gia}:L{lang_text}"
+
+
 def _target(raw: dict[str, Any]) -> str | None:
+    action = str(raw.get("loai", ""))
+    if action in {"dat_lenh", "buon_chuyen"}:
+        return order_target(raw)
+    if action == "xay" and raw.get("mon") not in (None, ""):
+        return str(raw["mon"])
+    if action == "nghien_cuu" and raw.get("linh_vuc") not in (None, ""):
+        return str(raw["linh_vuc"])
+    if action == "qua_song" and raw.get("den_bo") not in (None, ""):
+        return str(raw["den_bo"])
     for key in ("thua", "ref", "di_san", "tre", "den", "cua", "muc_tieu", "entity"):
         value = raw.get(key)
         if value not in (None, ""):

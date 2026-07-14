@@ -211,10 +211,20 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
     for aid in sorted(ke_hoach):
         kh = ke_hoach[aid]
         # nhận công phải CÒN HOẠT ĐỘNG — không góp cả tick lao động lên xác cha mẹ
-        if kh.gop_cong_cho and w.chu_the_hoat_dong(kh.gop_cong_cho):
-            sl = w.ledger.so_du(aid, "cong")
-            if sl > 0:
-                w.ledger.chuyen(aid, kh.gop_cong_cho, "cong", sl, "con góp công", w.tick)
+        if kh.gop_cong_cho:
+            from engine.action_journal import executed as journal_executed
+            from engine.action_journal import rejected as journal_rejected
+
+            if not w.chu_the_hoat_dong(kh.gop_cong_cho):
+                journal_rejected(w, aid, "phan_bo_cong", "labor_recipient_unavailable")
+            else:
+                sl = w.ledger.so_du(aid, "cong")
+                if sl <= 0:
+                    journal_rejected(w, aid, "phan_bo_cong", "insufficient_labor")
+                else:
+                    w.ledger.chuyen(aid, kh.gop_cong_cho, "cong", sl, "con góp công", w.tick)
+                    journal_executed(w, aid, "phan_bo_cong", code="labor_transferred",
+                                     detail=f"labor={sl:g} recipient={kh.gop_cong_cho}")
         for den, ts, sl in kh.bieu:
             if ts == "cong" or not w.chu_the_hoat_dong(den) or den == aid:
                 continue
@@ -419,6 +429,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
 
         # 2) Khai thác gỗ/quặng
         kt = sx["khai_thac"]
+        from engine.action_journal import executed as journal_executed
+        from engine.action_journal import rejected as journal_rejected
+
         for tai_san, cong_xin, dinh_muc, luong in (
             ("go", kh.cong_khai_go, 1.0 / float(kt["cong_moi_go"]), "khai_thac"),
             ("quang_dong", kh.cong_khai_quang, 1.0 / float(kt["cong_moi_quang"]), "khai_mo"),
@@ -440,11 +453,15 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
             else:
                 co_nguon = any(p.loai == loai_o for p in w.parcels.values())
             if not co_nguon:
+                journal_rejected(w, aid, "phan_bo_cong", "resource_unavailable",
+                                 detail=f"resource={tai_san}")
                 if ecology:
                     _ghi_su_co(w, aid, f"khai thác {tai_san} không thành: chưa tới nguồn")
                 continue
             cong_co = min(cong_xin, w.ledger.so_du(aid, "cong"))
             if cong_co <= 0:
+                journal_rejected(w, aid, "phan_bo_cong", "insufficient_labor",
+                                 detail=f"resource={tai_san}")
                 continue
             hieu_suat_kt = 1.0 if w.ledger.so_du(aid, "cong_cu") >= 1.0 else float(
                 kt["hieu_suat_khong_cong_cu"]
@@ -457,6 +474,8 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     dinh_muc * hieu_suat_kt * he_so_may(w, aid),
                 )
                 if thu_duoc <= 1e-9:
+                    journal_rejected(w, aid, "phan_bo_cong", "resource_depleted",
+                                     detail=f"resource={tai_san}")
                     _ghi_su_co(w, aid, "khai thác gỗ không thành: rừng tới được đã cạn")
                     continue
                 ghi_cong_dung(w, "phi_nong", cong_dung)
@@ -467,10 +486,28 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 w.ledger.sinh(aid, tai_san, thu_duoc, luong, f"khai thác {tai_san}", w.tick)
             if w.ledger.so_du(aid, "cong_cu") >= 1.0:
                 _hao_mon_cong_cu(w, aid)
+            journal_executed(w, aid, "phan_bo_cong", code=f"extracted_{tai_san}",
+                             detail=f"quantity={thu_duoc:g}")
 
         # 3) Chế tác công cụ, xây nhà, đúc xu, dựng máy, hàng mới — recipe NGUYÊN TỬ
         giam_vl = _giam_chi_phi_vat_lieu(w, aid)
         he_may = he_so_may(w, aid)
+        from engine.action_journal import executed as journal_executed
+        from engine.action_journal import rejected as journal_rejected
+
+        def ket_qua_xay(mon: str, yeu_cau: int, da_xay: int,
+                         ly_do: str = "insufficient_inputs", actor: str = aid) -> None:
+            """Record one aggregated build action without inventing extra intents."""
+            if yeu_cau <= 0:
+                return
+            if da_xay > 0:
+                code = "built" if da_xay >= yeu_cau else "partially_built"
+                journal_executed(w, actor, "xay", target=mon, code=code,
+                                 detail=f"built={da_xay}/{yeu_cau}")
+            else:
+                journal_rejected(w, actor, "xay", ly_do, target=mon)
+
+        da_che_cong_cu = 0
         for _ in range(int(kh.che_tao_cong_cu)):
             r = sx["recipe"]["cong_cu"]
             cong_can = float(r["cong"]) * giam_vl / he_may
@@ -480,7 +517,11 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 _ghi_su_co(w, aid, f"chế công cụ không thành: {_thieu_gi(w, aid, tieu)}")
                 break
             ghi_cong_dung(w, "phi_nong", cong_can)
+            da_che_cong_cu += 1
             w.events.ghi(w.tick, "che_tac", id=aid, mon="cong_cu")
+        ket_qua_xay("che_tac", int(kh.che_tao_cong_cu), da_che_cong_cu)
+
+        da_xay_nha = 0
         for _ in range(int(kh.xay_nha)):
             r = sx["recipe"]["nha"]
             cong_can = float(r["cong"]) * giam_vl / he_may
@@ -489,6 +530,7 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 _ghi_su_co(w, aid, f"xây nhà không thành: {_thieu_gi(w, aid, tieu)}")
                 break
             ghi_cong_dung(w, "phi_nong", cong_can)
+            da_xay_nha += 1
             # nhà dựng TRÊN thửa của mình (làng xóm 2D) — ưu tiên thửa gần làng
             ag = w.agents.get(aid)
             if ag is not None and ag.nha_thua is None:
@@ -501,6 +543,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     ag.nha_thua = thua_minh[0].id
             w.events.ghi(w.tick, "xay_nha", id=aid,
                          thua=(ag.nha_thua if ag is not None else None))
+        ket_qua_xay("nha", int(kh.xay_nha), da_xay_nha)
+
+        da_duc_xu = 0
         for _ in range(int(kh.duc_xu)):
             r = sx["recipe"]["xu"]
             cong_can = float(r["cong"]) * giam_vl
@@ -511,12 +556,18 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 _ghi_su_co(w, aid, f"đúc xu không thành: {_thieu_gi(w, aid, tieu)}")
                 break
             ghi_cong_dung(w, "phi_nong", cong_can)
+            da_duc_xu += 1
             w.events.ghi(w.tick, "duc_xu", id=aid, ra=r["ra"])
+        ket_qua_xay("xu", int(kh.duc_xu), da_duc_xu)
+
+        da_xay_may = 0
+        may_ly_do = "insufficient_inputs"
         # máy: cần blueprint cong_cu_may_moc áp dụng được (SPEC 2.5 + research.yaml)
         for _ in range(int(kh.xay_may)):
             from engine.research import duoc_ap_dung
 
             if duoc_ap_dung(w, aid, "cong_cu_may_moc") <= 0:
+                may_ly_do = "blueprint_unavailable"
                 w.ghi_unrecognized(aid, "xay_may", "chưa có blueprint cong_cu_may_moc")
                 _ghi_su_co(w, aid, "dựng máy không thành: chưa nắm bí quyết máy móc "
                                    "(cần blueprint cong_cu_may_moc hoặc li-xăng)")
@@ -532,12 +583,19 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                 _ghi_su_co(w, aid, f"dựng máy không thành: {_thieu_gi(w, aid, tieu)}")
                 break
             ghi_cong_dung(w, "phi_nong", cong_can)
+            da_xay_may += 1
             w.events.ghi(w.tick, "may_moi", id=aid)
+        ket_qua_xay("may", int(kh.xay_may), da_xay_may, may_ly_do)
+
         # hàng mới từ blueprint che_bien
         for ma_hang, so_luong in sorted(kh.che_hang.items()):
+            da_che_hang = 0
+            hang_ly_do = "insufficient_inputs"
             bp = next((b for b in w.blueprints.values() if b.hang_moi == ma_hang), None)
             if bp is None:
+                hang_ly_do = "blueprint_unavailable"
                 w.ghi_unrecognized(aid, "che_hang", f"không có blueprint cho {ma_hang}")
+                ket_qua_xay(ma_hang, int(so_luong), da_che_hang, hang_ly_do)
                 continue
             from engine.research import duoc_ap_dung
 
@@ -555,7 +613,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                                 and ben_hien_tai(w, hd.id, ck.den) == aid):
                             quyen = True
                 if not quyen:
+                    hang_ly_do = "no_blueprint_right"
                     w.ghi_unrecognized(aid, "che_hang", f"không có quyền {bp.id}")
+                    ket_qua_xay(ma_hang, int(so_luong), da_che_hang, hang_ly_do)
                     continue
             cong_mac_dinh = float(w.cfg.raw()["research"]["hang_moi"]["cong_mac_dinh"])
             for _ in range(int(so_luong)):
@@ -570,7 +630,9 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                                f"chế {ma_hang} không thành: {_thieu_gi(w, aid, tieu)}")
                     break
                 ghi_cong_dung(w, "phi_nong", cong_can)
+                da_che_hang += 1
                 w.events.ghi(w.tick, "che_tac", id=aid, mon=ma_hang)
+            ket_qua_xay(ma_hang, int(so_luong), da_che_hang, hang_ly_do)
 
     # 4) Reset homestead cho thửa công KHÔNG được canh mùa mưa này
     if mua_mua:
