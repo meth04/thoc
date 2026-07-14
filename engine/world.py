@@ -270,6 +270,10 @@ class World:
     # behavioral_state().
     action_journal_tick: list[dict[str, Any]] = field(default_factory=list)
     _action_journal_seq: int = 0
+    # Engine-confirmed v3 outcomes waiting for the next prompt. Unlike the
+    # raw action journal this affects a future decision, so it is inserted in
+    # behavioral_state only behind the versioned action-journal gate.
+    action_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     # P4 demographic observation state. It is intentionally excluded from
     # behavioral_state: it records completed facts but never controls a future
     # transition. engine.metrics_demography owns its contents.
@@ -713,6 +717,11 @@ class World:
             # trong hash ở trên; ghi rõ ra đây để reviewer bắt bẻ được, không giấu.
             state["estate"] = {"mo": self.di_san, "next_id": self._next_di_san}
         from engine.quotes import _bao_gia_bat
+
+        if bool(self.cfg.get("minds.action_journal.bat", False)):
+            # An empty field would alter legacy hashes. The v3 queue is
+            # intentionally a behavioural input because the prompt reads it.
+            state["minds"]["action_feedback"] = getattr(self, "action_feedback", {})
 
         if _bao_gia_bat(self):
             state["commerce"] = {

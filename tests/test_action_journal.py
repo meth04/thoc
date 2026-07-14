@@ -74,9 +74,33 @@ def test_runtime_quote_failure_is_journaled_as_a_rejection():
     assert row["execution"] == "rejected"
     assert row["reason_code"] == "insufficient_inventory"
     assert "insufficient_inventory" in w.agents[aid].su_co[-1]
+    assert w.action_feedback[aid][-1]["status"] == "rejected"
+    assert w.action_feedback[aid][-1]["code"] == "insufficient_inventory"
     cumulative = w.metrics_lich_su[-1]["action_journal"]["cumulative"]
     assert cumulative["execution"]["rejected"] == 1
     assert cumulative["reason_codes"]["insufficient_inventory"] == 1
+
+
+def test_uninstrumented_path_is_closed_as_unobserved_not_a_fake_rejection():
+    """The funnel must not leave terminal-tick requests labelled only planned."""
+    w, aid = _world()
+    recipient = next(other for other in sorted(w.agents) if other != aid)
+    plan = KeHoach(id=aid, nhan_tin=[(recipient, "xin chào")])
+
+    _run_one(w, aid, plan)
+
+    row = next(item for item in w.action_journal_tick if item["action"] == "nhan_tin")
+    assert row["preflight"] == "ok"
+    assert row["execution"] == "unobserved"
+    assert row["reason_code"] == "no_confirmed_effect"
+    assert aid not in w.action_feedback
+    journal = w.metrics_lich_su[-1]["action_journal"]
+    assert journal["unresolved"] == 0
+    assert journal["unobserved"] == 1
+    assert journal["outcome_coverage"] == 0.0
+    cumulative = journal["cumulative"]
+    assert cumulative["unresolved"] == 0
+    assert cumulative["unobserved"] == 1
 
 
 def test_reforestation_requires_a_hill_not_an_existing_forest():

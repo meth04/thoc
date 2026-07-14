@@ -61,6 +61,55 @@ def _emit(w: Any, row: dict[str, Any], stage: str) -> None:
     )
 
 
+def _feedback_limit(w: Any) -> int:
+    """Bound the behavioural feedback queue exposed to a v3 agent.
+
+    Action-journal rows themselves are observation-only. A small, explicit
+    queue is different: the prompt reads it at the next decision point, so it
+    belongs to the v3 behavioural state (see ``World.behavioral_state``).
+    """
+    try:
+        return max(1, int(w.cfg.get("minds.action_journal.feedback_toi_da", 8)))
+    except (TypeError, ValueError):
+        return 8
+
+
+def _feedback(w: Any, row: dict[str, Any]) -> None:
+    """Give an actor a compact engine-confirmed result for its next prompt.
+
+    ``unobserved`` is intentionally not shown: it means the audit layer lacks
+    a dedicated handler result, not that the actor learned an economic fact.
+    In particular, missing instrumentation must never become a fake rejection.
+    """
+    status = str(row.get("execution", ""))
+    if status not in {"executed", "rejected", "pending"}:
+        return
+    if row.get("_feedback_execution") == status:
+        return
+    aid = str(row.get("aid", ""))
+    if aid not in getattr(w, "agents", {}):
+        return
+    agent = w.agents[aid]
+    if not agent.con_song:
+        return
+    queue = getattr(w, "action_feedback", None)
+    if not isinstance(queue, dict):
+        queue = {}
+        w.action_feedback = queue
+    item = {
+        "tick": int(w.tick),
+        "action": str(row.get("action", "?")),
+        "target": row.get("target"),
+        "status": status,
+        "code": str(row.get("reason_code") or ""),
+    }
+    detail = row.get("detail")
+    if detail:
+        item["detail"] = str(detail)[:180]
+    queue[aid] = [*queue.get(aid, []), item][-_feedback_limit(w):]
+    row["_feedback_execution"] = status
+
+
 def request(w: Any, aid: str, action: str, *, origin: str = "external",
             target: str | None = None, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Record a requested action before any engine state is touched."""
@@ -127,8 +176,11 @@ def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = N
     if feedback and agent is not None and agent.con_song:
         target_text = f" {target}" if target not in (None, "") else ""
         agent.su_co = [*agent.su_co, f"[{code}] {action}{target_text}"][-3:]
+    previous = row.get("execution")
     row["execution"] = "rejected"
     _emit(w, row, "preflight" if preflight else "execution")
+    if previous != "rejected":
+        _feedback(w, row)
 
 
 def executed(w: Any, aid: str, action: str, *, target: str | None = None,
@@ -142,11 +194,35 @@ def executed(w: Any, aid: str, action: str, *, target: str | None = None,
     if row is None:
         return
     row["preflight"] = "ok" if row["preflight"] == "pending" else row["preflight"]
+    previous = row.get("execution")
     row["execution"] = "pending" if pending else "executed"
     row["reason_code"] = str(code)
     if detail:
         row["detail"] = str(detail)[:300]
     _emit(w, row, "execution")
+    if previous != row["execution"]:
+        _feedback(w, row)
+
+
+def finalize_unresolved(w: Any) -> None:
+    """Close requests a legacy handler did not instrument.
+
+    This is an audit safeguard, not a behavioural fallback. ``unobserved``
+    says only that the tick finished without an engine-confirmed outcome for
+    the request. It must remain distinct from ``rejected``: a valid order can
+    be submitted yet unfilled, and an uninstrumented handler may have changed
+    state successfully. Updated handlers should still use ``executed`` or
+    ``rejected`` whenever they know the outcome.
+    """
+    if not _enabled(w):
+        return
+    for row in _records(w):
+        if row.get("execution") != "planned":
+            continue
+        row["execution"] = "unobserved"
+        row["reason_code"] = "no_confirmed_effect"
+        row["detail"] = "no dedicated engine outcome was recorded in this tick"
+        _emit(w, row, "finalize")
 
 
 def _target(raw: dict[str, Any]) -> str | None:
@@ -333,10 +409,21 @@ def summary(w: Any) -> dict[str, Any] | None:
     execution = Counter(str(row.get("execution")) for row in rows)
     reasons = Counter(str(row.get("reason_code")) for row in rows if row.get("reason_code"))
     origins = Counter(str(row.get("origin")) for row in rows)
+    execution_rows = [str(row.get("execution")) for row in rows]
+    confirmed = sum(status in {"executed", "rejected", "pending"} for status in execution_rows)
+    unobserved = sum(status == "unobserved" for status in execution_rows)
+    unresolved = sum(status == "planned" for status in execution_rows)
     return {
         "planned": len(rows),
         "preflight": dict(sorted(preflight.items())),
         "execution": dict(sorted(execution.items())),
         "by_origin": dict(sorted(origins.items())),
         "reason_codes": dict(sorted(reasons.items())),
+        # ``planned`` is retained as the historical name for number of
+        # requests. These fields state whether requests received a handler
+        # confirmation instead of inviting readers to infer it from requests.
+        "confirmed": confirmed,
+        "unobserved": unobserved,
+        "unresolved": unresolved,
+        "outcome_coverage": round(confirmed / len(rows), 9) if rows else 1.0,
     }

@@ -184,12 +184,20 @@ def action_journal_cumulative(history: list[dict[str, Any]], current: dict[str, 
         if isinstance(journal, dict):
             rows.append(journal)
     rows.append(current)
+    planned = sum(int(row.get("planned", 0) or 0) for row in rows)
+    confirmed = sum(int(row.get("confirmed", 0) or 0) for row in rows)
+    unobserved = sum(int(row.get("unobserved", 0) or 0) for row in rows)
+    unresolved = sum(int(row.get("unresolved", 0) or 0) for row in rows)
     return {
-        "planned": sum(int(row.get("planned", 0) or 0) for row in rows),
+        "planned": planned,
         "preflight": _cong_dicts(rows, "preflight"),
         "execution": _cong_dicts(rows, "execution"),
         "by_origin": _cong_dicts(rows, "by_origin"),
         "reason_codes": _cong_dicts(rows, "reason_codes"),
+        "confirmed": confirmed,
+        "unobserved": unobserved,
+        "unresolved": unresolved,
+        "outcome_coverage": round(confirmed / planned, 9) if planned else 1.0,
     }
 
 

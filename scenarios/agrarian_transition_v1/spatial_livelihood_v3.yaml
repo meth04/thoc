@@ -9,6 +9,10 @@ minds:
   action_journal:
     bat: true
     enforce: true
+    # Number of engine-confirmed results retained for an agent that has not
+    # yet been prompted again. This is an interface design assumption, not an
+    # economic calibration.
+    feedback_toi_da: 8
 
 khong_gian:
   # Neither winter crop dominates in all factual states:

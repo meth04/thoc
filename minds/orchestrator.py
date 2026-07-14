@@ -167,6 +167,13 @@ class MindMock:
                 a = w.agents.get(aid)
                 if a is not None:
                     a.su_co = []
+                # Unlike raw journal rows, this is a prompt-facing
+                # behavioural input. Once the actor has been asked, its next
+                # engine-confirmed result will replace it; unselected agents
+                # retain feedback until they get a decision opportunity.
+                feedback = getattr(w, "action_feedback", None)
+                if isinstance(feedback, dict):
+                    feedback.pop(aid, None)
             # PHA APPLY: duyệt SORTED ID — thứ tự ghi Ledger tất định (điều luật #4).
             # xung đột thửa công (nhiều agent cùng nhắm) do engine dedup apply-time
             # (production.da_canh_tick_nay theo sorted id) — không cần da_nham ở mind.

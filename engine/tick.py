@@ -317,6 +317,12 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
     # bạo động: cơ chế trung lập — sung công + chia lại QUA LEDGER khi Gini quá ngưỡng
     # VÀ đủ số đông bạo động (chuyển CÂN nên audit vẫn xanh)
     politics.buoc_bao_dong(w, ke_hoach)
+    # Every v3 request has a terminal audit label before metrics are written.
+    # Handlers that know the result have already marked it; legacy paths are
+    # honestly marked ``unobserved`` instead of silently inflating "planned".
+    from engine.action_journal import finalize_unresolved
+
+    finalize_unresolved(w)
     audit.kiem_toan_the_gioi(w, tong_thua_ban_dau)
     research_mod.cap_nhat_san_tier(w)
     m = metrics.buoc_ket_toan(w)

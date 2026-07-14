@@ -870,6 +870,28 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     if the_cu.get("du_dinh"):
         dong.append(f"DỰ ĐỊNH BẠN TỰ GHI LẦN TRƯỚC: “{the_cu['du_dinh']}” — cập nhật "
                     f"bằng the_chinh_sach.du_dinh nếu đổi ý.")
+    # Kết quả engine-confirmed của action trước. Chỉ treatment action-journal
+    # v3 có queue này; legacy giữ nguyên prompt surface. ``unobserved`` không
+    # được đưa vào đây vì đó là thiếu instrumentation, không phải fact kinh tế.
+    feedback = getattr(w, "action_feedback", {}).get(aid, [])
+    if feedback:
+        glyph = {"executed": "✔", "rejected": "✘", "pending": "◐"}
+        rows = []
+        for item in feedback[-5:]:
+            if not isinstance(item, dict):
+                continue
+            status = str(item.get("status", ""))
+            action = str(item.get("action", "?"))
+            target = item.get("target")
+            code = str(item.get("code", ""))
+            target_text = f" {target}" if target else ""
+            suffix = f" [{code}]" if code else ""
+            rows.append(
+                f"{glyph.get(status, '•')} tick {item.get('tick', '?')} — "
+                f"{action}{target_text}{suffix}"
+            )
+        if rows:
+            dong.append("KẾT QUẢ HÀNH ĐỘNG GẦN ĐÂY: " + "; ".join(rows) + ".")
     # phản hồi việc không thành tick trước — builder CHỈ ĐỌC, không xóa;
     # orchestrator xóa su_co sau khi prompt của tick đã build xong
     if a.su_co:
