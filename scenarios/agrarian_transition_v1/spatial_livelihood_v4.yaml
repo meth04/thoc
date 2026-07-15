@@ -1,0 +1,42 @@
+# spatial_livelihood_v4.yaml — remediation following the real30_v3 diagnosis.
+#
+# Apply AFTER spatial_v1.yaml, spatial_livelihood_v2.yaml and
+# spatial_livelihood_v3.yaml.  It does not mutate the historical v3 treatment:
+# real30_v3 remains a diagnostic artifact whose config snapshot is preserved.
+
+minds:
+  # Infrastructure treatment: EACH autonomous resident receives 1..10
+  # independent provider requests per tick. With 50 adults this is 50..500
+  # calls/tick; it deliberately trades infrastructure cost for behavioural
+  # coverage. The boundary counts retry and MCP turns too, and never batches
+  # multiple residents into one decision call. Legacy artifacts retain their
+  # recorded scheduler; this overlay defines the new treatment.
+  llm_tick:
+    bat: true
+    pham_vi: moi_agent
+    toi_thieu_call: 1
+    toi_da_call: 10
+    toi_da_call_moi_quyet_dinh: 10
+    # A full-coverage tick is atomic for this experiment: do not spend a
+    # partial cohort and then time out waiting for RPM.  Before each tick the
+    # real gateway must have enough immediate route headroom for every adult's
+    # mandatory first request; otherwise it stops before any provider call.
+    kiem_tra_burst_rpm: true
+    # Decision coverage is the expensive priority. Memory/reflection use their
+    # deterministic local form unless a separate experiment enables this.
+    goi_ho_tro: false
+  # Nine tool turns still leave the tenth request for a mandatory final JSON
+  # decision; the provider also enforces this if another overlay raises it.
+  cong_cu_max_luot: 9
+
+  # A transparent last-resort continuation rule for a feasible house project.
+  # It creates no resources and only activates after shelter exposure has made
+  # health materially unsafe.  The values are scenario assumptions, not a
+  # historical calibration.
+  san_cho_o_toi_thieu:
+    bat: true
+    # Four-month ticks and a 240-work house require starting while a healthy
+    # adult can still supply several productive ticks, not at the mortality
+    # threshold itself.
+    nguong_health_khoi_cong: 90
+    cong_gop_moi_tick: 120

@@ -32,3 +32,6 @@ khong_gian.vu_dong.cay.ngo,kg and labor/field,design_assumption,,"V3 crop trade-
 khong_gian.vu_dong.cay.khoai,kg and labor/field,design_assumption,,"V3 crop trade-off: lower labor requirement and lower total food per field than maize; sensitivity required."
 suc_khoe.nha_o,health/tick,design_assumption,,"V3 shelter exposure/recovery treatment; health feeds existing labor-supply mechanism and is not a calibrated historical estimate."
 nhan_khau.tu_vong_nguyen_nhan.tuoi_gia_tu,years,design_assumption,,"V3 reporting threshold separating baseline mortality from old-age labels; it does not change mortality hazard."
+minds.llm_tick,request/agent/tick,design_assumption,,"V4 infrastructure treatment: each living adult must receive 1–10 independent provider requests per tick; this is a coverage/cost condition rather than an economic calibration."
+minds.san_cho_o_toi_thieu.nguong_health_khoi_cong,health points,design_assumption,,"V4 transparent threshold for offering a feasible shelter-project continuation; sensitivity and ablation are required."
+minds.san_cho_o_toi_thieu.cong_gop_moi_tick,công/tick,design_assumption,,"V4 cap on already-feasible shelter-project labour contributed by the public safety floor; it does not mint labour or materials."

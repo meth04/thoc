@@ -377,17 +377,42 @@ def chay_run(args, *, mind_factory=None) -> int:
     signal.signal(signal.SIGINT, bat_sigint)
 
     t0 = time.time()
+    ly_do_ket_thuc: str | None = None
     try:
         while w.tick < tong_tick and not ngat["flag"]:
+            # Full-autonomy treatment may require all living adults to receive
+            # a mandatory first LLM request.  Check its RPM feasibility before
+            # advancing world time: a failed check must not leave behind a
+            # policy-card half-tick masquerading as an LLM experiment.
+            kiem_tra_truoc_tick = getattr(mind_fn, "kiem_tra_truoc_tick", None)
+            if callable(kiem_tra_truoc_tick) and not kiem_tra_truoc_tick(w):
+                ly_do_ket_thuc = "llm_provider_budget_exhausted"
+                print(f"[budget] preflight không đủ: {getattr(mind_fn, 'ly_do_dung', '')} "
+                      "— chưa tiến world tick, checkpoint và dừng êm (không degrade).")
+                break
             m = chay_mot_tick(w, mind_fn, tong_thua)
             # telemetry LLM theo tick vào metrics.jsonl (m là chính dict đã lưu lịch sử)
             st = getattr(mind_fn, "stats_tick", None)
             if st:
                 m["llm"] = {k: st.get(k, 0) for k in
-                            ("call", "tok_in", "tok_out", "fallback", "latency_ms", "tool_call")}
+                            ("call", "logical_task", "api_call", "api_call_cap",
+                             "api_call_denied", "api_call_by_kind", "api_call_by_agent",
+                             "api_call_min_required", "api_call_min_met",
+                             "api_call_min_exception", "api_call_min_violations",
+                             "api_call_scope", "api_call_min_moi_agent",
+                             "api_call_cap_moi_agent",
+                             "tok_in", "tok_out", "fallback", "latency_ms", "tool_call")}
             if getattr(mind_fn, "het_ngan_sach", False):
+                ly_do_ket_thuc = "llm_provider_budget_exhausted"
                 print(f"[budget] hết ngân sách: {getattr(mind_fn, 'ly_do_dung', '')} "
                       f"— checkpoint và dừng êm (không degrade).")
+                break
+            if not any(agent.con_song for agent in w.agents.values()):
+                # An empty world has no economic actor.  Continuing to emit
+                # zero-valued ticks (and trying to satisfy a synthetic minimum
+                # LLM call) turns extinction into misleading pseudo-data.
+                ly_do_ket_thuc = "population_extinct"
+                print("[terminal] không còn người sống — kết thúc run tại tick hiện tại.")
                 break
             if w.tick % ck_moi_n == 0:
                 # THỨ TỰ BẮT BUỘC (cũ: luu_checkpoint RỒI MỚI flush ⇒ offset ghi trước flush
@@ -430,6 +455,7 @@ def chay_run(args, *, mind_factory=None) -> int:
         "run_uuid": journals.manifest.run_uuid,
         "segment_id": journals.manifest.segment_id,
         "replay_complete": journals.manifest.replay_complete,
+        "terminal_reason": ly_do_ket_thuc,
     }
     if args.mode in ("mock", "real"):
         meta["p_malformed"] = mind_fn.p_malformed
@@ -442,6 +468,12 @@ def chay_run(args, *, mind_factory=None) -> int:
         meta["tok_in_phien"] = int(getattr(mind_fn, "tok_in", 0))
         meta["tok_out_phien"] = int(getattr(mind_fn, "tok_out", 0))
         meta["luot_cong_cu_phien"] = int(getattr(mind_fn, "so_luot_cong_cu", 0))
+        meta["so_api_call_phien"] = int(getattr(mind_fn, "so_api_call", 0))
+        meta["so_api_call_bi_tu_choi_phien"] = int(
+            getattr(mind_fn, "so_api_call_bi_tu_choi", 0)
+        )
+        if ly_do_ket_thuc == "llm_provider_budget_exhausted":
+            meta["llm_preflight_ly_do"] = str(getattr(mind_fn, "ly_do_dung", ""))
         meta["concurrency"] = int(getattr(mind_fn, "concurrency", 0))
         mind_fn.log.dong()
         if getattr(mind_fn, "transcript", None) is not None:
@@ -462,6 +494,18 @@ def chay_run(args, *, mind_factory=None) -> int:
         meta["tok_out"] = int(tele.get("tok_out", 0))
         meta["luot_cong_cu"] = int(tele.get("luot_cong_cu", 0))
         meta["chi_phi_usd_uoc_tinh"] = tele.get("chi_phi_usd", 0.0)
+        autonomy = tele.get("ngan_sach_tick", {})
+        if isinstance(autonomy, dict) and autonomy.get("ap_dung"):
+            meta["llm_request_total"] = int(autonomy.get("request_total", 0))
+            meta["llm_autonomy_budget"] = {
+                "scope": autonomy.get("scope"),
+                "agent_tick": int(autonomy.get("agent_tick", 0)),
+                "request_moi_tick": autonomy.get("request_moi_tick", {}),
+                "dat": bool(autonomy.get("dat", False)),
+                "vi_pham_san": len(autonomy.get("vi_pham_san", [])),
+                "vi_pham_tran": len(autonomy.get("vi_pham_tran", [])),
+                "vi_pham_batch": len(autonomy.get("vi_pham_batch", [])),
+            }
         print(f"[{args.mode}] call tổng={meta['so_call']} (phiên này {meta['so_call_phien']}) "
               f"nghĩ phiên={meta['so_luot_nghi_phien']} "
               f"fallback={meta['so_fallback']} ({meta['fallback_rate']:.2%}) | "
@@ -503,6 +547,17 @@ def viet_session_report(run_dir: Path, w, meta: dict) -> None:
             f"- LLM: {meta['so_call']} call tích lũy trong log; "
             f"phiên này {meta.get('so_luot_nghi_phien', meta.get('so_luot_nghi', 0))} lượt nghĩ; "
             f"fallback {meta['fallback_rate']:.2%} (p_malformed={meta['p_malformed']})"
+        )
+    autonomy = meta.get("llm_autonomy_budget")
+    if isinstance(autonomy, dict):
+        rng = autonomy.get("request_moi_tick", {})
+        dong.append(
+            f"- Autonomy LLM mỗi agent: {'PASS' if autonomy.get('dat') else 'FAIL'} · "
+            f"{autonomy.get('agent_tick', 0)} agent-tick · {meta.get('llm_request_total', 0)} "
+            f"request · {rng.get('min', 0)}–{rng.get('max', 0)} request/tick · "
+            f"vi phạm sàn/trần/batch "
+            f"{autonomy.get('vi_pham_san', 0)}/{autonomy.get('vi_pham_tran', 0)}/"
+            f"{autonomy.get('vi_pham_batch', 0)}"
         )
     dong.append(f"- Milestones: {[x['ten'] for x in w.milestones]}")
     (rp_dir / f"session_{n}.md").write_text("\n".join(dong), encoding="utf-8")

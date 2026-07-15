@@ -17,6 +17,13 @@ class LLMRequest:
     tier: str
     schema: str = "QuyetDinh"
     batch_ids: list[str] = field(default_factory=list)
+    # Runtime-only scheduler metadata.  It is deliberately NOT rendered into
+    # prompts/transcripts: it governs infrastructure cost, not what an agent
+    # knows about the simulated world.
+    tick_budget: Any | None = None
+    logical_id: str = ""
+    logical_kind: str = "decision"
+    max_api_calls: int | None = None
 
 
 @dataclass
@@ -121,7 +128,12 @@ class MockProvider:
 
     def goi(self, req: LLMRequest, attempt: int = 0) -> LLMResponse:
         from minds.personabot import sinh_quyet_dinh, tra_loi_mock
+        from minds.tick_budget import bat_dau_yeu_cau
 
+        # A mock invocation is the offline equivalent of one provider request.
+        # This makes the same 1..N scheduler contract testable without any
+        # external model call. Transcript replay intentionally bypasses it.
+        bat_dau_yeu_cau(req)
         t0 = time.time()
         batch = [
             sinh_quyet_dinh(self.w, aid, req.ctx["bc"], req.ctx["da_nham"],

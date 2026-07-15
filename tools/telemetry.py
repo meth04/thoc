@@ -119,13 +119,107 @@ def phan_tich(sqlite_path: Path, bang_gia: dict | None = None) -> dict[str, Any]
     }
 
 
+def phan_tich_ngan_sach_tick(run_dir: Path) -> dict[str, Any]:
+    """Đọc-only audit cho treatment LLM 1..N **mỗi agent**.
+
+    ``llm_calls.sqlite`` ghi outcome logic; số request thực (retry/MCP cũng
+    tính) nằm trong metrics tick.  Vì vậy phép kiểm này lấy metrics làm nguồn
+    chuẩn, rồi dùng ``batch_size`` trong SQLite để chứng minh không dồn nhiều
+    cư dân vào một decision call.
+    """
+    metrics_path = run_dir / "metrics.jsonl"
+    if not metrics_path.exists():
+        return {"ap_dung": False, "ly_do": "khong_co_metrics"}
+    rows: list[tuple[int, dict[str, Any]]] = []
+    for line in metrics_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        metric = json.loads(line)
+        llm = metric.get("llm")
+        if isinstance(llm, dict) and llm.get("api_call_scope") == "moi_agent":
+            rows.append((int(metric.get("tick", 0)), llm))
+    if not rows:
+        return {"ap_dung": False, "ly_do": "treatment_khong_bat"}
+
+    tong_request = 0
+    tong_agent_tick = 0
+    min_tick: int | None = None
+    max_tick = 0
+    vi_pham_san: list[dict[str, Any]] = []
+    vi_pham_tran: list[dict[str, Any]] = []
+    for tick, llm in rows:
+        request = int(llm.get("api_call", 0))
+        tong_request += request
+        min_tick = request if min_tick is None else min(min_tick, request)
+        max_tick = max(max_tick, request)
+        min_agent = int(llm.get("api_call_min_moi_agent", 1))
+        cap_agent = int(llm.get("api_call_cap_moi_agent", 0))
+        by_agent = llm.get("api_call_by_agent", {})
+        if not isinstance(by_agent, dict):
+            by_agent = {}
+        tong_agent_tick += max(len(by_agent), int(llm.get("api_call_min_required", 0)))
+        under = {
+            str(aid).removeprefix("agent:")
+            for aid in llm.get("api_call_min_violations", [])
+        }
+        under.update(str(aid) for aid, n in by_agent.items() if int(n) < min_agent)
+        if llm.get("api_call_min_met") is False and not under:
+            under.add("<khong-xac-dinh>")
+        for aid in sorted(under):
+            vi_pham_san.append({"tick": tick, "agent": aid})
+        if cap_agent > 0:
+            for aid, n in sorted(by_agent.items()):
+                if int(n) > cap_agent:
+                    vi_pham_tran.append({"tick": tick, "agent": str(aid), "call": int(n)})
+
+    batch_vi_pham: list[dict[str, int]] = []
+    sqlite_path = run_dir / "llm_calls.sqlite"
+    if sqlite_path.exists():
+        conn = sqlite3.connect(sqlite_path)
+        try:
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(llm_calls)")}
+            if "batch_size" in columns:
+                for tick, max_batch in conn.execute(
+                    "SELECT tick, MAX(batch_size) FROM llm_calls GROUP BY tick"
+                ):
+                    if int(max_batch or 0) > 1:
+                        batch_vi_pham.append({"tick": int(tick), "batch_size": int(max_batch)})
+        finally:
+            conn.close()
+
+    return {
+        "ap_dung": True,
+        "scope": "moi_agent",
+        "so_tick": len(rows),
+        "agent_tick": tong_agent_tick,
+        "request_total": tong_request,
+        "request_moi_tick": {"min": min_tick or 0, "max": max_tick},
+        "vi_pham_san": vi_pham_san,
+        "vi_pham_tran": vi_pham_tran,
+        "vi_pham_batch": batch_vi_pham,
+        "dat": not (vi_pham_san or vi_pham_tran or batch_vi_pham),
+    }
+
+
 def viet_md(kq: dict, run_name: str) -> str:
     if kq.get("tong_call", 0) == 0:
         return f"# Telemetry LLM — `{run_name}`\n\n(không có call nào trong llm_calls.sqlite)\n"
     d = [f"# Telemetry LLM — run `{run_name}`", ""]
     d.append(f"- **Tổng call:** {kq['tong_call']:,} · fallback {kq['fallback_rate']:.2%} "
              f"({kq['fallback']}) · retry/lượt-công-cụ {kq['luot_cong_cu']:,} "
-             f"(cột retries: MCP tắt = số retry; MCP bật = số lượt gọi công cụ)")
+              f"(cột retries: MCP tắt = số retry; MCP bật = số lượt gọi công cụ)")
+    ngan_sach = kq.get("ngan_sach_tick")
+    if isinstance(ngan_sach, dict) and ngan_sach.get("ap_dung"):
+        ket = "PASS" if ngan_sach.get("dat") else "FAIL"
+        tick_range = ngan_sach.get("request_moi_tick", {})
+        d.append(
+            f"- **Autonomy budget mỗi agent:** **{ket}** · "
+            f"{ngan_sach['so_tick']:,} tick · {ngan_sach['agent_tick']:,} agent-tick · "
+            f"{ngan_sach['request_total']:,} request · request/tick "
+            f"{tick_range.get('min', 0):,}–{tick_range.get('max', 0):,} · "
+            f"vi phạm sàn/trần/batch = {len(ngan_sach['vi_pham_san'])}/"
+            f"{len(ngan_sach['vi_pham_tran'])}/{len(ngan_sach['vi_pham_batch'])}."
+        )
     if kq.get("call_superseded"):
         d.append(f"- **Chi phí vs quỹ đạo** (ADR 0006 §C.1): `call_burned` "
                  f"{kq['call_burned']:,} (đã trả tiền, KHÔNG xóa) · `call_effective` "
@@ -164,6 +258,7 @@ def sinh_bao_cao(run_dir: Path, bang_gia: dict | None = None) -> dict:
     if not sq.exists():
         return {"tong_call": 0}
     kq = phan_tich(sq, bang_gia)
+    kq["ngan_sach_tick"] = phan_tich_ngan_sach_tick(run_dir)
     rp = run_dir / "reports"
     rp.mkdir(exist_ok=True)
     (rp / "telemetry.md").write_text(viet_md(kq, run_dir.name), encoding="utf-8")

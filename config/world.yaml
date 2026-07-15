@@ -252,6 +252,23 @@ fiscal:                          # tài khóa/khu vực công — ADR 0004 §T08
   chi_cong_toi_da_moi_tick: 5    # trần số đơn vị xây/tick (chống spam intent)
 
 minds:
+  # A hard, auditable per-agent infrastructure budget. It is opt-in so
+  # legacy/replay treatments stay interpretable; spatial v4 enables it.
+  # Each autonomous agent gets 1..10 provider requests/tick (real HTTP or
+  # mock equivalent), including retries, fail-over and agentic tool turns.
+  llm_tick:
+    bat: false
+    pham_vi: moi_agent
+    toi_thieu_call: 1
+    toi_da_call: 10
+    # All calls related to one agent share this cap. The final JSON response
+    # occupies one slot, so at most nine preceding tool turns fit under 10.
+    toi_da_call_moi_quyet_dinh: 10
+    # Optional treatment-level preflight: require that the mandatory first
+    # turn of every autonomous adult fits in the currently available one-minute
+    # provider RPM window.  This prevents a costly half-tick with only a
+    # subset of residents heard when a full-coverage experiment is selected.
+    kiem_tra_burst_rpm: false
   # Research treatment mode: one provider/model/sampling setup for every agent tier, no
   # automatic route fallback. Tắt cho production; bật bằng overlay thí nghiệm có provenance.
   nghiem_thuc:

@@ -103,6 +103,25 @@ def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
     if isinstance(strict, dict) and not bool(strict.get("bat", False)):
         cfg["minds"]["nghiem_thuc"] = {"bat": False}
 
+    # Infrastructure-only LLM coverage and the optional shelter safety floor
+    # are scenario treatments.  A disabled block has no transition effect and
+    # must hash like an older config that predates it; otherwise merely adding
+    # an OFF knob breaks the pinned legacy trajectory.
+    minds = cfg.get("minds")
+    if isinstance(minds, dict):
+        llm_tick = minds.get("llm_tick")
+        if not isinstance(llm_tick, dict) or not bool(llm_tick.get("bat", False)):
+            minds.pop("llm_tick", None)
+        shelter_floor = minds.get("san_cho_o_toi_thieu")
+        if not isinstance(shelter_floor, dict) or not bool(shelter_floor.get("bat", False)):
+            minds.pop("san_cho_o_toi_thieu", None)
+
+    demography = cfg.get("nhan_khau")
+    if isinstance(demography, dict):
+        causes = demography.get("tu_vong_nguyen_nhan")
+        if not isinstance(causes, dict) or not bool(causes.get("bat", False)):
+            demography.pop("tu_vong_nguyen_nhan", None)
+
     # Quote/escrow is a versioned commerce treatment. A disabled overlay has the same
     # transition function as an old config with no ``bao_gia`` block, so omit it from the
     # behavioral identity rather than creating a false replay distinction.

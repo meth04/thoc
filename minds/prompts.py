@@ -743,6 +743,37 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"Hồi ký: {a.hoi_ky or '(trống)'} | Gia huấn: \"{a.gia_huan or '(chưa có)'}\"",
         f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat_hien or 'không có'}.",
     ]
+    # Shelter is a measurable constraint, not a vague "be safe" exhortation.
+    # Showing the same health transition that the engine will apply lets an
+    # LLM judge a house project against food, labour and trade using facts.
+    nha_cfg = w.cfg.get("suc_khoe.nha_o", {})
+    if isinstance(nha_cfg, dict) and bool(nha_cfg.get("bat", False)):
+        ho_cho_o = w.ho_cua(aid)
+        co_nha = any(w.ledger.so_du(member, "nha") >= 1.0 for member in ho_cho_o)
+        if not co_nha:
+            hoi = float(w.cfg.get("suc_khoe.hoi_khi_an_du")) * float(
+                nha_cfg.get("he_so_hoi_khi_vo_gia_cu", 1.0)
+            )
+            key_mat = ("mat_suc_khoe_mua_mua" if w.mua_mua()
+                       else "mat_suc_khoe_mua_kho")
+            mat = float(nha_cfg.get(key_mat, 0.0))
+            recipe = w.cfg.get("san_xuat.recipe.nha", {})
+            open_projects = [
+                project for project in getattr(w, "du_an", {}).values()
+                if project.trang_thai == "dang_lam" and project.loai == "nha"
+                and project.chu in ho_cho_o
+            ]
+            progress = "chưa có dự án nhà mở"
+            if open_projects:
+                project = min(open_projects, key=lambda row: (row.tick_tao, row.id))
+                progress = (f"dự án {project.id}: còn "
+                            f"{max(0.0, project.cong_can - project.cong_da):g} công")
+            dong.append(
+                "CHỖ Ở — hộ bạn chưa có nhà. Nếu ăn đủ ở mùa này, sức khỏe của bạn "
+                f"thay đổi {hoi - mat:+.2f} (= hồi {hoi:.2f} − phơi nhiễm {mat:.2f}); "
+                f"nhà có công thức {float(recipe.get('cong', 0.0)):g} công + "
+                f"{float(recipe.get('go', 0.0)):g} gỗ. {progress}."
+            )
     if a.gia_ky_vong:
         gia_rieng = ", ".join(
             f"{ts}≈{gia:.1f} thóc" for ts, gia in sorted(a.gia_ky_vong.items())

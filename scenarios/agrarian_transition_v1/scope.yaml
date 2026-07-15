@@ -58,6 +58,22 @@ behavioral_assumptions:
       vào world_hash qua ke_hoach→sản xuất; KHÔNG ép outcome có tên. Khi so sánh policy (T09/T10),
       đây KHÔNG phải hành vi thuần LLM/rulebot — phải nêu khi diễn giải. Tắt: đặt
       `minds: {san_an_toi_thieu: {bat: false}}` trong overlay để ablation.
+  llm_autonomy_v4:
+    enabled: treatment_only
+    ghi_chu: >-
+      Overlay `spatial_livelihood_v4.yaml` yêu cầu MỖI người trưởng thành còn sống có một
+      lượt LLM độc lập tối thiểu và tối đa mười request provider/tick, không batch nhiều
+      người vào một call. Đây là điều kiện bao phủ hạ tầng đắt tiền, không phải cơ chế kinh
+      tế hay bằng chứng hành vi lịch sử. Khi RPM hiện tại không đủ cho lượt bắt buộc của cả
+      cohort, run dừng trước tick thay vì chạy một phần dân số bằng policy card. Các call nén
+      ký ức/phản tư mặc định dùng fallback local để không biến coverage 1× thành burst 2×.
+  shelter_floor_v4:
+    enabled: treatment_only
+    ghi_chu: >-
+      Overlay v4 có survival floor chỗ ở config-gated: chỉ khi hộ đã không nhà, sức khỏe qua
+      ngưỡng nguy hiểm, và công trình nhà đã khả thi bằng đất/vật liệu của chính họ, nó mới
+      thêm intent mở/tiếp tục dự án và ghi event `san_cho_o_toi_thieu`. Không tạo gỗ, công,
+      đất hay nhà; phải báo cáo và ablation cùng như survival floor lương thực.
   behavior_policy:
     default: rulebot   # baseline; feasible_random/subsistence là treatment (ADR 0002)
 exclusions:

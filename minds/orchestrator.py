@@ -21,8 +21,9 @@ from minds.prompts import build_agent_prompt
 from minds.provenance import record_plan, record_plan_actions, record_raw_actions
 from minds.providers_real import LoiHetQuota, che_key
 from minds.repair import parse_batch
-from minds.safety import ap_dung_san_an_toi_thieu
+from minds.safety import ap_dung_san_an_toi_thieu, ap_dung_san_cho_o_toi_thieu
 from minds.schemas import TheChinhSach, ap_patch
+from minds.tick_budget import LoiVuotNganSachTick, NganSachLLMTick, cau_hinh_ngan_sach
 from minds.translate import quyet_dinh_thanh_ke_hoach
 from minds.triggers import quet_trigger
 
@@ -37,6 +38,21 @@ def tier_cua(w: World, aid: str) -> str:
 def _the_cua(w: World, aid: str) -> TheChinhSach:
     du_lieu = w.policy_cards.get(aid)
     return TheChinhSach(**du_lieu) if du_lieu else TheChinhSach()
+
+
+def _agent_tu_chu(w: World) -> list[str]:
+    """Cư dân có năng lực tự quyết kinh tế trong tick hiện tại.
+
+    Trẻ nhỏ vẫn được hộ bảo trợ qua engine; ép một LLM trưởng thành đưa lệnh
+    thị trường thay cho trẻ nhỏ sẽ làm mô hình *kém* thực tế hơn. Tất cả người
+    trưởng thành còn sống, không chỉ người có trigger, đều phải có call riêng
+    khi treatment autonomy được bật.
+    """
+    tuoi_truong_thanh = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+    return [
+        aid for aid in sorted(w.agents)
+        if w.agents[aid].con_song and w.agents[aid].truong_thanh(tuoi_truong_thanh)
+    ]
 
 
 class MindMock:
@@ -61,6 +77,14 @@ class MindMock:
         self.tok_out = 0
         self.so_luot_cong_cu = 0  # tổng lượt gọi công cụ MCP
         self.stats_tick: dict = {}
+        # Created afresh for each world tick. It aggregates independent
+        # per-agent budgets: 50 autonomous residents imply 50..500 provider
+        # requests, never a hidden village-wide cap of ten.
+        self._ngan_sach_tick: NganSachLLMTick | None = None
+        self._cfg_ngan_sach_tick: dict = {}
+        self.so_api_call = 0
+        self.so_api_call_bi_tu_choi = 0
+        self._agent_bi_chan_tick: set[str] = set()
         self.het_ngan_sach = False
         self.ly_do_dung = ""
         # mock: gather TUẦN TỰ theo sorted-id, chia sẻ da_nham (giữ hành vi phân bố thửa
@@ -121,6 +145,9 @@ class MindMock:
 
         self.provider.w = w  # sau resume, w là object mới
         self.stats_tick = {}  # reset telemetry của tick này
+        self._cfg_ngan_sach_tick = cau_hinh_ngan_sach(w.cfg)
+        self._ngan_sach_tick = None
+        self._agent_bi_chan_tick = set()
         bc = _BoiCanhTick(w)
         cau_hon_den: dict[str, list[str]] = {}
         for tu, den, _t in w.cau_hon_cho:
@@ -128,6 +155,34 @@ class MindMock:
         ctx = {"bc": bc, "cau_hon_den": cau_hon_den}
 
         triggers = quet_trigger(w)
+        if self._cfg_ngan_sach_tick["bat"]:
+            tu_chu = _agent_tu_chu(w)
+            toi_thieu = int(self._cfg_ngan_sach_tick["toi_thieu"])
+            toi_da = int(self._cfg_ngan_sach_tick["toi_da"])
+            # One aggregate semaphore still gives provider code a simple,
+            # thread-safe interface; its hard total is exactly the sum of all
+            # independent agent maxima, and each ``agent:<id>`` has its own
+            # cap. Thus A cannot spend B's ten calls.
+            self._ngan_sach_tick = NganSachLLMTick(
+                tick=w.tick,
+                toi_thieu=toi_thieu if tu_chu else 0,
+                toi_da=len(tu_chu) * toi_da,
+                default_toi_da_moi_task=toi_da,
+            )
+            if tu_chu:
+                self._ngan_sach_tick.dat_yeu_cau_cho_tasks(
+                    [f"agent:{aid}" for aid in tu_chu], toi_thieu_moi_task=toi_thieu
+                )
+                # The trigger remains context/priority information, never a
+                # gate which suppresses a resident's independent LLM turn.
+                triggers = {
+                    aid: list(triggers.get(aid, ("dieu_phoi_toi_thieu",)))
+                    for aid in tu_chu
+                }
+            else:
+                self._ngan_sach_tick.dat_yeu_cau_toi_thieu(
+                    False, ly_do_ngoai_le="no_autonomous_adult"
+                )
         ke_hoach: dict[str, KeHoach] = {}
         thung_intent_la: list = []  # (aid, hành động thô, lý do) — bộ dịch intent xử lý sau
         # một da_nham cho CẢ tick: người nghĩ (mock) → người-thẻ → entity đều tránh
@@ -140,6 +195,10 @@ class MindMock:
             aid for aid in sorted(triggers)
             if (a := w.agents.get(aid)) is not None and a.con_song
         ]
+        # Preserve the intended cohort in telemetry even if the real-provider
+        # guard later rejects the tick.  Replacing this with zero would make a
+        # failed 50-person autonomy preflight look like a quiet village.
+        so_task_logic = len(thinkers)
 
         # hook ngân sách (real: budget guard per-agent; mock: luôn đủ)
         if thinkers and not self._du_ngan_sach(w, thinkers):
@@ -182,7 +241,9 @@ class MindMock:
                 if qd is None:  # fallback: giữ thẻ cũ, không hành động mới
                     self.so_fallback += 1
                     ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, set())
-                    record_plan(w, aid, "fallback", detail="llm_response_unusable")
+                    detail = ("llm_tick_cap" if aid in self._agent_bi_chan_tick
+                              else "llm_response_unusable")
+                    record_plan(w, aid, "fallback", detail=detail)
                     record_plan_actions(w, ke_hoach[aid], "fallback")
                     continue
                 kh = quyet_dinh_thanh_ke_hoach(w, qd, thung_intent_la)
@@ -230,6 +291,7 @@ class MindMock:
         # sinh kế khi kho xuống dưới ngưỡng config. Cần chạy SAU LLM/thẻ để không thay
         # thế lựa chọn tự nguyện, chỉ lấp một ràng buộc vật chất bị bỏ quên.
         ap_dung_san_an_toi_thieu(w, ke_hoach, bc, da_nham)
+        ap_dung_san_cho_o_toi_thieu(w, ke_hoach)
 
         # --- nén hồi ký mỗi 4 tick (mock nén — heuristic, vẫn log call) ---
         if w.tick % 4 == 0:
@@ -237,6 +299,20 @@ class MindMock:
         # --- tự phản tư mỗi N tick: cô đọng ký ức + ân oán → niềm tin cốt lõi (5.3) ---
         if w.tick % int(w.cfg.get("minds.reflection_moi_n_tick")) == 0:
             self._reflection(w)
+        self.stats_tick["logical_task"] = so_task_logic
+        if self._ngan_sach_tick is not None:
+            tick_stats = self._ngan_sach_tick.thong_ke()
+            tick_stats["api_call_by_agent"] = {
+                task.removeprefix("agent:"): count
+                for task, count in tick_stats.get("api_call_by_task", {}).items()
+                if task.startswith("agent:")
+            }
+            tick_stats["api_call_scope"] = "moi_agent"
+            tick_stats["api_call_min_moi_agent"] = int(self._cfg_ngan_sach_tick["toi_thieu"])
+            tick_stats["api_call_cap_moi_agent"] = int(self._cfg_ngan_sach_tick["toi_da"])
+            self.stats_tick.update(tick_stats)
+            self.so_api_call += int(tick_stats["api_call"])
+            self.so_api_call_bi_tu_choi += int(tick_stats["api_call_denied"])
         self.log.flush()
         if self.transcript is not None:
             self.transcript.flush()
@@ -300,7 +376,16 @@ class MindMock:
                   else build_agent_prompt(w, aid, triggers))
         tier = tier_cua(w, aid)
         req_ctx = {**ctx, "aid": aid}  # da_nham đã nằm trong ctx (chia sẻ/rỗng tùy chế độ)
-        req = LLMRequest(prompt=prompt, ctx=req_ctx, tier=tier, batch_ids=[aid])
+        # Every LLM-related request of this resident (decision, retry, MCP,
+        # memory, reflection, translation) shares one per-agent 1..N budget.
+        logical_id = f"agent:{aid}"
+        max_api = (int(self._cfg_ngan_sach_tick["toi_da_moi_task"])
+                   if self._ngan_sach_tick is not None else None)
+        req = LLMRequest(
+            prompt=prompt, ctx=req_ctx, tier=tier, batch_ids=[aid],
+            tick_budget=self._ngan_sach_tick, logical_id=logical_id,
+            logical_kind="decision", max_api_calls=max_api,
+        )
         # MCP (PART 5.2): real + cờ bật + provider hỗ trợ → vòng công cụ CHỈ ĐỌC
         dung_cong_cu = (not self._tuan_tu
                         and bool(w.cfg.get("minds.dung_cong_cu_the_gioi"))
@@ -310,6 +395,10 @@ class MindMock:
                 resp = self.provider.goi_agentic(req, w, aid)  # NGOÀI khoá — I/O song song
             else:
                 resp = self.provider.goi(req, attempt=0)  # NGOÀI khoá — I/O chạy song song
+        except LoiVuotNganSachTick:
+            with self._lock:
+                self._agent_bi_chan_tick.add(aid)
+            return None
         except LoiHetQuota as e:
             with self._lock:
                 self._ghi_call_loi(w, req, e)
@@ -322,10 +411,18 @@ class MindMock:
         if not hong:
             return ok[aid]
         # retry 1 lần kèm nhắc lỗi (mock: sinh lại với attempt=1)
-        req2 = LLMRequest(prompt=prompt + "\n[LỖI JSON — trả lại đúng schema]",
-                          ctx=req_ctx, tier=tier, batch_ids=[aid])
+        req2 = LLMRequest(
+            prompt=prompt + "\n[LỖI JSON — trả lại đúng schema]",
+            ctx=req_ctx, tier=tier, batch_ids=[aid],
+            tick_budget=self._ngan_sach_tick, logical_id=logical_id,
+            logical_kind="decision", max_api_calls=max_api,
+        )
         try:
             resp2 = self.provider.goi(req2, attempt=1)
+        except LoiVuotNganSachTick:
+            with self._lock:
+                self._agent_bi_chan_tick.add(aid)
+            return None
         except LoiHetQuota as e:
             with self._lock:
                 self._ghi_call_loi(w, req2, e)

@@ -4,6 +4,22 @@ from __future__ import annotations
 
 from engine.world import World
 
+# Higher numbers mean that a scarce LLM decision slot is economically more
+# urgent.  This is a scheduler priority, never an action recommendation: the
+# selected person can still choose any valid action or do nothing.
+UU_TIEN_TRIGGER = {
+    "sap_doi": 100,
+    "cho_o_nguy_kich": 95,
+    "dao_han": 85,
+    "nhan_de_nghi": 80,
+    "duoc_cau_hon": 70,
+    "moc_tuoi": 55,
+    "gia_lech": 45,
+    "nghe_tin_bang_rao": 35,
+    "dinh_ky": 10,
+    "dieu_phoi_toi_thieu": 0,
+}
+
 
 def quet_trigger(w: World) -> dict[str, list[str]]:
     """Trả {agent_id: [lý do trigger]} — kỳ vọng 30–40% dân/tick."""
@@ -67,6 +83,16 @@ def quet_trigger(w: World) -> dict[str, list[str]]:
         )
         if du_tru < nhu_cau:
             them(aid, "sap_doi")
+        # Exposure is a physical threat distinct from hunger.  The config
+        # gate keeps legacy treatments byte-for-byte unchanged.
+        nha_o = cfg.get("suc_khoe.nha_o", {})
+        san_cho = cfg.get("minds.san_cho_o_toi_thieu", {})
+        if (isinstance(nha_o, dict) and bool(nha_o.get("bat", False))
+                and isinstance(san_cho, dict) and bool(san_cho.get("bat", False))):
+            co_nha = any(w.ledger.so_du(m, "nha") >= 1.0 for m in ho)
+            nguong_cho = float(san_cho.get("nguong_health_khoi_cong", 50.0))
+            if not co_nha and a.health <= nguong_cho:
+                them(aid, "cho_o_nguy_kich")
         if gia_lech:
             them(aid, "gia_lech")
         if de_nghi_den.get(aid):
@@ -84,3 +110,57 @@ def quet_trigger(w: World) -> dict[str, list[str]]:
         if (w.tick + so_le) % dinh_ky_n == 0:
             them(aid, "dinh_ky")
     return ket_qua
+
+
+def chon_nguoi_nghi(w: World, triggers: dict[str, list[str]], *,
+                     toi_da: int, toi_thieu: int = 1) -> dict[str, list[str]]:
+    """Choose a bounded, deterministic and fair set of LLM decision makers.
+
+    The old orchestrator sent every triggered resident to the provider.  A
+    periodic trigger could therefore create dozens of calls, while a quiet
+    tick made zero calls.  This selector first serves material urgency, then
+    uses a tick-rotating tie break so equal residents do not permanently lose
+    to a low lexical id.  If living adults exist but no trigger fires, one is
+    deliberately scheduled for a normal review.
+    """
+    cap = max(0, int(toi_da))
+    floor = max(0, int(toi_thieu))
+    adult_age = int(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+    eligible = [
+        aid for aid in sorted(w.agents)
+        if w.agents[aid].con_song and w.agents[aid].truong_thanh(adult_age)
+    ]
+    if cap == 0 or not eligible:
+        return {}
+
+    index = {aid: i for i, aid in enumerate(eligible)}
+    rotation = w.tick % len(eligible)
+
+    def priority(aid: str) -> int:
+        return max((UU_TIEN_TRIGGER.get(reason, 20)
+                    for reason in triggers.get(aid, [])), default=-1)
+
+    candidates = [aid for aid in eligible if aid in triggers]
+    if not candidates and floor:
+        # A quiet village still has ordinary decisions (saving, an intended
+        # investment, a reply next tick).  This is a review opportunity, not
+        # fabricated information or an engine action.
+        candidates = eligible[:]
+        triggers = {**triggers}
+        for aid in candidates:
+            triggers.setdefault(aid, ["dieu_phoi_toi_thieu"])
+
+    candidates.sort(
+        key=lambda aid: (-priority(aid), (index[aid] - rotation) % len(eligible), aid)
+    )
+    chosen = candidates[:cap]
+    # ``floor`` is normally one and cap is validated positive.  The guard
+    # documents the intentional exception: a world with no adult has nobody
+    # who can make an economic decision, so an empty call is not manufactured.
+    if len(chosen) < floor and eligible:
+        for aid in eligible:
+            if aid not in chosen:
+                chosen.append(aid)
+            if len(chosen) >= min(cap, floor):
+                break
+    return {aid: list(triggers.get(aid, ("dieu_phoi_toi_thieu",))) for aid in chosen}

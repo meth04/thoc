@@ -218,6 +218,19 @@ def _q_nam(tuoi: float, gp: dict[str, float], ns: dict) -> float:
     return min(tran, math.exp(log_q[-1] + do_doc * (tuoi - moc[-1])))
 
 
+def _ly_do_suy_kiet(*, vua_doi: bool, vo_gia_cu: bool, co_dich: bool) -> str:
+    """Gắn nhãn tử vong sức khỏe thấp theo cơ chế đang hoạt động."""
+    # ``benh_tat`` không có cú sốc dịch đã từng làm một chuỗi phơi nhiễm do
+    # vô gia cư tất định trông như một dịch bệnh bí ẩn trong real30_v3.
+    if vua_doi:
+        return "chet_doi"
+    if vo_gia_cu:
+        return "phoi_nhiem"
+    if co_dich:
+        return "benh_tat"
+    return "kiet_suc"
+
+
 def cai_chet(w: World) -> list[str]:
     sk = w.cfg.raw()["suc_khoe"]
     gp = w.cfg.get("nhan_khau.tu_vong_gompertz")
@@ -233,10 +246,23 @@ def cai_chet(w: World) -> list[str]:
             continue
         vua_doi = w.tick - a.doi_tick <= w.tick_moi_nam()  # thiếu ăn trong vòng 1 năm gần đây
         ly_do = None
+        ly_do_suy_kiet = _ly_do_suy_kiet(
+            vua_doi=vua_doi,
+            vo_gia_cu=bool(getattr(a, "vo_gia_cu", False)),
+            co_dich=bool(getattr(w, "dich_benh_tick", False)),
+        )
         if a.health <= 0:
-            ly_do = "chet_doi" if vua_doi else "kiet_suc"
+            # The detailed causal taxonomy is a v3 reporting treatment.  The
+            # base/legacy path must retain its old labels exactly, otherwise a
+            # read-only diagnosis feature silently changes memories and the
+            # pinned behavioural world hash.
+            ly_do = ly_do_suy_kiet if tach_nguyen_nhan else (
+                "chet_doi" if vua_doi else "kiet_suc"
+            )
         elif a.health < sk["nguong_nguy_kich"] and g.random() < sk["p_chet_khi_nguy_kich"]:
-            ly_do = "chet_doi" if vua_doi else "benh_tat"
+            ly_do = ly_do_suy_kiet if tach_nguyen_nhan else (
+                "chet_doi" if vua_doi else "benh_tat"
+            )
         else:
             # Hazard Gompertz được khai báo theo NĂM. Căn theo độ dài tick để một
             # scenario 3 mùa/năm không lặng lẽ làm xác suất chết thường niên cao hơn.

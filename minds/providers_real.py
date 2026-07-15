@@ -16,12 +16,46 @@ import httpx
 from minds.gateway import LLMRequest, LLMResponse
 from minds.keypool import KeyPool, key_hash
 from minds.quota import QuotaCounter
+from minds.tick_budget import (
+    LoiVuotNganSachTick,
+    bat_dau_yeu_cau,
+    logical_id_cua,
+    slot_con_lai_cho_yeu_cau,
+)
 
 
 def che_key(text: str) -> str:
     """Che API key trong mọi chuỗi lỗi/URL — key không bao giờ được lộ ra log."""
     text = re.sub(r"key=[^&\s'\"]+", "key=***", text)
     return re.sub(r"Bearer [^\s'\"]+", "Bearer ***", text)
+
+
+def _bat_dau_request_thuc(req: LLMRequest) -> None:
+    """Consume exactly one tick-budget slot immediately before ``client.post``.
+
+    A route retry, a 429 retry and every turn in an agentic tool loop each
+    reaches this function independently. It enforces the 1..N cap of the
+    *specific agent*, rather than a misleading cap for the whole village.
+    """
+    bat_dau_yeu_cau(req)
+
+
+def _luot_tool_huu_dung(req: LLMRequest, cau_hinh_max_luot: int) -> int:
+    """Cap tool turns so one agent always retains a final JSON call.
+
+    A tool turn is itself an LLM request.  With a per-agent cap of 10, the
+    most an agent can do is 9 tool requests plus one final decision—not 10
+    tools *and* a hidden eleventh model request.
+    """
+    con_lai = slot_con_lai_cho_yeu_cau(req)
+    if con_lai is None:
+        return max(0, int(cau_hinh_max_luot))
+    if con_lai < 1:
+        raise LoiVuotNganSachTick(
+            f"tick {getattr(getattr(req, 'tick_budget', None), 'tick', '?')}: "
+            f"hết slot LLM cho {logical_id_cua(req)}"
+        )
+    return min(max(0, int(cau_hinh_max_luot)), max(0, con_lai - 1))
 
 
 @dataclass
@@ -64,6 +98,7 @@ class AIStudioProvider:
         if key is None:
             raise LoiHetQuota("aistudio: mọi key đang cooldown")
         t0 = time.time()
+        _bat_dau_request_thuc(req)
         r = self.client.post(
             f"{self.base}/v1beta/models/{model}:generateContent",
             params={"key": key},
@@ -123,6 +158,13 @@ class AIStudioProvider:
             key = chon_key()
             if key is None:
                 raise LoiHetSlot("aistudio-het-slot")  # tràn cả vòng sang 9router
+            # ``chon_key`` already reserved an in-flight key.  A rejected
+            # tick-budget slot must release it without creating a quota row.
+            try:
+                _bat_dau_request_thuc(req)
+            except LoiVuotNganSachTick:
+                xong_key(key, False)
+                raise
             thanh_cong = False
             try:
                 cfg = {"temperature": temperature, "maxOutputTokens": max_tokens}
@@ -205,7 +247,7 @@ class NineRouterProvider:
 
     def goi_agentic(self, req: LLMRequest, model: str, temperature: float,
                     max_tokens: int, w, aid: str, khai_bao: list, thuc_thi,
-                    max_luot: int) -> LLMResponse:
+                    max_luot: int, ghi_thanh_cong=None) -> LLMResponse:
         """Vòng agentic OpenAI-compatible (MCP trên 9router): LLM gọi công cụ CHỈ ĐỌC
         nhiều lượt trước khi quyết. Công cụ = KHAI_BAO_CONG_CU bọc dạng OpenAI tools."""
         t0 = time.time()
@@ -223,6 +265,7 @@ class NineRouterProvider:
                 body["tools"] = tools  # còn lượt → cho gọi công cụ
             else:
                 body["response_format"] = {"type": "json_object"}  # lượt cuối: ép quyết
+            _bat_dau_request_thuc(req)
             r = self.client.post(f"{self.base}/chat/completions",
                                  headers={"Authorization": f"Bearer {self.key}"}, json=body)
             if r.status_code == 429:
@@ -231,6 +274,13 @@ class NineRouterProvider:
                 r.raise_for_status()
             except httpx.HTTPStatusError as e:
                 raise httpx.HTTPError(che_key(str(e))) from None
+            # One agentic response may contain many HTTP turns.  Count each
+            # successful turn now—not once when the entire conversation ends—
+            # so RPM/RPD state and the auditable scheduler describe the same
+            # physical requests.  This also preserves calls already spent if
+            # a later tool turn returns malformed JSON.
+            if ghi_thanh_cong is not None:
+                ghi_thanh_cong()
             d = r.json()
             usage = d.get("usage", {})
             tok_in += int(usage.get("prompt_tokens", 0))
@@ -274,6 +324,7 @@ class NineRouterProvider:
     def goi(self, req: LLMRequest, model: str, temperature: float,
             max_tokens: int) -> LLMResponse:
         t0 = time.time()
+        _bat_dau_request_thuc(req)
         r = self.client.post(
             f"{self.base}/chat/completions",
             headers={"Authorization": f"Bearer {self.key}"},
@@ -378,6 +429,42 @@ class GatewayReal:
         return self.quota.con_lai_rpd(route.provider, route.model,
                                       self._key_hashes(route.provider), route.rpd, now)
 
+    def kha_nang_burst(self, route: Route, now: float) -> int:
+        """Số request có thể BẮT ĐẦU ngay trong cửa sổ RPM hiện tại.
+
+        Đây không phải dự báo RPD cả ngày.  Nó là headroom tức thời dùng bởi
+        treatment coverage đầy đủ để quyết định trước tick liệu tất cả cư dân
+        có thể nhận lượt suy nghĩ bắt buộc hay không.  Cooldown, RPD đã dùng
+        và request đang bay đều trừ trực tiếp khỏi năng lực này.
+        """
+        if route.provider == "aistudio":
+            cong_suat = 0
+            for key in self.pool_aistudio.key_kha_dung(now):
+                kh = key_hash(key)
+                rpm_con = route.rpm - self.quota.rpm_hien_tai(
+                    route.provider, route.model, kh, now
+                ) - self._dang_bay.get(kh, 0)
+                rpd_con = route.rpd - self.quota.rpd_da_dung(
+                    route.provider, route.model, kh, now
+                )
+                cong_suat += max(0, min(rpm_con, rpd_con))
+            return int(cong_suat)
+
+        # A missing/placeholder 9router key is not capacity.  Treating it as
+        # a usable route would turn a clean preflight failure into a later
+        # HTTP failure after some residents have already been processed.
+        key = str(self._env.nine_key or "")
+        if not key or key.startswith("dien_key"):
+            return 0
+        kh = key_hash(key)
+        rpm_con = route.rpm - self.quota.rpm_hien_tai(
+            route.provider, route.model, kh, now
+        ) - self._dang_bay.get(kh, 0)
+        rpd_con = route.rpd - self.quota.rpd_da_dung(
+            route.provider, route.model, kh, now
+        )
+        return int(max(0, min(rpm_con, rpd_con)))
+
     def concurrency_de_xuat(self, cap: int) -> int:
         """Số call LLM song song NÊN chạy mỗi tick, TỰ CO GIÃN theo số key: mỗi key
         aistudio gánh được ~vài call/phút → càng nhiều key càng chạy song song được.
@@ -438,11 +525,15 @@ class GatewayReal:
         sample_cfg = self.strict_treatment_cfg if self.strict_treatment else tier_cfg
         temperature = float(sample_cfg.get("temperature", tier_cfg.get("temperature", 0.9)))
         max_tokens = int(sample_cfg.get("max_output_tokens", tier_cfg.get("max_output_tokens", 2000)))
-        max_luot = int(self.cfg.get("minds.cong_cu_max_luot"))
+        max_luot_cau_hinh = int(self.cfg.get("minds.cong_cu_max_luot"))
         loi_cuoi: Exception | None = None
         so_attempt_hong = 0
         co_route_con_rpd = False
         for route in self.routes_cua_tier(req.tier):
+            # Re-evaluate after a failed route too: a failed HTTP attempt has
+            # already consumed this resident's budget, so the next route may
+            # only have room for a direct final JSON answer.
+            max_luot = _luot_tool_huu_dung(req, max_luot_cau_hinh)
             now = time.time()
             if self.con_lai(route, now) <= 0:
                 continue
@@ -458,9 +549,11 @@ class GatewayReal:
                     try:
                         resp = self.ninerouter.goi_agentic(
                             req, route.model, temperature, max_tokens, w, aid,
-                            KHAI_BAO_CONG_CU, thuc_thi, max_luot)
-                        self.quota.ghi_call(route.provider, route.model, resp.key_hash,
-                                            time.time())
+                            KHAI_BAO_CONG_CU, thuc_thi, max_luot,
+                            ghi_thanh_cong=lambda _route=route, _kh=kh: self.quota.ghi_call(
+                                _route.provider, _route.model, _kh, time.time()
+                            ),
+                        )
                         return resp
                     except (LoiRateLimit, *self._LOI_PHAN_HOI) as e:
                         loi_cuoi = e
@@ -567,3 +660,98 @@ def budget_guard(gw: GatewayReal, can_theo_tier: dict[str, int]) -> tuple[bool, 
         if tong_con * safety < can:
             return False, f"tier {tier}: cần {can} call, còn {tong_con} (×{safety})"
     return True, ""
+
+
+def burst_guard(gw: GatewayReal, can_theo_tier: dict[str, int]) -> tuple[bool, str]:
+    """Fail closed when an autonomy tick cannot cover all adults immediately.
+
+    The graph is a small max-flow allocation: a tier can consume any of its
+    declared fallback routes, while a shared route (T0/T1 often share one)
+    is counted only once.  A naive per-tier sum would double-count that shared
+    provider capacity and allow exactly the partial cohort this guard exists
+    to prevent.
+    """
+    nhu_cau = {str(tier): int(so) for tier, so in can_theo_tier.items() if int(so) > 0}
+    if not nhu_cau:
+        return True, ""
+    now = time.time()
+    safety = float(gw.cfg.get("quotas.chung.safety_margin"))
+    routes_tier: dict[str, list[tuple[str, str]]] = {}
+    cong_suat: dict[tuple[str, str], int] = {}
+    raw_cong_suat: dict[tuple[str, str], int] = {}
+    for tier in sorted(nhu_cau):
+        keys: list[tuple[str, str]] = []
+        for route in gw.routes_cua_tier(tier):
+            key = (route.provider, route.model)
+            if key not in raw_cong_suat:
+                raw = gw.kha_nang_burst(route, now)
+                raw_cong_suat[key] = raw
+                # Quotas are already conservative configuration, but preserve
+                # the project's global headroom rule.  Do not round one
+                # genuinely available slot down to zero for a small scenario.
+                cong_suat[key] = max(1, int(raw * safety)) if raw > 0 else 0
+            if key not in keys:
+                keys.append(key)
+        routes_tier[tier] = keys
+
+    # Edmonds–Karp over source -> tier -> route -> sink.  Inputs are small
+    # (five tiers and a handful of routes), so clarity beats a clever shortcut.
+    graph: dict[str, dict[str, int]] = {}
+
+    def them_canh(u: str, v: str, cap: int) -> None:
+        graph.setdefault(u, {})
+        graph.setdefault(v, {})
+        graph[u][v] = graph[u].get(v, 0) + max(0, int(cap))
+        graph[v].setdefault(u, 0)
+
+    source, sink = "__source__", "__sink__"
+    tong_can = sum(nhu_cau.values())
+    for tier, so in sorted(nhu_cau.items()):
+        node_tier = f"tier:{tier}"
+        them_canh(source, node_tier, so)
+        for provider, model in routes_tier[tier]:
+            them_canh(node_tier, f"route:{provider}/{model}", so)
+    for (provider, model), cap in sorted(cong_suat.items()):
+        them_canh(f"route:{provider}/{model}", sink, cap)
+
+    dong = 0
+    while True:
+        truoc: dict[str, str | None] = {source: None}
+        queue = [source]
+        for u in queue:
+            for v, cap in graph.get(u, {}).items():
+                if cap > 0 and v not in truoc:
+                    truoc[v] = u
+                    queue.append(v)
+                    if v == sink:
+                        break
+            if sink in truoc:
+                break
+        if sink not in truoc:
+            break
+        # Rebuild the actual source→sink path; the compact BFS queue above is
+        # not necessarily that path.
+        path: list[tuple[str, str]] = []
+        v = sink
+        while truoc[v] is not None:
+            u = truoc[v]
+            path.append((u, v))
+            v = u
+        day = min(graph[u][v] for u, v in path)
+        for u, v in path:
+            graph[u][v] -= day
+            graph[v][u] = graph[v].get(u, 0) + day
+        dong += day
+
+    if dong >= tong_can:
+        return True, ""
+    chi_tiet_can = ", ".join(f"{tier}={so}" for tier, so in sorted(nhu_cau.items()))
+    chi_tiet_cap = ", ".join(
+        f"{provider}/{model}={cong_suat[(provider, model)]}/{raw_cong_suat[(provider, model)]}"
+        for provider, model in sorted(cong_suat)
+    ) or "không có route khả dụng"
+    return False, (
+        "RPM burst không đủ cho autonomy tick: "
+        f"cần {tong_can} lượt bắt buộc ({chi_tiet_can}), "
+        f"phân bổ được {dong}; headroom an toàn/raw: {chi_tiet_cap}"
+    )
