@@ -141,6 +141,9 @@ def test_v4_real_fake_provider_makes_50_independent_http_requests(tmp_path):
 def test_v4_rpm_preflight_stops_before_spending_a_partial_cohort(tmp_path):
     """Two 4-RPM keys cannot honestly start the required 50-person burst."""
     cfg = _cfg()
+    # The production v4 treatment may wait for a recoverable RPM window.  This
+    # regression exercises the explicit no-wait/fail-closed branch instead.
+    cfg.raw()["minds"]["llm_tick"]["cho_burst_rpm_toi_s"] = 0
     strict = cfg.raw()["minds"]["nghiem_thuc"]
     strict.update({
         "bat": True,
@@ -206,6 +209,7 @@ def test_run_driver_keeps_world_at_tick_zero_when_autonomy_preflight_fails(
         return _decision_response(json.loads(request.content))
 
     def factory(_mode, w, _args):
+        w.cfg.raw()["minds"]["llm_tick"]["cho_burst_rpm_toi_s"] = 0
         env = EnvKeys(gemini_keys=["fixture-key-0", "fixture-key-1"],
                       nine_key="fixture-nine-key", nine_base="http://fixture.invalid/v1",
                       llm_mode="real")

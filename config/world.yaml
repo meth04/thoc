@@ -269,6 +269,11 @@ minds:
     # provider RPM window.  This prevents a costly half-tick with only a
     # subset of residents heard when a full-coverage experiment is selected.
     kiem_tra_burst_rpm: false
+    # If non-zero, a real full-coverage treatment may wait for a sliding RPM
+    # window to recover before the tick starts. A timeout still fails closed:
+    # no world-time advance and no policy-card half cohort.
+    cho_burst_rpm_toi_s: 0
+    cho_burst_rpm_poll_s: 3
   # Research treatment mode: one provider/model/sampling setup for every agent tier, no
   # automatic route fallback. Tắt cho production; bật bằng overlay thí nghiệm có provenance.
   nghiem_thuc:

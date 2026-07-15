@@ -18,10 +18,12 @@ minds:
     toi_da_call: 10
     toi_da_call_moi_quyet_dinh: 10
     # A full-coverage tick is atomic for this experiment: do not spend a
-    # partial cohort and then time out waiting for RPM.  Before each tick the
-    # real gateway must have enough immediate route headroom for every adult's
-    # mandatory first request; otherwise it stops before any provider call.
+    # partial cohort. Before each tick the real gateway waits (at most 150 s)
+    # for the sliding RPM window to have headroom for every adult's mandatory
+    # first request; a timeout still stops before any provider call.
     kiem_tra_burst_rpm: true
+    cho_burst_rpm_toi_s: 150
+    cho_burst_rpm_poll_s: 3
     # Decision coverage is the expensive priority. Memory/reflection use their
     # deterministic local form unless a separate experiment enables this.
     goi_ho_tro: false

@@ -472,6 +472,9 @@ def chay_run(args, *, mind_factory=None) -> int:
         meta["so_api_call_bi_tu_choi_phien"] = int(
             getattr(mind_fn, "so_api_call_bi_tu_choi", 0)
         )
+        meta["cho_burst_preflight_s_phien"] = round(
+            float(getattr(mind_fn, "so_cho_burst_preflight_s", 0.0)), 3
+        )
         if ly_do_ket_thuc == "llm_provider_budget_exhausted":
             meta["llm_preflight_ly_do"] = str(getattr(mind_fn, "ly_do_dung", ""))
         meta["concurrency"] = int(getattr(mind_fn, "concurrency", 0))

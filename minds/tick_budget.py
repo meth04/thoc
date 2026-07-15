@@ -211,7 +211,7 @@ def slot_con_lai_cho_yeu_cau(req: Any) -> int | None:
     )
 
 
-def cau_hinh_ngan_sach(cfg: Any) -> dict[str, int | bool | str]:
+def cau_hinh_ngan_sach(cfg: Any) -> dict[str, int | float | bool | str]:
     """Đọc + kiểm tra cấu hình scheduler một lần ở rìa minds.
 
     Giữ fallback cho checkpoint/config cũ: mode mới là opt-in, còn các tham
@@ -230,12 +230,16 @@ def cau_hinh_ngan_sach(cfg: Any) -> dict[str, int | bool | str]:
     moi_task = int(raw.get("toi_da_call_moi_quyet_dinh", toi_da))
     goi_ho_tro = bool(raw.get("goi_ho_tro", False))
     kiem_tra_burst_rpm = bool(raw.get("kiem_tra_burst_rpm", False))
+    cho_burst_rpm_toi_s = float(raw.get("cho_burst_rpm_toi_s", 0))
+    cho_burst_rpm_poll_s = float(raw.get("cho_burst_rpm_poll_s", 3))
     if toi_thieu < 0 or toi_da < 1 or toi_thieu > toi_da:
         raise ValueError("minds.llm_tick phải có 0 <= toi_thieu_call <= toi_da_call")
     if pham_vi != "moi_agent":
         raise ValueError("minds.llm_tick.pham_vi hiện chỉ hỗ trợ 'moi_agent'")
     if moi_task < 1 or moi_task > toi_da:
         raise ValueError("minds.llm_tick: trần mỗi agent/task phải thuộc [1, toi_da_call]")
+    if cho_burst_rpm_toi_s < 0 or cho_burst_rpm_poll_s <= 0:
+        raise ValueError("minds.llm_tick: thời gian chờ burst phải >= 0 và poll phải > 0")
     return {
         "bat": bat,
         "pham_vi": pham_vi,
@@ -244,4 +248,6 @@ def cau_hinh_ngan_sach(cfg: Any) -> dict[str, int | bool | str]:
         "toi_da_moi_task": moi_task,
         "goi_ho_tro": goi_ho_tro,
         "kiem_tra_burst_rpm": kiem_tra_burst_rpm,
+        "cho_burst_rpm_toi_s": cho_burst_rpm_toi_s,
+        "cho_burst_rpm_poll_s": cho_burst_rpm_poll_s,
     }

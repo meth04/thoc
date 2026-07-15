@@ -104,6 +104,7 @@ class MindReal(MindMock):
         # chặn trên bởi minds.concurrency
         self.concurrency = self.gateway.concurrency_de_xuat(int(cfg.get("minds.concurrency")))
         self.ly_do_dung = ""
+        self.so_cho_burst_preflight_s = 0.0
         # bộ phiên dịch intent: loại đã hỏi mà LLM cũng bó tay → không hỏi lại (đỡ call)
         self._loai_bo_tay: set[str] = set()
 
@@ -126,10 +127,30 @@ class MindReal(MindMock):
             if w.agents[aid].con_song
             and w.agents[aid].tuoi_nam + buoc_tuoi_nam >= tuoi_truong_thanh
         ]
-        if not thinkers or self._du_ngan_sach(w, thinkers):
+        if not thinkers:
             return True
-        self.het_ngan_sach = True
-        return False
+        # A strict instantaneous burst check is correct at the start of a
+        # fresh run but wrong immediately after a successful tick: its own
+        # calls are still inside the provider's sliding 60-second RPM window.
+        # Wait only for that recoverable condition.  RPD exhaustion/provider
+        # configuration errors still fail immediately, and timeout preserves
+        # the no-half-tick contract.
+        deadline = time.monotonic() + float(
+            self._cfg_ngan_sach_tick.get("cho_burst_rpm_toi_s", 0.0)
+        )
+        poll_s = float(self._cfg_ngan_sach_tick.get("cho_burst_rpm_poll_s", 3.0))
+        while True:
+            if self._du_ngan_sach(w, thinkers):
+                self.ly_do_dung = ""
+                return True
+            co_the_hoi = self.ly_do_dung.startswith("RPM burst không đủ")
+            con_lai = deadline - time.monotonic()
+            if not co_the_hoi or con_lai <= 0:
+                self.het_ngan_sach = True
+                return False
+            cho = min(poll_s, con_lai)
+            time.sleep(cho)
+            self.so_cho_burst_preflight_s += cho
 
     # ---------- budget guard (điều luật #7: không degrade) ----------
     def _du_ngan_sach(self, w: World, thinkers: list) -> bool:
