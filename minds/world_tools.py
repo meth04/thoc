@@ -58,6 +58,11 @@ KHAI_BAO_CONG_CU: list[dict[str, Any]] = [
         "parameters": {"type": "object", "properties": {}},
     },
     {
+        "name": "xem_cho_o",
+        "description": "Xem tình trạng chỗ ở của chính bạn: nhà, quyền lô cư trú công, dự án nhà và các lô công đang mở. Chỉ trả dữ kiện, không tạo quyền hay tài sản.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
         "name": "xem_co_hoi_san_xuat",
         "description": "Xem fact card của hoạt động đang khả thi/gần khả thi: công, đầu vào, đầu ra vật lý và giới hạn tài nguyên; không xếp hạng lựa chọn.",
         "parameters": {"type": "object", "properties": {}},
@@ -198,6 +203,48 @@ def _xem_du_an(w: World, aid: str, args: dict) -> dict:
     return {"du_an": projects, "pham_vi": "dự án của bạn hoặc công trường cùng làng/bờ tới được"}
 
 
+def _xem_cho_o(w: World, aid: str, args: dict) -> dict:
+    """Private, read-only housing/entry-right card for an autonomous resident."""
+    from engine.settlement import _dat_o_bat, lo_cua, lo_uu_tien
+
+    agent = w.agents.get(aid)
+    if agent is None or not agent.con_song:
+        return {"loi": "người hỏi không còn hoạt động", "code": "agent_unavailable"}
+    household = [member for member in w.ho_cua(aid)
+                 if member in w.agents and w.agents[member].con_song]
+    homes = {
+        member: w.ledger.so_du(member, "nha")
+        for member in household if w.ledger.so_du(member, "nha") > 0
+    }
+    site = lo_cua(w, aid)
+    projects = [
+        project for project in getattr(w, "du_an", {}).values()
+        if project.trang_thai == "dang_lam" and project.loai == "nha"
+        and project.chu in household
+    ]
+    project_rows = [
+        {
+            "id": project.id,
+            "thua": project.thua,
+            "cong_con_lai": round(max(0.0, project.cong_can - project.cong_da), 6),
+            "vat_lieu_con_lai": {
+                asset: round(max(0.0, need - project.vat_lieu_da.get(asset, 0.0)), 6)
+                for asset, need in sorted(project.vat_lieu_can.items())
+            },
+            "han_tick": project.han_tick,
+        }
+        for project in sorted(projects, key=lambda row: (row.tick_tao, row.id))
+    ]
+    return {
+        "co_nha_trong_ho": bool(homes),
+        "nha_cua_ho": homes,
+        "lo_cu_tru_cua_toi": site,
+        "lo_cong_uu_tien": lo_uu_tien(w, aid) if _dat_o_bat(w) and site is None else [],
+        "du_an_nha_dang_mo": project_rows,
+        "pham_vi": "quyền lô chỉ cho phép đặt dự án nhà; không phải title ruộng",
+    }
+
+
 def _reachable_parcels(w: World, aid: str):
     from engine.spatial import co_the_o_bo
 
@@ -238,7 +285,10 @@ def _xem_co_hoi_san_xuat(w: World, aid: str, args: dict) -> dict:
     cards: list[dict[str, Any]] = []
     reachable = _reachable_parcels(w, aid)
     owned_fields = [p for p in reachable if p.loai == "ruong" and p.chu == aid]
-    common_fields = [p for p in reachable if p.loai == "ruong" and p.chu is None]
+    common_fields = [
+        p for p in reachable if p.loai == "ruong" and p.chu is None
+        and p.homestead_ai in (None, aid)
+    ]
     if w.mua_mua():
         sx = cfg["san_xuat"]
         cards.append({
@@ -286,6 +336,15 @@ def _xem_co_hoi_san_xuat(w: World, aid: str, args: dict) -> dict:
             "ton_ca_chung": round(float(getattr(w, "ca_ton", 0.0)), 6),
             "cong_hien_co": labour,
         })
+    from engine.settlement import _dat_o_bat, lo_cua, lo_uu_tien
+
+    if _dat_o_bat(w) and lo_cua(w, aid) is None:
+        cards.append({
+            "hoat_dong": "chon_dat_o",
+            "lo_uu_tien": lo_uu_tien(w, aid),
+            "tai_san_tao_ra": "quyen_dat_nha",
+            "khong_tao_ra": ["ruong", "go", "cong", "nha"],
+        })
     return {"co_hoi": cards, "pham_vi": "thông số vật lý/nguồn lực, không phải khuyến nghị"}
 
 
@@ -304,7 +363,8 @@ def _dat_cong_gan(w: World, aid: str, args: dict) -> dict:
     lang = w.villages[a.lang if a and a.lang < len(w.villages) else 0]
     cong = sorted(
         (p for p in w.parcels.values()
-         if p.loai == "ruong" and p.chu is None and co_the_o_bo(w, aid, p.bo)),
+         if p.loai == "ruong" and p.chu is None and p.homestead_ai in (None, aid)
+         and co_the_o_bo(w, aid, p.bo)),
         key=lambda p: (abs(p.r - lang.r) + abs(p.c - lang.c), p.id),
     )[:max(0, toi_da)]
     return {"thua": [{"id": p.id, "mau_mo": round(p.mau_mo, 2)} for p in cong]}
@@ -402,6 +462,7 @@ CONG_CU: dict[str, Callable[[World, str, dict], dict]] = {
     "xem_thi_truong_local": _xem_thi_truong_local,
     "xem_bao_gia": _xem_bao_gia,
     "xem_du_an": _xem_du_an,
+    "xem_cho_o": _xem_cho_o,
     "xem_co_hoi_san_xuat": _xem_co_hoi_san_xuat,
     "xem_tai_nguyen_gan_day": _xem_tai_nguyen_gan_day,
     "tai_san_cua_toi": _tai_san_cua_toi,

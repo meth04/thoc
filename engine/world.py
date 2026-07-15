@@ -87,7 +87,8 @@ def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
         cfg.pop("khong_gian", None)
     else:
         # Subsystems tắt độc lập không thể ảnh hưởng tick; giữ flag để khác với bật.
-        for name in ("do", "khai_hoang", "vu_dong", "ga_rung", "rung", "cham_tre", "endowment"):
+        for name in ("do", "khai_hoang", "vu_dong", "ga_rung", "rung", "cham_tre",
+                     "endowment", "dat_o", "phan_bo_ruong_cong"):
             block = space.get(name)
             if isinstance(block, dict) and not bool(block.get("bat", False)):
                 space[name] = {"bat": False}
@@ -235,6 +236,10 @@ class World:
     # scenario gate is enabled.
     du_an: dict[str, Any] = field(default_factory=dict)
     _next_du_an: int = 0
+    # Versioned public residential-lot permits: ``site id -> living holder``.  This is not
+    # a farm-land title and lives outside Agent so legacy Agent canonical layout stays exact.
+    # It enters behavioral_state only when ``khong_gian.dat_o.bat`` is on.
+    quyen_dat_o: dict[str, str] = field(default_factory=dict)
     gia_lich_su: dict[str, list] = field(default_factory=dict)  # tài sản → [(tick, giá, kl)]
     gat_tick: dict[str, tuple[str, float]] = field(default_factory=dict)  # thửa → (ai, kg)
     # Mọi thửa đã canh (lúa hoặc vụ đông) trong tick — dùng cho hồi màu; `gat_tick` giữ
@@ -461,6 +466,16 @@ class World:
             return (v.r, v.c)
         if a.nha_thua and a.nha_thua in self.parcels:
             p = self.parcels[a.nha_thua]
+            return (p.r, p.c)
+        # A selected public residential lot is a real location before a house is completed.
+        # It is deliberately checked before farm ownership: otherwise everyone without a
+        # finished house collapses back to the same village centre and the local social graph
+        # cannot reflect their voluntary settlement choice.
+        from engine.settlement import lo_cua
+
+        site = lo_cua(self, aid)
+        if site and site in self.parcels:
+            p = self.parcels[site]
             return (p.r, p.c)
         for p in self.parcels.values():
             if p.chu == aid:
@@ -724,6 +739,7 @@ class World:
         # một THÍ NGHIỆM KHÁC.
         from engine.estate import _di_san_bat
         from engine.household import _cu_tru_bat
+        from engine.settlement import _dat_o_bat
 
         if _cu_tru_bat(self):
             # Đổi ai được ăn ⇒ đổi quỹ đạo ⇒ PHẢI vào hash. `_next_cu_tru` quyết định id tương
@@ -735,6 +751,10 @@ class World:
             # trữ chỉ observatory đọc). Ta cố ý KHÔNG bắt chước `hop_dong_xong` — nó đang nằm
             # trong hash ở trên; ghi rõ ra đây để reviewer bắt bẻ được, không giấu.
             state["estate"] = {"mo": self.di_san, "next_id": self._next_di_san}
+        if _dat_o_bat(self):
+            # The site geometry is already in ``parcels``.  Only the changing common permit
+            # registry belongs here; omitting it would make next-tick prompts/hash disagree.
+            state["settlement_sites"] = {"rights": self.quyen_dat_o}
         from engine.quotes import _bao_gia_bat
 
         if bool(self.cfg.get("minds.action_journal.bat", False)):
@@ -927,6 +947,11 @@ class World:
             w.du_an = {}
         if not hasattr(w, "_next_du_an"):
             w._next_du_an = 0
+        # Settlement-site migration: old checkpoints carry no inferred rights.  A treatment
+        # that enabled this feature must start a fresh run because its map contains versioned
+        # ``dat_o`` parcels; preserving an empty registry here keeps ordinary old resumes safe.
+        if not hasattr(w, "quyen_dat_o"):
+            w.quyen_dat_o = {}
         w._cu_tru_ver = getattr(w, "_cu_tru_ver", 0) + 1  # ép dựng lại chỉ mục
         w._cu_tru_idx = None
         return w

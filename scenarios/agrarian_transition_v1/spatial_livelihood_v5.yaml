@@ -1,0 +1,33 @@
+# spatial_livelihood_v5.yaml — settlement-entry and fair-common-land remediation.
+#
+# Apply AFTER spatial_v1.yaml + spatial_livelihood_v2.yaml + v3.yaml + v4.yaml.  It is a
+# new treatment, not a retroactive edit to historical real30/real15 artifacts.
+
+khong_gian:
+  # Small household lots in the founding village.  A lot is an entry right for a house project,
+  # not a farm title and not a resource endowment.  The map's agricultural cells remain intact.
+  dat_o:
+    bat: true
+    he_so_lo_moi_nguoi: 2.0
+    so_lo_toi_thieu: 100
+    toi_da_uu_tien: 3
+
+  # Public rice parcels are allocated simultaneously when several people request the same
+  # parcel in a season.  The seeded lottery is auditable and does not privilege lexical ids.
+  phan_bo_ruong_cong:
+    bat: true
+    co_che: lottery_seeded
+
+du_an:
+  cong_trinh:
+    nha:
+      # A selected dat_o permit is a valid site for this one project kind.  Wood, labour,
+      # escrow, expiry and completion remain the ordinary generic-project mechanics.
+      cho_phep_quyen_cu_tru: true
+
+minds:
+  san_cho_o_toi_thieu:
+    # Start a legal construction pathway before exposure becomes irreversible.  The floor can
+    # request a public lot or continue a feasible project; it never creates materials/work.
+    nguong_health_khoi_cong: 100
+    cong_gop_moi_tick: 120

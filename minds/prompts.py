@@ -254,6 +254,12 @@ def luat_vat_ly(w: World) -> str:
         f"- Canh CÙNG MỘT thửa đất công {so(sx['homestead_tick_lien_tiep'])} mùa lúa liên tiếp "
         f"→ thửa đó thành CỦA BẠN."
     )
+    if bool(cfg.get("khong_gian.phan_bo_ruong_cong.bat", False)):
+        dong.append(
+            "- RUỘNG CÔNG CÙNG MÙA: khi nhiều người đăng cùng một thửa, engine gom yêu cầu "
+            "đồng thời rồi lottery seeded chọn người canh mùa đó; không dùng thứ tự id. Người "
+            "đang tích homestead trên thửa công được giữ quyền canh liên tục."
+        )
     nha_cong, nha_go = float(rc["nha"]["cong"]), float(rc["nha"]["go"])
     ct_r = rc["cong_cu"]
     dong_nha = (
@@ -266,6 +272,15 @@ def luat_vat_ly(w: World) -> str:
             f"bằng hợp đồng gop_cong), hoặc mua nhà có sẵn."
         )
     dong.append(dong_nha)
+    from engine.settlement import _dat_o_bat
+
+    if _dat_o_bat(w):
+        limit = int(cfg.get("khong_gian.dat_o.toi_da_uu_tien", 0))
+        dong.append(
+            f"- LÔ CƯ TRÚ CÔNG: mỗi người lớn có thể đăng tối đa {so(limit)} lô theo thứ tự "
+            "ưu tiên. Nếu trùng lô, lottery seeded chọn người giữ quyền và xét lô dự phòng. "
+            "Quyền lô chỉ cho phép đặt dự án nhà; KHÔNG cấp ruộng, gỗ, công hay nhà."
+        )
     dong.append(
         f"- Công cụ = {so(ct_r['go'])} gỗ + {so(ct_r['cong'])} công "
         f"(năng suất ×{so(ct_r['tang_nang_suat'])}, mòn "
@@ -570,8 +585,18 @@ def _fact_cards_cuc_bo(w: World, aid: str) -> list[str]:
     from engine.spatial import co_the_o_bo
 
     reachable = [p for p in w.parcels.values() if co_the_o_bo(w, aid, p.bo)]
-    fields = sorted((p for p in reachable if p.loai == "ruong" and p.chu is None),
-                    key=lambda p: p.id)[:6]
+    all_fields = sorted((p for p in reachable if p.loai == "ruong" and p.chu is None
+                         and p.homestead_ai in (None, aid)),
+                        key=lambda p: p.id)
+    # A shared "first six" board was a measurable prompt-level bottleneck: independent
+    # agents repeatedly selected P00_05/P00_06/P00_07 and engine order then favoured low ids.
+    # This is only a rotated public listing; the full registry remains observable through the
+    # world tool and simultaneous allocation decides conflicts.
+    if all_fields:
+        offset = int(w.rng.get(f"ruong_cong_board:{aid}", w.tick).integers(0, len(all_fields)))
+        fields = (all_fields[offset:] + all_fields[:offset])[:6]
+    else:
+        fields = []
     rows: list[str] = []
     if fields:
         rows.append(
@@ -589,6 +614,15 @@ def _fact_cards_cuc_bo(w: World, aid: str) -> list[str]:
                 "FACT CARD — RỪNG/ĐỒI CÔNG CÓ THỂ KHAI HOANG: "
                 + ", ".join(f"{p.id}({p.loai})" for p in clearable)
                 + ". Dùng khai_hoang.thua; tốn công theo luật vật lý."
+            )
+    from engine.settlement import _dat_o_bat, lo_cua, lo_uu_tien
+
+    if _dat_o_bat(w) and lo_cua(w, aid) is None:
+        lots = lo_uu_tien(w, aid)
+        if lots:
+            rows.append(
+                "FACT CARD — LÔ CƯ TRÚ CÔNG: " + ", ".join(lots)
+                + ". Dùng chon_dat_o.thua + du_phong; lô chỉ là quyền đặt dự án nhà."
             )
     from engine.projects import visible_to
     from engine.quotes import quote_visible_to
@@ -617,8 +651,15 @@ def _fact_cards_cuc_bo(w: World, aid: str) -> list[str]:
 
 
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
+    from engine.economy import household_food_equivalent, household_food_need
+
     a = w.agents[aid]
     tai_san = w.ledger.tai_san_cua(aid)
+    ho_song = [member for member in w.ho_cua(aid)
+               if member in w.agents and w.agents[member].con_song]
+    luong_thuc_ho = household_food_equivalent(w, ho_song)
+    nhu_cau_ho = household_food_need(w, ho_song)
+    tick_du_tru = luong_thuc_ho / nhu_cau_ho if nhu_cau_ho > 1e-9 else 0.0
     tai_san_str = ", ".join(
         f"{ts}: {sl:.0f}" for ts, sl in sorted(tai_san.items())
         if not ts.startswith("vi_the:")
@@ -712,7 +753,8 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     # đất công gần làng (để khai hoang/canh)
     lang = w.villages[a.lang]
     dat_cong = sorted(
-        (p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None),
+        (p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None
+         and p.homestead_ai in (None, aid)),
         key=lambda p: (abs(p.r - lang.r) + abs(p.c - lang.c), p.id),
     )[:5]
     # entity mình điều hành / cổ phần (map điều hành cache MỘT lần mỗi tick)
@@ -742,12 +784,21 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"Tính cách (1-9): {a.persona.as_dict()}.",
         f"Hồi ký: {a.hoi_ky or '(trống)'} | Gia huấn: \"{a.gia_huan or '(chưa có)'}\"",
         f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat_hien or 'không có'}.",
+        "[KHẢ NĂNG THỰC THI SỐNG CÒN] Trong suy nghĩ trước JSON, đối chiếu bốn phần: "
+        f"lương thực hộ {luong_thuc_ho:.1f}kg / nhu cầu {nhu_cau_ho:.1f}kg mỗi tick "
+        f"(~{tick_du_tru:.1f} tick dự trữ); sức khỏe và chỗ ở; công, giống, gỗ hay vật "
+        "liệu thực có; và một giao dịch hoặc hoạt động có thể thực hiện ngay. Công cụ chỉ-"
+        "đọc cho số liệu về tài sản, cơ hội sản xuất, nhà, giá, dự án và tài nguyên; nhan_tin "
+        "cùng đề nghị hợp đồng/báo giá là các kênh liên lạc với người khác. Không có hành "
+        "động nào tự tạo ra thóc, gỗ, công, quyền đất hay nhà.",
     ]
     # Shelter is a measurable constraint, not a vague "be safe" exhortation.
     # Showing the same health transition that the engine will apply lets an
     # LLM judge a house project against food, labour and trade using facts.
     nha_cfg = w.cfg.get("suc_khoe.nha_o", {})
     if isinstance(nha_cfg, dict) and bool(nha_cfg.get("bat", False)):
+        from engine.settlement import _dat_o_bat, lo_cua, lo_uu_tien
+
         ho_cho_o = w.ho_cua(aid)
         co_nha = any(w.ledger.so_du(member, "nha") >= 1.0 for member in ho_cho_o)
         if not co_nha:
@@ -774,6 +825,21 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
                 f"nhà có công thức {float(recipe.get('cong', 0.0)):g} công + "
                 f"{float(recipe.get('go', 0.0)):g} gỗ. {progress}."
             )
+            if _dat_o_bat(w):
+                lot = lo_cua(w, aid)
+                if lot:
+                    dong.append(
+                        f"QUYỀN LÔ CƯ TRÚ: bạn đang giữ {lot}; lô này hợp lệ cho dự án nhà, "
+                        "không phải ruộng sản xuất."
+                    )
+                else:
+                    options = lo_uu_tien(w, aid)
+                    if options:
+                        dong.append(
+                            "QUYỀN LÔ CƯ TRÚ: bạn chưa giữ lô nào. Bảng lô công đang thấy: "
+                            + ", ".join(options)
+                            + ". Chon_dat_o nhận một lô chính và các lô dự phòng."
+                        )
     if a.gia_ky_vong:
         gia_rieng = ", ".join(
             f"{ts}≈{gia:.1f} thóc" for ts, gia in sorted(a.gia_ky_vong.items())
@@ -927,5 +993,10 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     # orchestrator xóa su_co sau khi prompt của tick đã build xong
     if a.su_co:
         dong.append(f"Chuyện vừa rồi KHÔNG THÀNH (rút kinh nghiệm): {a.su_co}")
+    dong.append(
+        "KIỂM TRA SINH TỒN TRƯỚC KHI XUẤT JSON: không giả định cứu trợ hay tài sản tự xuất "
+        "hiện. Mọi đường sống trong quyết định cần dùng đúng tài sản, công, mùa và mã đối tác/"
+        "dự án/lô đã quan sát; khi dữ kiện chưa đủ, các công cụ chỉ-đọc được dùng trước câu trả lời."
+    )
     dong.append(f"Vì sao bạn được hỏi lúc này: {ly_do_trigger}.")
     return "\n".join(dong)

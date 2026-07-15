@@ -124,7 +124,15 @@ def _site_for(w: Any, aid: str, spec: dict[str, Any], raw_site: Any, *,
                         action=action)
         return None, "no_site"
     parcel = w.parcels.get(site)
-    if parcel is None or parcel.chu != aid:
+    # A public residential lot is deliberately narrower than farm ownership: only a project
+    # spec that opts in (currently ``nha``) may use the holder's permit.  All other structures
+    # retain the old rule ``parcel.chu == aid``.
+    from engine.settlement import co_quyen_xay_nha
+
+    residence_right = bool(spec.get("cho_phep_quyen_cu_tru", False)) and co_quyen_xay_nha(
+        w, aid, site
+    )
+    if parcel is None or (parcel.chu != aid and not residence_right):
         _record_failure(w, aid, "no_right", "không có quyền đặt công trình trên thửa này",
                         action=action, target=site)
         return None, "no_right"

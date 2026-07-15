@@ -49,6 +49,7 @@ from engine.intents import KeHoach
 from engine.market import Lenh
 from engine.projects import _du_an_bat
 from engine.quotes import _bao_gia_bat
+from engine.settlement import _dat_o_bat
 from engine.spatial import (
     _cham_tre_bat,
     _ga_rung_bat,
@@ -551,6 +552,37 @@ def _gt_di_san(w: Any) -> dict[str, Any]:
     return {"han": so(_cfg(w).get("ho.di_san.claim_han_tick", 0))}
 
 
+def _tk_chon_dat_o(w: Any, kh: KeHoach, d: dict, thung: list | None) -> None:
+    """Keep a bounded, ordered list; the engine resolves simultaneous requests."""
+    cfg_limit = max(1, int(w.cfg.get("khong_gian.dat_o.toi_da_uu_tien", 3)))
+    fallback = d.get("du_phong", [])
+    if not isinstance(fallback, list | tuple):
+        fallback = []
+    rows = [d.get("thua"), *fallback]
+    seen: set[str] = set()
+    ranked: list[str] = []
+    for raw in rows:
+        site = str(raw or "")
+        if not site or site in seen:
+            continue
+        seen.add(site)
+        ranked.append(site)
+        if len(ranked) >= cfg_limit:
+            break
+    kh.chon_dat_o = ranked
+
+
+def _fk_chon_dat_o(kh: KeHoach) -> list[dict]:
+    if not kh.chon_dat_o:
+        return []
+    return [{"loai": "chon_dat_o", "thua": kh.chon_dat_o[0],
+             "du_phong": list(kh.chon_dat_o[1:])}]
+
+
+def _gt_chon_dat_o(w: Any) -> dict[str, Any]:
+    return {"uu_tien": so(_cfg(w).get("khong_gian.dat_o.toi_da_uu_tien", 0))}
+
+
 # ---- không gian: đóng thuyền / rao đò / qua sông (ADR 0005 §2.3) ---- #
 def _tk_dong_thuyen(w: Any, kh: KeHoach, d: dict, thung: list | None) -> None:
     kh.dong_thuyen += max(0, int(d.get("so_luong", 1) or 0))
@@ -1033,6 +1065,10 @@ def _gt_phan_bo_cong(w: Any) -> dict[str, Any]:
         "thua_max": so(sx["thua_toi_da_tu_canh"]),
         "cong_go": so(kt["cong_moi_go"]),
         "cong_quang": so(kt["cong_moi_quang"]),
+        "ruong_cong": (
+            "; với ruộng công trùng yêu cầu, lottery seeded phân bổ theo mùa"
+            if bool(_cfg(w).get("khong_gian.phan_bo_ruong_cong.bat", False)) else ""
+        ),
     }
 
 
@@ -1274,11 +1310,12 @@ CATALOG: tuple[HanhDongCapability, ...] = (
             '"khai_quang_cong":0,\n'
             '   "hoc":true,"day_cho":["A0012"],"gop_cong_cho":null}   (canh thửa mình/thửa '
             'công/thửa có quyền dùng: $cong_thua công + $giong kg giống mỗi thửa, tự canh '
-            'tối đa $thua_max thửa; gỗ $cong_go công/cây, quặng $cong_quang công)'
+            'tối đa $thua_max thửa; gỗ $cong_go công/cây, quặng $cong_quang công$ruong_cong)'
         ),
         mau_prompt_gia_tri=_gt_phan_bo_cong,
         ma_ket_qua=("ok", "thieu_cong", "thieu_giong", "khong_co_quyen_dung",
-                    "thua_khong_hop_le", "chua_qua_song"),
+                    "thua_khong_hop_le", "chua_qua_song", "homestead_reserved",
+                    "common_land_lottery_lost"),
         thu_tu_phat=10,
     ),
     HanhDongCapability(
@@ -1444,6 +1481,24 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         ma_ket_qua=("ok", "tinh_nang_tat", "khong_ton_tai", "het_han",
                     "khong_hoat_dong", "no_right"),
         thu_tu_phat=92,
+    ),
+    HanhDongCapability(
+        ten="chon_dat_o",
+        kehoach_field=("chon_dat_o",),
+        schema_fields=(("thua", "str"), ("du_phong", "list[str]")),
+        to_kehoach=_tk_chon_dat_o, from_kehoach=_fk_chon_dat_o,
+        engine_handler=("engine.settlement.giai_quyet_chon_dat_o",),
+        kha_dung_fn=_dat_o_bat, kha_dung_key="khong_gian.dat_o.bat",
+        mau_prompt_template=(
+            '- {"loai":"chon_dat_o","thua":"O0001","du_phong":["O0002","O0003"]} '
+            '(đăng tối đa $uu_tien lô cư trú công theo thứ tự; nếu trùng người khác, '
+            'lottery seeded chọn một người và xét lô dự phòng. Quyền này chỉ cho đặt dự án '
+            'nhà, không cấp ruộng, gỗ, công hoặc nhà)'
+        ),
+        mau_prompt_gia_tri=_gt_chon_dat_o,
+        ma_ket_qua=("ok", "actor_ineligible", "already_has_residence",
+                    "invalid_residential_site", "residential_sites_unavailable"),
+        thu_tu_phat=93,
     ),
     # ---- không gian: đò là DỊCH VỤ (ADR 0005 §2.3) ---- #
     HanhDongCapability(

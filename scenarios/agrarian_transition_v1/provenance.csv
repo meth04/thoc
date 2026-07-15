@@ -35,3 +35,7 @@ nhan_khau.tu_vong_nguyen_nhan.tuoi_gia_tu,years,design_assumption,,"V3 reporting
 minds.llm_tick,request/agent/tick,design_assumption,,"V4 infrastructure treatment: each living adult must receive 1–10 independent provider requests per tick; this is a coverage/cost condition rather than an economic calibration."
 minds.san_cho_o_toi_thieu.nguong_health_khoi_cong,health points,design_assumption,,"V4 transparent threshold for offering a feasible shelter-project continuation; sensitivity and ablation are required."
 minds.san_cho_o_toi_thieu.cong_gop_moi_tick,công/tick,design_assumption,,"V4 cap on already-feasible shelter-project labour contributed by the public safety floor; it does not mint labour or materials."
+khong_gian.dat_o.he_so_lo_moi_nguoi,lots per initial resident,design_assumption,,"V5 public residential-lot supply rule; requires capacity sensitivity before any substantive claim."
+khong_gian.dat_o.so_lo_toi_thieu,lots,design_assumption,,"V5 minimum founding supply of public residential permits; not a calibrated settlement density."
+khong_gian.dat_o.toi_da_uu_tien,ranked requests per resident/tick,design_assumption,,"V5 bounded preference list for simultaneous residential-lot allocation; affects collision resolution only."
+khong_gian.phan_bo_ruong_cong.co_che,enum,institutional_assumption,,"V5 seeded simultaneous lottery for contested seasonal common-field use; an explicit allocation rule, not an empirical historical fact."

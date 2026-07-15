@@ -56,6 +56,9 @@ class KeHoach:
     viet_di_chuc: dict | None = None  # {phan_bo: {id: %}, gia_huan}
     di_cu: bool = False
     # ---- Không gian (ADR 0005 §2.3): đò là DỊCH VỤ, không class định chế ----
+    # lô cư trú công: danh sách ưu tiên (tối đa theo config), resolver lottery chọn một lô.
+    # Đây chỉ là quyền đặt dự án nhà, không phải title ruộng hay tài sản được mint.
+    chon_dat_o: list[str] = field(default_factory=list)
     dong_thuyen: int = 0  # đóng N thuyền (recipe công+gỗ, nguyên tử)
     rao_do: tuple | None = None  # chủ thuyền niêm yết: (phi, tai_san_tra) mỗi chuyến
     qua_song: tuple | None = None  # khách xin qua: (den_bo, tai_san_tra, phi_chap_nhan)

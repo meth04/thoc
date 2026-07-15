@@ -37,6 +37,18 @@ conda run -n thoc-env python run.py --mode rulebot --ticks 20 --seed 41 \
     --config-overlay scenarios/agrarian_transition_v1/spatial_v1.yaml \
     --run-name agr_spatial_s41
 
+# Treatment định cư v5: nạp ĐÚNG thứ tự. Người lớn xin lô cư trú công trước,
+# nhà vẫn cần đủ gỗ+công; tranh ruộng công được lottery seeded đồng thời.
+# Đây là experiment mới, không so trực tiếp với artifact v1–v4.
+conda run -n thoc-env python run.py --mode rulebot --ticks 20 --seed 41 \
+    --scenario agrarian_transition_v1 \
+    --config-overlay scenarios/agrarian_transition_v1/spatial_v1.yaml \
+    --config-overlay scenarios/agrarian_transition_v1/spatial_livelihood_v2.yaml \
+    --config-overlay scenarios/agrarian_transition_v1/spatial_livelihood_v3.yaml \
+    --config-overlay scenarios/agrarian_transition_v1/spatial_livelihood_v4.yaml \
+    --config-overlay scenarios/agrarian_transition_v1/spatial_livelihood_v5.yaml \
+    --run-name agr_spatial_v5_s41
+
 # 5. Ensemble phản chứng paired-seed (smoke; full 30-seed = PENDING_COMPUTE):
 conda run -n thoc-env python -m tools.counterfactual \
     --scenario agrarian_transition_v1 --seeds 41 42 43 --ticks 60 --mode rulebot --prefix agr_cf

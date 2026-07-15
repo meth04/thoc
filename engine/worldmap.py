@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from engine.config import Config
@@ -73,6 +75,7 @@ def sinh_ban_do(cfg: Config, rng: np.random.Generator) -> tuple[dict[str, Parcel
         for p in parcels.values():
             if abs(p.r - v.r) + abs(p.c - v.c) <= ban_kinh_lang:
                 p.lang = v.id
+    _them_lo_dat_o(cfg, parcels, villages)
     return parcels, villages
 
 
@@ -160,4 +163,58 @@ def _sinh_ban_do_hai_bo(
         for p in parcels.values():
             if abs(p.r - v.r) + abs(p.c - v.c) <= ban_kinh_lang:
                 p.lang = v.id
+    _them_lo_dat_o(cfg, parcels, villages)
     return parcels, villages
+
+
+def _them_lo_dat_o(cfg: Config, parcels: dict[str, Parcel], villages: list[Village]) -> None:
+    """Add small public residential lots for the versioned settlement treatment.
+
+    The map's production cells are deliberately much coarser than a household plot.  A
+    ``dat_o`` parcel therefore overlays a village-core coordinate rather than converting a
+    rice field/forest into a whole housing cell.  It cannot be cultivated or harvested and
+    has no owner/title; the dynamic right is kept in ``World.quyen_dat_o``.
+
+    This runs only behind the explicit scenario flag.  No RNG is consumed, so every legacy
+    map remains byte-for-byte the same when the flag is absent/off.
+    """
+    if not (bool(cfg.get("khong_gian.bat", False))
+            and bool(cfg.get("khong_gian.dat_o.bat", False))):
+        return
+    if not villages:
+        return
+    raw = cfg.get("khong_gian.dat_o", {})
+    if not isinstance(raw, dict):
+        return
+    ratio = max(0.0, float(raw.get("he_so_lo_moi_nguoi", 0.0)))
+    minimum = max(0, int(raw.get("so_lo_toi_thieu", 0)))
+    population = max(0, int(cfg.get("nhan_khau.dan_so_ban_dau")))
+    target = max(minimum, int(math.ceil(population * ratio)))
+    if target <= 0:
+        return
+
+    # Current treatment has one founding village.  The loop is nevertheless per-village so
+    # a later map generator can opt in without silently putting all lots in village zero.
+    per_village = int(math.ceil(target / len(villages)))
+    next_id = 1
+    for village in sorted(villages, key=lambda v: v.id):
+        candidates = [
+            p for p in parcels.values()
+            if p.loai != "song" and p.lang == village.id
+            and (p.bo is None or p.bo == "dan_cu")
+        ]
+        candidates.sort(key=lambda p: (
+            abs(p.r - village.r) + abs(p.c - village.c), p.id
+        ))
+        for base in candidates[:per_village]:
+            if next_id > target:
+                return
+            site = Parcel(
+                id=f"O{next_id:04d}", r=base.r, c=base.c, loai="dat_o",
+                mau_mo=0.0, mau_mo_goc=0.0, lang=village.id, bo=base.bo,
+            )
+            # ``dat_o`` has no ecological stock, but calling the common initializer keeps a
+            # checkpoint/map invariant: every Parcel exposes the dynamic ecology attributes.
+            khoi_tao_parcel(cfg, site)
+            parcels[site.id] = site
+            next_id += 1

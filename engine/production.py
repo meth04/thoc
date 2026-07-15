@@ -272,6 +272,15 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                     journal_rejected(w, aid, "phan_bo_cong", "no_land_right",
                                      detail=f"no cultivation right for {pid}")
                     continue  # đất người khác, không có quyền sử dụng
+                # A public field being continuously homesteaded is not an unclaimed commons
+                # slot.  Without this guard any later lexical actor could reset another
+                # resident's accumulated tenure merely by submitting the same parcel.
+                if p.chu is None and p.homestead_ai not in (None, aid):
+                    from engine.action_journal import rejected as journal_rejected
+
+                    journal_rejected(w, aid, "phan_bo_cong", "homestead_reserved",
+                                     detail=f"{pid} is under homestead by {p.homestead_ai}")
+                    continue
                 if pid in da_canh_tick_nay:
                     from engine.action_journal import rejected as journal_rejected
 
@@ -369,6 +378,12 @@ def thi_hanh_san_xuat(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                         from engine.action_journal import rejected as journal_rejected
 
                         journal_rejected(w, aid, "canh_vu_dong", "no_land_right", target=pid)
+                        continue
+                    if p.chu is None and p.homestead_ai not in (None, aid):
+                        from engine.action_journal import rejected as journal_rejected
+
+                        journal_rejected(w, aid, "canh_vu_dong", "homestead_reserved",
+                                         target=pid)
                         continue
                     if pid in da_canh_tick_nay:
                         from engine.action_journal import rejected as journal_rejected

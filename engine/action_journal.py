@@ -364,8 +364,24 @@ def _preflight(w: Any, aid: str, raw: dict[str, Any]) -> tuple[str | None, str |
                 return "parcel_not_cultivable", f"{parcel_id} is not a field"
             if parcel.chu not in (None, aid) and parcel.id not in rights:
                 return "no_land_right", f"actor has no cultivation right for {parcel_id}"
+            if parcel.chu is None and parcel.homestead_ai not in (None, aid):
+                return "homestead_reserved", f"{parcel_id} is under another resident's homestead"
             if not co_the_o_bo(w, aid, parcel.bo):
                 return "parcel_unreachable", f"actor has not reached {parcel_id}'s bank"
+    elif action == "chon_dat_o":
+        site = str(raw.get("thua", ""))
+        parcel = w.parcels.get(site)
+        if parcel is None or parcel.loai != "dat_o":
+            return "invalid_residential_site", "residential lot id does not exist"
+        if parcel.lang != w.agents[aid].lang:
+            return "invalid_residential_site", "residential lot is outside actor village"
+        from engine.settlement import lo_cua
+
+        if lo_cua(w, aid) is not None or w.ledger.so_du(aid, "nha") >= 1.0:
+            return "already_has_residence", "actor already has a residence right or house"
+        adult = float(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+        if w.agents[aid].tuoi_nam < adult:
+            return "actor_ineligible", "only an adult may claim a residential lot"
     elif action in {"gop_vat_lieu_du_an", "gop_cong_du_an", "huy_du_an"}:
         project = getattr(w, "du_an", {}).get(str(raw.get("ref", "")))
         if project is None:
@@ -416,6 +432,8 @@ def _drop_rejected(kh: Any, raw: dict[str, Any]) -> None:
         rejected_fields = {str(p) for p in raw.get("canh_thua", []) or []}
         if rejected_fields:
             kh.canh_thua = [p for p in kh.canh_thua if p not in rejected_fields]
+    elif action == "chon_dat_o":
+        kh.chon_dat_o = []
     elif action in {"gop_vat_lieu_du_an", "gop_cong_du_an"}:
         field = "gop_vat_lieu_du_an" if action == "gop_vat_lieu_du_an" else "gop_cong_du_an"
         ref = str(raw.get("ref", ""))

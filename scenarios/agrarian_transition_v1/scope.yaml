@@ -74,6 +74,15 @@ behavioral_assumptions:
       ngưỡng nguy hiểm, và công trình nhà đã khả thi bằng đất/vật liệu của chính họ, nó mới
       thêm intent mở/tiếp tục dự án và ghi event `san_cho_o_toi_thieu`. Không tạo gỗ, công,
       đất hay nhà; phải báo cáo và ablation cùng như survival floor lương thực.
+  settlement_entry_v5:
+    enabled: treatment_only
+    ghi_chu: >-
+      Overlay v5 mở quyền chọn lô cư trú công cho người lớn trước khi dựng nhà. Lô là quyền đặt
+      dự án, không phải title ruộng và không tạo tài sản; nhà vẫn cần recipe gỗ+công trong ledger.
+      Trùng lô và ruộng công được giải đồng thời bằng lottery seeded, không ưu đãi id áp dụng.
+      Survival floor chỉ tạo intent hợp lệ/khả thi và phải được tách báo cáo khỏi hành vi LLM thuần.
+      Lô đã có nhà không được cấp lại khi chủ xây chết; thừa kế/chuyển nhượng nhà không được suy
+      diễn từ quyền lô trong treatment này.
   behavior_policy:
     default: rulebot   # baseline; feasible_random/subsistence là treatment (ADR 0002)
 exclusions:

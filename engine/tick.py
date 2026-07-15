@@ -65,6 +65,23 @@ def chay_mot_tick(w: World, mind_fn: MindFn, tong_thua_ban_dau: int) -> dict:
 
     preflight_plans(w, ke_hoach)
 
+    # Versioned settlement entry: all residential-lot requests are visible before the
+    # resolver chooses a winner, so no one wins merely because their agent id happens to be
+    # applied first.  This has to precede work-order registration: a valid lot claimed today
+    # may be used as the site of a house project in the same tick.
+    from engine import settlement
+
+    settlement.giai_quyet_chon_dat_o(w, ke_hoach)
+
+    # Common-field conflicts are simultaneous under the v5 treatment rather than resolved by
+    # lexical apply order.  A transparent food floor may then give a lottery-losing, hungry
+    # household one genuinely unused feasible field; it never mints seed/labour/output.
+    from engine import common_land
+    from minds.safety import ap_dung_san_an_sau_phan_bo_ruong_cong
+
+    da_phan_ruong_cong = common_land.phan_bo_ruong_cong(w, ke_hoach)
+    ap_dung_san_an_sau_phan_bo_ruong_cong(w, ke_hoach, da_phan_ruong_cong)
+
     # 3b. lập pháp nhân + di chúc + di cư (trước bảng rao để entity ký được ngay)
     from engine import entities as entities_mod
     from engine.action_journal import executed as journal_executed

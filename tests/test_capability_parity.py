@@ -251,6 +251,8 @@ def _ke_hoach_phu_moi_action(w, aid: str) -> KeHoach:
     # nhưng không có đường schema/catalog sẽ làm CAP-1 đỏ ngay tại đây.
     kh.tach_ho = True
     kh.yeu_cau_di_san = ["DI_SAN:A0001"]
+    # v5 settlement entry: ranked public residential-lot request
+    kh.chon_dat_o = ["O0001", "O0002", "O0003"]
     # ---- KHÔNG GIAN: 3 action từng mồ côi (F-02) + khai hoang (F-03) + vụ đông + chăm trẻ
     kh.dong_thuyen = 2
     kh.rao_do = (5.0, "thoc")
@@ -913,6 +915,10 @@ LY_DO_KHONG_THAM_SO: dict[str, str] = {
     "yeu_cau_di_san": (
         "yêu cầu chỉ ghi tư cách claim vào lifecycle di sản; không tự chuyển tài sản hoặc áp "
         "một mức giá nào"
+    ),
+    "chon_dat_o": (
+        "quyền lô chỉ là một yêu cầu đồng thời; không có chi phí, tài sản hay title ruộng được "
+        "engine áp đặt (trần danh sách là interface của treatment v5)"
     ),
     "chap_nhan_bao_gia": (
         "chấp nhận chỉ dùng giá/lượng đã ghi trên chính báo giá; không có tham số engine áp đặt"
