@@ -627,7 +627,16 @@ def test_missing_aistudio_tpm_policy_is_configuration_error():
 
 def test_unverified_ninerouter_tpm_policy_fails_closed_without_http(tmp_path):
     """An unverified TPM route is a journaled denial, never a silent HTTP fallback."""
-    cfg = load_config()
+    # Config gốc nay khai verified TPM cho ninerouter (chủ dự án xác nhận), nên bài test tự
+    # dựng lại một route CHƯA xác minh để kiểm đúng logic fail-closed — không phụ thuộc trạng
+    # thái verified của config production.
+    overlay = tmp_path / "ninerouter_unverified.yaml"
+    overlay.write_text(
+        'quotas:\n  ninerouter:\n    models:\n'
+        '      "gc/gemini-2.5-flash-lite": {tpm_policy: unverified}\n',
+        encoding="utf-8",
+    )
+    cfg = load_config(overlays=[overlay])
     calls: list[httpx.Request] = []
     attempts = LLMCallLog(tmp_path / "llm_calls.sqlite")
     gateway = GatewayReal(
