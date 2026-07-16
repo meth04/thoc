@@ -59,9 +59,11 @@ def test_gateway_chon_key_ranh_hon_khi_mot_key_da_dung():
     gw = GatewayReal(load_config(), _env(4), QuotaCounter(None))
     route = gw.routes_cua_tier("T0")[0]  # aistudio
     now = time.time()
-    # dồn tải lên gkey_0: ghi vài call → RPM cao → phải tránh nó
+    # Dồn physical starts lên gkey_0: RPM tính admission, không phải response thành công.
     for _ in range(3):
-        gw.quota.ghi_call(route.provider, route.model, key_hash("gkey_0"), now)
+        assert gw.quota.nhan_slot_bat_dau(
+            route.provider, route.model, key_hash("gkey_0"), route.rpm, route.rpd, now
+        )
     chon = gw._chon_key_aistudio(route, now)
     assert chon is not None and chon != "gkey_0"  # chọn key rảnh hơn
 

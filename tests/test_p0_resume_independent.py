@@ -53,8 +53,22 @@ OVERLAY_TE = {
     # quota thành nhiễu. Nâng quota để đo ĐÚNG cái đang đo (journal), không phải rate-limit.
     "quotas": {
         "aistudio": {"models": {"gemini-3.1-flash-lite": {"rpm": 100000, "rpd": 100000}}},
+        # FakeTransport-only policy: production 9router remains unverified and
+        # fail-closed; this independent journal fixture admits only its local routes.
         "ninerouter": {"models": {
-            "gc/gemini-3.1-flash-lite-preview": {"rpm": 100000, "rpd": 100000}}},
+            "gc/gemini-3.1-flash-lite-preview": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+            "gc/gemini-2.5-flash-lite": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+            "gc/gemini-2.5-flash": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+            "gc/gemini-2.5-pro": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+        }},
     },
 }
 TONG_TICK = 9

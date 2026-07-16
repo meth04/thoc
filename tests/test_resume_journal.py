@@ -47,8 +47,22 @@ OVERLAY = {
     # test P0.2 nâng quota để đo ĐÚNG cái nó muốn đo (journal), không che khuyết tật đó.
     "quotas": {
         "aistudio": {"models": {"gemini-3.1-flash-lite": {"rpm": 100000, "rpd": 100000}}},
+        # FakeTransport-only policy: production 9router remains unverified and
+        # fail-closed; journal tests need every advertised fixture route admitted.
         "ninerouter": {"models": {
-            "gc/gemini-3.1-flash-lite-preview": {"rpm": 100000, "rpd": 100000}}},
+            "gc/gemini-3.1-flash-lite-preview": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+            "gc/gemini-2.5-flash-lite": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+            "gc/gemini-2.5-flash": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+            "gc/gemini-2.5-pro": {
+                "rpm": 100000, "rpd": 100000, "tpm": 1000000, "tpm_policy": "verified",
+            },
+        }},
     },
 }
 TONG_TICK = 8
@@ -529,7 +543,8 @@ def test_journal_identity_co_du_4_truong_adr_0006_c2():
     from engine.journal import JournalIdentity
 
     assert set(JournalIdentity.model_fields) == {
-        "config_sha256", "prompt_template_hash", "capability_catalog_hash", "git_revision"}
+        "config_sha256", "prompt_template_hash", "capability_catalog_hash",
+        "runtime_source_identity", "git_revision"}
 
 
 def test_journal_manifest_ghi_capability_catalog_hash(tmp_path, monkeypatch, overlay):
@@ -561,25 +576,20 @@ def test_journal_2_capability_catalog_hash_doi_fail_closed(tmp_path, monkeypatch
     assert _snapshot(rd) == truoc
 
 
-def test_recover_journal_ha_cap_artifact_vinh_vien(tmp_path, monkeypatch, overlay):
-    """Escape hatch CÓ GIÁ: chạy tiếp được, nhưng KHÔNG BAO GIỜ xanh trở lại."""
-    import tools.verify_research_run as vrr
-
+def test_recover_journal_legacy_is_rejected_without_mutating_artifact(tmp_path, monkeypatch, overlay):
+    """A legacy artifact has no matching UUID contract, so recovery cannot overwrite it."""
     monkeypatch.setattr(run_mod, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(vrr, "DATA_DIR", tmp_path)
     rd = _chuan_bi_tail_ban(tmp_path, overlay, "rec")
     (rd / "checkpoints" / "journal_manifest.json").unlink()
-    _chay(_args(overlay, mode="mock", run_name="rec", resume=True,
-                extra=("--fast", "--transcript", "--p-malformed", "0.0",
-                       "--recover-journal")))
-    mf = RunJournals.doc_manifest(rd)
-    assert mf.replay_complete is False
-    assert mf.artifact_status_forced == "diagnostic_only_unreplayable"
-    assert mf.recoveries[-1].operator_flag == "--recover-journal"
-    assert don_quarantine(rd), "journal cũ phải nằm trong orphans/, KHÔNG bị xóa"
-    ket = vrr.verify_run("rec", quick=True)
-    assert ket.artifact_status == "diagnostic_only_unreplayable"
-    assert ket.failed() is True, ket.render()
+    before = _snapshot(rd)
+
+    with pytest.raises(SystemExit, match="recover-journal"):
+        _chay(_args(overlay, mode="mock", run_name="rec", resume=True,
+                    extra=("--fast", "--transcript", "--p-malformed", "0.0",
+                           "--recover-journal")))
+
+    assert _snapshot(rd) == before
+    assert RunJournals.doc_manifest(rd) is None
 
 
 # ================================================================ JOURNAL-3: không xóa lịch sử
@@ -766,8 +776,12 @@ def test_a03_transcript_replay_lech_hash_thi_khong_the_exit_0(tmp_path, monkeypa
 
     dong = [json.loads(x) for x in (rd / "transcript.jsonl").read_text(
         encoding="utf-8").splitlines() if x.strip()]
-    # bóp méo response CUỐI ⇒ quyết định khác ⇒ world_hash replay khác hash gốc
-    dong[-1]["response_raw"] = json.dumps(
+    # Transcript-2 kết thúc mỗi decision bằng một row terminal riêng. Bóp méo provider
+    # response CUỐI (không phải terminal row) ⇒ quyết định khác ⇒ world_hash replay lệch.
+    response_cuoi = next(
+        row for row in reversed(dong) if row.get("record_type", "provider_call") == "provider_call"
+    )
+    response_cuoi["response_raw"] = json.dumps(
         [{"id": "A0001", "hanh_dong": [{"loai": "phan_bo_cong", "hoc": True}],
           "ly_do": "đổi"}], ensure_ascii=False)
     (rd / "transcript.jsonl").write_text(

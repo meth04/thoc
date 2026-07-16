@@ -49,10 +49,17 @@ from pathlib import Path
 from typing import Any
 
 from engine.config import load_config
-from engine.journal import RunJournals, kiem_lien_tuc
+from engine.journal import JournalIdentity, LoiJournal, RunJournals, kiem_lien_tuc
 from engine.tick import chay_mot_tick
 from engine.world import tao_the_gioi
-from tools.experiments import ROOT, sha256_file
+from tools.experiments import (
+    IDENTITY_CONTRACT_VERSION,
+    MANIFEST_SCHEMA,
+    ROOT,
+    manifest_identity_contract,
+    runtime_source_identity,
+    sha256_file,
+)
 
 DATA_DIR = ROOT / "data" / "runs"
 
@@ -128,6 +135,84 @@ def _read_metrics(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
+def _schema3_runtime_identity_present(manifest: dict[str, Any]) -> bool:
+    """Return whether an artifact has the minimum schema-3 executable provenance.
+
+    An absent source inventory is not a normal current-code version mismatch: it means the
+    artifact predates (or failed to write) the evidence needed to identify the runtime at all.
+    Such an artifact remains diagnostic-only rather than being relabelled as a replay failure.
+    """
+    runtime = manifest.get("reproducibility", {}).get("runtime_source_identity")
+    return (manifest.get("schema_version") == MANIFEST_SCHEMA
+            and isinstance(runtime, dict)
+            and isinstance(runtime.get("sha256"), str)
+            and bool(runtime["sha256"]))
+
+
+def _run_meta_execution_projection(manifest: dict[str, Any], meta: dict[str, Any],
+                                   expected_contract: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Bind branch-selecting outer metadata to the immutable experiment manifest.
+
+    ``run_meta`` is convenient output, not an authority that may redirect verification from a
+    real transcript to a seed replay.  Direct projections are checked in addition to the copied
+    identity contract so a stale/tampered outer ``mode``/policy/model setting cannot select a
+    different verifier branch before the mismatch is reported.
+    """
+    run = manifest.get("run", {})
+    repro = manifest.get("reproducibility", {})
+    expected = {"mode": run.get("mode")}
+    expected.update({
+        field: repro.get(field)
+        for field in (
+            "policy", "prompt_template_hash", "capability_catalog_hash",
+            "runtime_source_identity", "model_snapshot", "temperature", "git_revision",
+        )
+    })
+    mismatches = [
+        field for field, value in expected.items()
+        if field not in meta or meta[field] != value
+    ]
+    meta_execution = (meta.get("identity_contract") or {}).get("execution")
+    if meta_execution != expected_contract.get("execution"):
+        mismatches.append("identity_contract.execution")
+    return not mismatches, mismatches
+
+
+def _identity_contract_complete(contract: object) -> bool:
+    """A green artifact needs every v1 cross-artifact identity field, not a best effort."""
+    if not isinstance(contract, dict) or contract.get("contract_version") != IDENTITY_CONTRACT_VERSION:
+        return False
+    run = contract.get("run")
+    execution = contract.get("execution")
+    outcome = contract.get("outcome")
+    if not all(isinstance(block, dict) for block in (run, execution, outcome)):
+        return False
+    run_required = {"name", "mode", "seed", "run_uuid", "ticks_requested"}
+    execution_required = {
+        "config_sha256", "policy", "prompt_template_hash", "capability_catalog_hash",
+        "runtime_source_identity", "model_snapshot", "temperature", "git_revision",
+    }
+    outcome_required = {"tick_final", "world_hash", "segment_id", "terminal_reason"}
+    return (
+        run_required <= set(run)
+        and execution_required <= set(execution)
+        and outcome_required <= set(outcome)
+        and isinstance(run["name"], str)
+        and isinstance(run["mode"], str)
+        and isinstance(run["seed"], int)
+        and isinstance(run["run_uuid"], str) and bool(run["run_uuid"])
+        and isinstance(run["ticks_requested"], int)
+        and isinstance(execution["config_sha256"], str)
+        and isinstance(execution["capability_catalog_hash"], str)
+        and isinstance(execution["runtime_source_identity"], dict)
+        and isinstance(execution["runtime_source_identity"].get("sha256"), str)
+        and isinstance(outcome["tick_final"], int)
+        and isinstance(outcome["world_hash"], str)
+        and isinstance(outcome["segment_id"], int)
+        and (outcome["terminal_reason"] is None or isinstance(outcome["terminal_reason"], str))
+    )
+
+
 def _reconstruct_config(manifest: dict[str, Any], ket: Ket):
     """Dựng lại config từ overlay ghi trong manifest (đã gồm scenario overlay ở index 0)."""
     repro = manifest.get("reproducibility", {})
@@ -143,10 +228,12 @@ def _reconstruct_config(manifest: dict[str, Any], ket: Ket):
         if item.get("sha256") and sha256_file(p) != item["sha256"]:
             drifted.append(str(p))
         overlays.append(p)
+    # An overlay is executable scenario law, not optional provenance.  Replaying a run after
+    # its recorded YAML moved or changed is a different treatment, so this must fail closed.
     if missing:
-        ket.add("overlay_files_present", False, f"thiếu: {missing}", hard=False)
+        ket.add("overlay_files_present", False, f"thiếu: {missing}")
     if drifted:
-        ket.add("overlay_files_unchanged", False, f"sha256 lệch: {drifted}", hard=False)
+        ket.add("overlay_files_unchanged", False, f"sha256 lệch: {drifted}")
     cfg = load_config(overlays=overlays)
     return cfg, bool(missing)
 
@@ -164,16 +251,16 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
         ket.add("manifest_present", False, "thiếu experiment_manifest.json")
         return ket
     manifest = _load_json(manifest_path)
-    schema_ok = manifest.get("schema_version") is not None
+    schema_ok = manifest.get("schema_version") == MANIFEST_SCHEMA
     run_block = manifest.get("run", {})
     repro = manifest.get("reproducibility", {})
-    required_run = {"name", "mode", "seed", "ticks_requested"}
+    required_run = {"name", "mode", "seed", "ticks_requested", "run_uuid"}
     missing_run = sorted(required_run - set(run_block))
     manifest_ok = (schema_ok and not missing_run
                    and repro.get("config_sha256") is not None)
     ket.add("manifest_schema", manifest_ok,
-            f"schema={manifest.get('schema_version')} missing_run={missing_run}")
-
+            f"schema={manifest.get('schema_version')} required={MANIFEST_SCHEMA} "
+            f"missing_run={missing_run}")
     # 2. run_meta + đồng nhất manifest↔meta
     meta_path = run_dir / "run_meta.json"
     if not meta_path.exists():
@@ -191,16 +278,50 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
         ket.add("outcome_hash_matches_meta", bool(hash_ok),
                 f"{outcome.get('world_hash', '')[:12]} vs {meta.get('world_hash', '')[:12]}")
 
+    # The identity contract is repeated in manifest, final metadata, and final checkpoint
+    # pointer.  A legacy schema has no such three-way evidence and is diagnostic only.
+    expected_contract = manifest_identity_contract(manifest)
+    stored_contract = manifest.get("identity_contract")
+    meta_contract = meta.get("identity_contract")
+    contract_ok = (
+        manifest.get("schema_version") == MANIFEST_SCHEMA
+        and _identity_contract_complete(stored_contract)
+        and stored_contract == expected_contract
+        and meta_contract == expected_contract
+    )
+    ket.add("artifact_identity_contract", contract_ok,
+            "manifest/run_meta identity contract khớp" if contract_ok else
+            "manifest/run_meta thiếu hoặc lệch versioned identity contract")
+    schema3_runtime_ok = _schema3_runtime_identity_present(manifest)
+    ket.add("schema3_runtime_identity", schema3_runtime_ok,
+            "schema-3 + runtime source identity có mặt" if schema3_runtime_ok else
+            "artifact legacy: thiếu schema-3 hoặc runtime_source_identity; chỉ diagnostic-only")
+    projection_ok, projection_mismatches = _run_meta_execution_projection(
+        manifest, meta, expected_contract)
+    ket.add("run_meta_execution_projection", projection_ok,
+            "outer mode + execution projections khớp manifest trước khi chọn nhánh replay"
+            if projection_ok else
+            "run_meta không khớp manifest: " + ", ".join(projection_mismatches))
+    current_runtime_source = runtime_source_identity()
+    source_identity_ok = repro.get("runtime_source_identity") == current_runtime_source
+    ket.add("runtime_source_identity_current", source_identity_ok,
+            "runtime Python inventory khớp executable tree hiện tại" if source_identity_ok else
+            "runtime Python inventory thiếu/lệch executable tree hiện tại")
+    # A missing schema-3 runtime identity is legacy evidence, not a current-code version
+    # mismatch.  Only a recorded identity that differs from the executable tree gets the latter.
+    if schema3_runtime_ok and not source_identity_ok:
+        ket.artifact_status = VERSION_MISMATCH
+
     # 3. config digest tái dựng
     cfg, overlays_missing = _reconstruct_config(manifest, ket)
     if not overlays_missing:
         digest_ok = cfg.digest() == repro.get("config_sha256")
-        # SOFT: base config có thể trôi ở khóa không ảnh hưởng run này; replay hash mới là
-        # bằng chứng tái lập quyết định. Digest lệch = cảnh báo provenance, không phải FAIL.
+        # The reconstructed digest includes the base config plus every recorded overlay.  A
+        # different digest means the current replay law is not the recorded treatment; do not
+        # allow a matching seed/hash by coincidence to turn that provenance drift green.
         ket.add("config_digest_reproduced", bool(digest_ok),
                 f"{cfg.digest()[:12]} vs {str(repro.get('config_sha256'))[:12]}"
-                + ("" if digest_ok else " (base config trôi sau run — xem replay_world_hash)"),
-                hard=False)
+                + ("" if digest_ok else " (config/scenario law drift)"))
     else:
         ket.add("config_digest_reproduced", None, "overlay thiếu — không tái dựng được digest")
 
@@ -233,7 +354,7 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
             if not p.exists() or sha256_file(p) != digest:
                 drift.append(rel)
         ket.add("scenario_files_unchanged", not drift,
-                f"trôi: {drift}" if drift else f"{len(recorded)} file khớp", hard=False)
+                f"trôi: {drift}" if drift else f"{len(recorded)} file khớp")
 
     # 5. metrics/events consistency
     metrics_path = run_dir / "metrics.jsonl"
@@ -253,8 +374,18 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
 
     # 5b. journal continuity (HARD) — tính TỪ NỘI DUNG FILE, không cần manifest, nên bắt được
     # cả artifact legacy: event seq/tick, transcript call_id, llm_calls call_id, metric tick.
+    # Branch only from manifest mode after the preceding run_meta projection binding.  Reading
+    # meta["mode"] here would let a mutable convenience file change a real replay into a seed
+    # replay before its mismatch became visible.
+    mode = str(run_block.get("mode") or "")
+    ket.add("manifest_mode_supported", mode in {"rulebot", "mock", "real"},
+            f"mode={mode!r}")
     jc = kiem_lien_tuc(run_dir)
-    jm = RunJournals.doc_manifest(run_dir)
+    try:
+        jm = RunJournals.doc_manifest(run_dir)
+    except Exception as exc:  # noqa: BLE001 — corrupt manifest is evidence failure, not a crash
+        jm = None
+        ket.add("journal_manifest_parseable", False, f"{type(exc).__name__}: {exc}")
     ket.add("journal_continuity", bool(jc["ok"]),
             "; ".join(jc["loi"]) if jc["loi"] else
             (f"events={jc.get('events_records', '-')} "
@@ -262,9 +393,71 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
              f"metrics={jc.get('metrics_records', '-')} "
              f"call_burned={jc.get('llm_calls_burned', '-')} "
              f"call_effective={jc.get('llm_calls_effective', '-')}"))
+    # A legacy artifact may be internally continuous yet has no checkpoint prefix that proves
+    # which bytes belong to the final world.  It is diagnostic evidence, never a green path.
     ket.add("journal_manifest_present", jm is not None,
-            "" if jm is not None else "run legacy (trước ADR 0006 §C) — không resume được",
-            hard=False)
+            "" if jm is not None else "run legacy (trước ADR 0006 §C) — diagnostic, không replay-verified")
+    if jm is None:
+        ket.add("final_checkpoint_journal_evidence", False,
+                "thiếu/không đọc được journal manifest; không có bằng chứng final checkpoint prefix")
+        ket.add("journal_checkpoint_identity_contract", False,
+                "thiếu journal/checkpoint identity contract")
+    else:
+        expected_uuid = meta.get("run_uuid")
+        manifest_uuid = run_block.get("run_uuid")
+        ket.add("run_uuid_manifest_meta", bool(expected_uuid and manifest_uuid
+                                                 and expected_uuid == manifest_uuid),
+                f"meta={expected_uuid!r} manifest={manifest_uuid!r}")
+        expected_identity = JournalIdentity(
+            config_sha256=repro.get("config_sha256"),
+            prompt_template_hash=repro.get("prompt_template_hash"),
+            capability_catalog_hash=repro.get("capability_catalog_hash"),
+            runtime_source_identity=repro.get("runtime_source_identity"),
+            git_revision=repro.get("git_revision"),
+        )
+        pointer_path = run_dir / "checkpoints" / "checkpoint_moi_nhat.json"
+        try:
+            pointer = _load_json(pointer_path)
+            pointer_contract_ok = pointer.get("identity_contract") == expected_contract
+        except (OSError, json.JSONDecodeError):
+            pointer = {}
+            pointer_contract_ok = False
+        execution = expected_contract["execution"]
+        journal_contract_ok = (
+            pointer_contract_ok
+            and jm.run_uuid == expected_contract["run"]["run_uuid"]
+            and jm.run_name == expected_contract["run"]["name"]
+            and jm.segment_id == expected_contract["outcome"]["segment_id"]
+            and jm.checkpoint_tick == expected_contract["outcome"]["tick_final"]
+            and jm.identity.config_sha256 == execution["config_sha256"]
+            and jm.identity.prompt_template_hash == execution["prompt_template_hash"]
+            and jm.identity.capability_catalog_hash == execution["capability_catalog_hash"]
+            and jm.identity.runtime_source_identity == execution["runtime_source_identity"]
+            and jm.identity.git_revision == execution["git_revision"]
+            and pointer.get("run_uuid") == expected_contract["run"]["run_uuid"]
+            and pointer.get("segment_id") == expected_contract["outcome"]["segment_id"]
+            and pointer.get("tick") == expected_contract["outcome"]["tick_final"]
+            and pointer.get("world_hash") == expected_contract["outcome"]["world_hash"]
+        )
+        ket.add("journal_checkpoint_identity_contract", journal_contract_ok,
+                "journal/checkpoint UUID, segment, ticks, git và capability catalog khớp"
+                if journal_contract_ok else
+                "journal/checkpoint thiếu hoặc lệch identity contract")
+        try:
+            RunJournals.verify_final_checkpoint(
+                run_dir,
+                expected_run_name=run_name,
+                expected_run_uuid=str(expected_uuid) if expected_uuid else None,
+                expected_tick=tick_cuoi,
+                expected_world_hash=meta.get("world_hash"),
+                expected_identity=expected_identity,
+            )
+        except LoiJournal as exc:
+            ket.add("final_checkpoint_journal_evidence", False, str(exc))
+        else:
+            ket.add("final_checkpoint_journal_evidence", True,
+                    "final checkpoint pointer + prefix sha/offset/count + SQLite + "
+                    "run_uuid + segment/recovery lineage khớp")
     for cb in jc.get("canh_bao", []):
         if "trùng khít" in cb:
             ket.add("events_dup_lines_legacy", False, cb, hard=False)
@@ -299,9 +492,58 @@ def verify_run(run_name: str, quick: bool = False) -> Ket:
                 f"call_burned={burned} = call_effective={eff} + superseded={sup}; "
                 f"Σrecovery={rec}; MAX(call_id)={mx}")
 
+    # Attempts are a separate immutable cost forensic ledger. ``mock`` has no HTTP attempts,
+    # but a real artifact with transcript/logical calls must retain this evidence; absence is not
+    # a green legacy compatibility path.
+    observed_llm = bool(jc.get("llm_calls_burned", 0) or jc.get("transcript_records", 0)
+                        or jc.get("llm_attempts_burned", 0))
+    attempts_expected = mode == "real" and observed_llm
+    attempt_evidence = jc.get("llm_attempts_evidence")
+    attempt_loi: list[str] = []
+    if attempts_expected and jm is None:
+        attempt_loi.append("không có journal manifest/checkpoint attempt metadata")
+    if attempts_expected and attempt_evidence != "available":
+        attempt_loi.append("llm_attempts unavailable dù artifact real có LLM evidence")
+    if attempts_expected and jc.get("llm_attempts_burned") is None:
+        attempt_loi.append("thiếu attempt count/max identity")
+    if attempts_expected and not jc.get("llm_attempts_burned", 0):
+        attempt_loi.append("artifact real có LLM evidence nhưng không có attempt row")
+    if jc.get("llm_attempts_burned") is not None:
+        attempt_burned = jc["llm_attempts_burned"]
+        attempt_eff = jc.get("llm_attempts_effective")
+        attempt_sup = jc.get("llm_attempts_superseded")
+        attempt_max = jc.get("llm_attempts_max_id")
+        attempt_rec = jc.get("llm_attempt_recovery_rows")
+        if attempt_eff is None or attempt_sup is None:
+            attempt_loi.append("thiếu phân hoạch effective/superseded")
+        elif attempt_burned != attempt_eff + attempt_sup:
+            attempt_loi.append(
+                f"attempt burned({attempt_burned}) ≠ effective({attempt_eff}) + "
+                f"superseded({attempt_sup})")
+        if attempt_max != attempt_burned:
+            attempt_loi.append(
+                f"MAX(attempt_id)={attempt_max} ≠ COUNT(*)={attempt_burned} ⇒ ĐÃ CÓ ROW BỊ XÓA")
+        if attempt_rec is None and attempt_sup:
+            attempt_loi.append("recovery cũ thiếu attempt_rows_superseded")
+        elif attempt_rec is not None and attempt_sup != attempt_rec:
+            attempt_loi.append(
+                f"attempt superseded({attempt_sup}) ≠ Σ RecoveryEntry "
+                f"attempt_rows_superseded({attempt_rec})")
+        missing_metadata = jc.get("llm_attempt_checkpoint_metadata_missing", [])
+        if missing_metadata and attempt_burned:
+            attempt_loi.append(
+                f"checkpoint thiếu max_attempt_id/attempt_record_count tại tick "
+                f"{missing_metadata}")
+    semantic = (
+        "not_applicable (không có HTTP attempt; rulebot/mock)"
+        if not attempts_expected and attempt_evidence in (None, "unavailable")
+        else ("available" if attempt_evidence == "available" else "unavailable")
+    )
+    ket.add("attempt_forensic_identity", not attempt_loi,
+            "; ".join(attempt_loi) if attempt_loi else semantic)
+
     # 6. replay — KHÔNG còn nhánh SKIP cho mode real (đó là cổng phát false-green: SKIP lưu
     # ok=None và Ket.failed() chỉ fail khi ok is False ⇒ in "ĐỦ BẰNG CHỨNG ✅" + exit 0).
-    mode = meta.get("mode")
     co_transcript = (run_dir / "transcript.jsonl").exists()
     dung_transcript = co_transcript and mode in ("mock", "real")
     if mode == "real" and not co_transcript:
@@ -400,14 +642,32 @@ def _tinh_nhan(ket: Ket, jc: dict, jm, quick: bool, dung_transcript: bool) -> st
 
     Thứ tự ưu tiên: nhãn bị ép (``--recover-journal``) > journal không liên tục (sự thật về
     chính artifact) > identity mismatch > kết quả replay > chưa verify."""
-    if jm is not None and jm.artifact_status_forced:
+    if jm is None:
+        return DIAGNOSTIC_ONLY
+    schema_runtime = ket.lay("schema3_runtime_identity")
+    if schema_runtime is None or schema_runtime[0] is False:
+        return DIAGNOSTIC_ONLY
+    if jm.artifact_status_forced:
         return jm.artifact_status_forced
-    if jm is not None and not jm.replay_complete:
+    if not jm.replay_complete:
         return DIAGNOSTIC_ONLY
     if not jc["ok"]:
         return DIAGNOSTIC_ONLY
+    # A manifest identity that differs from the current executable interface has a precise
+    # diagnosis.  Its copied identity-contract rows necessarily differ too, but that does not
+    # turn a version mismatch into an ambiguous diagnostic artifact.
     if ket.artifact_status == VERSION_MISMATCH:
         return VERSION_MISMATCH
+    for identity_check in (
+        "artifact_identity_contract", "run_meta_execution_projection",
+        "journal_checkpoint_identity_contract",
+    ):
+        item = ket.lay(identity_check)
+        if item is None or item[0] is False:
+            return DIAGNOSTIC_ONLY
+    attempts = ket.lay("attempt_forensic_identity")
+    if attempts is not None and attempts[0] is False:
+        return DIAGNOSTIC_ONLY
     if quick:
         return PENDING
     tr = ket.lay("replay_from_transcript")

@@ -1,0 +1,9 @@
+# market_persistence_v1.yaml — versioned thin-market order-book treatment.
+#
+# Apply as an explicit overlay. Base config and all historical spatial_livelihood_v1..v5
+# artifacts keep the legacy one-tick auction because this key is absent there.
+
+cho:
+  # An unfilled order participates in the placement tick plus the next two market sessions.
+  # This is a design assumption for thin markets, not an administered price or guaranteed fill.
+  lenh_ton_tai_tick: 3

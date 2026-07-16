@@ -111,11 +111,170 @@ def xu_ly_cau_hon(w: World, ke_hoach: dict[str, KeHoach]) -> None:
                          code="proposal_sent", pending=True)
 
 
-def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
-    ss = w.cfg.get("nhan_khau.sinh_san")
-    nc = w.cfg.raw()["nhu_cau"]
-    tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
-    g = w.rng.get("sinh_con", w.tick)
+def _thai_ky_cfg(ss: dict) -> dict | None:
+    """Đọc gate thai kỳ (WP-E, REPORT_REAL15_V5 §9) — bật bằng SỰ HIỆN DIỆN của khóa
+    ``nhan_khau.sinh_san.thai_ky_tick``.
+
+    Config legacy KHÔNG có khóa → trả ``None`` → ``sinh_con`` đi ĐÚNG code path cũ
+    (giữ nguyên thứ tự rút RNG và các world-hash pin — tests/test_household_estate.py).
+    Khóa có mặt nhưng vô nghĩa → raise (fail closed, không có fallback lặng lẽ).
+    """
+    if "thai_ky_tick" not in ss:
+        return None
+
+    def tick_nguyen(ten: str, raw: object, toi_thieu: int) -> int:
+        if isinstance(raw, bool):
+            raise ValueError(f"{ten} phải là số tick nguyên")
+        try:
+            number = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{ten} phải là số tick nguyên") from exc
+        if not math.isfinite(number) or not number.is_integer() or number < toi_thieu:
+            raise ValueError(f"{ten} phải là số tick nguyên >= {toi_thieu}")
+        return int(number)
+
+    thai = tick_nguyen("nhan_khau.sinh_san.thai_ky_tick", ss["thai_ky_tick"], 1)
+    hau_san = tick_nguyen(
+        "nhan_khau.sinh_san.khoang_cach_sinh_toi_thieu_tick",
+        ss.get("khoang_cach_sinh_toi_thieu_tick", 0),
+        0,
+    )
+    p_doi = float(ss.get("p_sinh_doi", 0.0))
+    if not math.isfinite(p_doi) or not 0.0 <= p_doi <= 1.0:
+        raise ValueError("nhan_khau.sinh_san.p_sinh_doi phải trong [0, 1]")
+    return {"thai_ky_tick": thai, "hau_san_tick": hau_san, "p_sinh_doi": p_doi}
+
+
+def _trang_thai_sinh_san(w: World) -> tuple[dict[str, dict], dict[str, int]]:
+    """Trạng thái thai kỳ + hậu sản. SINGLE-WRITER: chỉ module này mutate.
+
+    ``w.thai_ky`` ánh xạ mẹ sang cha tại lúc thụ thai và tick dự sinh; ``w.hau_san``
+    ánh xạ mẹ sang tick sớm nhất được xét thụ thai lại. Thuộc tính được tạo lười để
+    checkpoint cũ vẫn nạp được trong work package không được sửa ``engine/world.py``.
+
+    Đây là behavioral state: nó đổi việc một ca sinh có xảy ra ở tick sau hay không.
+    Hiện pickle đã serialize nó, nhưng ``World.behavioral_state`` chưa băm nó. Test
+    integration strict-xfail và handoff cuối work package giữ blocker này hiển thị.
+    """
+    if not hasattr(w, "thai_ky"):
+        w.thai_ky = {}
+    if not hasattr(w, "hau_san"):
+        w.hau_san = {}
+    return w.thai_ky, w.hau_san
+
+
+def _xoa_sinh_san_khi_chet(w: World, aid: str) -> None:
+    """Dọn thai kỳ/hậu sản ngay khi một agent chết; không để dead ghost trong state."""
+    if _thai_ky_cfg(w.cfg.get("nhan_khau.sinh_san")) is None:
+        return
+    thai_ky, hau_san = _trang_thai_sinh_san(w)
+    thai = thai_ky.pop(aid, None)
+    hau_san.pop(aid, None)
+    if thai is not None:
+        w.events.ghi(
+            w.tick,
+            "thai_ky_ket_thuc",
+            me=aid,
+            cha=thai.get("cha"),
+            thu_thai_tick=thai.get("thu_thai_tick"),
+            sinh_du_kien=thai.get("sinh_tick"),
+            ly_do="me_mat",
+        )
+
+
+def _an_ninh_luong_thuc(w: World, aid: str, nc: dict, tt: int) -> float:
+    """An ninh lương thực của hộ: dự trữ / nhu cầu 2 tick."""
+    ho = w.ho_cua(aid)
+    du_tru = sum(w.ledger.so_du(m, "thoc") for m in ho)
+    nhu_cau = sum(
+        nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(tt) else nc["tre_em_kg_tick"]
+        for m in ho
+    )
+    return min(1.0, du_tru / (2 * nhu_cau)) if nhu_cau > 0 else 1.0
+
+
+def _rui_ro_sinh_no(w: World, g, ss: dict, aid: str) -> None:
+    """Rủi ro tử vong sinh nở — CHỈ giảm khi hộ sản phụ CÓ HỢP ĐỒNG hiệu lực với người
+    nắm blueprint y_te (giá cả do hai bên tự thỏa thuận trong hợp đồng — engine
+    không tự móc túi ai, không tự đặt giá dịch vụ). Luôn rút ĐÚNG MỘT draw RNG."""
+    rui_ro = ss["rui_ro_me"]
+    ho_me = set(w.ho_cua(aid))
+    thay_thuoc = None
+    for bid in sorted(w.blueprints):
+        bp = w.blueprints[bid]
+        if (bp.linh_vuc != "y_te" or not w.chu_the_hoat_dong(bp.chu)
+                or bp.chu in ho_me):
+            continue
+        co_hd = any(
+            hd.trang_thai == "hieu_luc" and bp.chu in hd.cac_ben
+            and ho_me & set(hd.cac_ben)
+            for hd in w.hop_dong.values()
+        )
+        if co_hd:
+            thay_thuoc = bp.chu
+            break
+    if thay_thuoc is not None:
+        from engine.research import duoc_ap_dung
+
+        san = float(ss["y_te_giam_rui_ro_san"])
+        rui_ro *= max(san, 1.0 - duoc_ap_dung(w, thay_thuoc, "y_te"))
+    if g.random() < rui_ro:
+        w.agents[aid].health = 0.0  # tử vong sinh nở — xử lý ở bước chết
+        from engine import metrics_demography
+
+        metrics_demography.danh_dau_tu_vong_sinh_no(w, aid)
+        w.events.ghi(w.tick, "tu_vong_sinh_no", id=aid)
+
+
+def _tao_tre(w: World, g, me: Agent, cha: Agent) -> Agent:
+    """Sinh MỘT trẻ. persona = trung bình cha mẹ ± đột biến (seeded,
+    tham số nhan_khau.dot_bien_persona). Thứ tự rút RNG (k draws persona
+    rồi 1 draw giới tính) GIỮ NGUYÊN so với code legacy — đổi là đổi hash pin."""
+    cid = w.id_moi()
+    pa, pb = cha.persona.as_dict(), me.persona.as_dict()
+    db = w.cfg.get("nhan_khau.dot_bien_persona")
+    bien_do = int(db["bien_do"])
+    gia_tri = {
+        k: int(np.clip(round((pa[k] + pb[k]) / 2 + g.integers(-bien_do, bien_do + 1)),
+                       int(db["min"]), int(db["max"])))
+        for k in pa
+    }
+    con = Agent(
+        id=cid,
+        ten=f"Con {cid[1:]}",
+        gioi_tinh="nu" if g.random() < w.cfg.get("nhan_khau.ty_le_nu") else "nam",
+        tuoi_tick=0,
+        persona=Persona(**gia_tri),
+        lang=me.lang,
+        cha=cha.id,
+        me=me.id,
+    )
+    w.agents[cid] = con
+    cha.con.append(cid)
+    me.con.append(cid)
+    return con
+
+
+def _ghi_khai_sinh(w: World, con: Agent, me: Agent, cha: Agent) -> None:
+    from engine import metrics_demography
+
+    metrics_demography.ghi_sinh(w)
+    household.ghi_bien_co(w, "sinh", tre=con.id, me=me.id, cha=cha.id)
+    w.events.ghi(w.tick, "sinh", id=con.id, cha=cha.id, me=me.id)
+    # Cha có thể đã chết trong thai kỳ. Agent chết không được nhận ký ức mới.
+    if cha.con_song:
+        w.ghi_ky_uc(cha.id, f"vợ chồng tôi sinh con {con.ten} ({con.id})", doi=True)
+    if me.con_song:
+        w.ghi_ky_uc(me.id, f"vợ chồng tôi sinh con {con.ten} ({con.id})", doi=True)
+
+
+def _sinh_con_tuc_thi(w: World, ke_hoach: dict[str, KeHoach], ss: dict, nc: dict,
+                      tt: int, g) -> None:
+    """Code path LEGACY (không thai kỳ): trúng xúc xắc là sinh NGAY trong tick.
+
+    GIỮ NGUYÊN TỪNG DRAW RNG so với bản trước WP-E — bị pin bởi
+    tests/test_household_estate.py::test_hash_legacy_pinned_off và hai hash vàng
+    trong tests/test_resume_journal.py. Đổi thứ tự draw ở đây = phá determinism legacy."""
     for aid in sorted(w.agents):
         me = w.agents[aid]
         if not (me.con_song and me.gioi_tinh == "nu" and me.vo_chong):
@@ -129,77 +288,105 @@ def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
         kh = ke_hoach.get(aid)
         if kh is not None:
             me.y_dinh_sinh_con = kh.y_dinh_sinh_con
-        # an ninh lương thực của hộ: dự trữ / nhu cầu 2 tick
-        ho = w.ho_cua(aid)
-        du_tru = sum(w.ledger.so_du(m, "thoc") for m in ho)
-        nhu_cau = sum(
-            nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(tt) else nc["tre_em_kg_tick"]
-            for m in ho
-        )
-        an_ninh = min(1.0, du_tru / (2 * nhu_cau)) if nhu_cau > 0 else 1.0
+        an_ninh = _an_ninh_luong_thuc(w, aid, nc, tt)
         p = ss["p_goc"] * an_ninh * me.y_dinh_sinh_con
         if g.random() >= p:
             continue
-        # sinh nở — rủi ro CHỈ giảm khi hộ sản phụ CÓ HỢP ĐỒNG hiệu lực với người nắm
-        # blueprint y_te (giá cả do hai bên tự thỏa thuận trong hợp đồng — engine
-        # không tự móc túi ai, không tự đặt giá dịch vụ)
-        rui_ro = ss["rui_ro_me"]
-        ho_me = set(w.ho_cua(aid))
-        thay_thuoc = None
-        for bid in sorted(w.blueprints):
-            bp = w.blueprints[bid]
-            if (bp.linh_vuc != "y_te" or not w.chu_the_hoat_dong(bp.chu)
-                    or bp.chu in ho_me):
-                continue
-            co_hd = any(
-                hd.trang_thai == "hieu_luc" and bp.chu in hd.cac_ben
-                and ho_me & set(hd.cac_ben)
-                for hd in w.hop_dong.values()
-            )
-            if co_hd:
-                thay_thuoc = bp.chu
-                break
-        if thay_thuoc is not None:
-            from engine.research import duoc_ap_dung
+        _rui_ro_sinh_no(w, g, ss, aid)
+        con = _tao_tre(w, g, me, cha)
+        _ghi_khai_sinh(w, con, me, cha)
 
-            san = float(ss["y_te_giam_rui_ro_san"])
-            rui_ro *= max(san, 1.0 - duoc_ap_dung(w, thay_thuoc, "y_te"))
-        if g.random() < rui_ro:
-            me.health = 0.0  # tử vong sinh nở — xử lý ở bước chết
+
+def _sinh_con_thai_ky(w: World, ke_hoach: dict[str, KeHoach], ss: dict, nc: dict,
+                      tt: int, g, gate: dict) -> None:
+    """WP-E: thụ thai → mang thai ``thai_ky_tick`` tick → sinh → hậu sản
+    ``khoang_cach_sinh_toi_thieu_tick`` tick không thụ thai lại.
+
+    Khoảng cách tối thiểu giữa hai ca sinh của cùng một mẹ (trừ sinh đôi cùng ca)
+    = hau_san_tick + thai_ky_tick. Sinh đôi là draw RNG riêng mỗi ca sinh
+    (``p_sinh_doi``), ghi event ``sinh_doi`` bên cạnh hai event ``sinh``."""
+    thai_ky, hau_san = _trang_thai_sinh_san(w)
+    t_min, t_max = ss["tuoi_me"]
+    for aid in sorted(w.agents):
+        me = w.agents[aid]
+        thai = thai_ky.get(aid)
+        if not (me.con_song and me.gioi_tinh == "nu"):
+            if not me.con_song:
+                _xoa_sinh_san_khi_chet(w, aid)
+            continue
+        if thai is not None:
+            # --- đang mang thai: KHÔNG thụ thai tiếp; đủ tick thì sinh ---
+            if w.tick < int(thai["sinh_tick"]):
+                continue
+            # sinh nở xảy ra dù goá/ly tán — cha ghi theo lúc thụ thai (agent không bị
+            # xóa khỏi w.agents kể cả khi đã chết, nên tra cứu trực tiếp là fail-closed)
+            cha = w.agents.get(str(thai["cha"]))
+            if cha is None:
+                raise RuntimeError(f"thai kỳ của {aid} tham chiếu cha không tồn tại")
+            _rui_ro_sinh_no(w, g, ss, aid)
+            sinh_doi = g.random() < gate["p_sinh_doi"]  # một draw riêng cho mỗi ca sinh
+            cac_con: list[str] = []
+            for _ in range(2 if sinh_doi else 1):
+                con = _tao_tre(w, g, me, cha)
+                _ghi_khai_sinh(w, con, me, cha)
+                cac_con.append(con.id)
             from engine import metrics_demography
 
-            metrics_demography.danh_dau_tu_vong_sinh_no(w, aid)
-            w.events.ghi(w.tick, "tu_vong_sinh_no", id=aid)
-        cid = w.id_moi()
-        pa, pb = cha.persona.as_dict(), me.persona.as_dict()
-        # persona = trung bình cha mẹ ± đột biến (seeded, tham số nhan_khau.dot_bien_persona)
-        db = w.cfg.get("nhan_khau.dot_bien_persona")
-        bien_do = int(db["bien_do"])
-        gia_tri = {
-            k: int(np.clip(round((pa[k] + pb[k]) / 2 + g.integers(-bien_do, bien_do + 1)),
-                           int(db["min"]), int(db["max"])))
-            for k in pa
-        }
-        con = Agent(
-            id=cid,
-            ten=f"Con {cid[1:]}",
-            gioi_tinh="nu" if g.random() < w.cfg.get("nhan_khau.ty_le_nu") else "nam",
-            tuoi_tick=0,
-            persona=Persona(**gia_tri),
-            lang=me.lang,
-            cha=cha.id,
-            me=me.id,
-        )
-        w.agents[cid] = con
-        cha.con.append(cid)
-        me.con.append(cid)
-        from engine import metrics_demography
+            metrics_demography.ghi_ca_sinh(w, me.id, so_con=len(cac_con))
+            if sinh_doi:
+                w.events.ghi(
+                    w.tick, "sinh_doi", me=aid, cha=cha.id,
+                    cac_con=cac_con, so_con=len(cac_con),
+                )
+            del thai_ky[aid]
+            if gate["hau_san_tick"] > 0:
+                duoc_lai = int(w.tick + gate["hau_san_tick"])
+                hau_san[aid] = duoc_lai
+                w.events.ghi(
+                    w.tick, "hau_san_bat_dau", me=aid,
+                    duoc_thu_thai_lai_tu_tick=duoc_lai,
+                )
+            continue
+        # --- chưa mang thai: hậu sản hết hạn độc lập với hôn nhân/tái hôn ---
+        han = hau_san.get(aid)
+        if han is not None:
+            if w.tick < int(han):
+                continue
+            del hau_san[aid]
+            w.events.ghi(w.tick, "hau_san_ket_thuc", me=aid)
 
-        metrics_demography.ghi_sinh(w)
-        household.ghi_bien_co(w, "sinh", tre=cid, me=me.id, cha=cha.id)
-        w.events.ghi(w.tick, "sinh", id=cid, cha=cha.id, me=me.id)
-        w.ghi_ky_uc(cha.id, f"vợ chồng tôi sinh con {con.ten} ({cid})", doi=True)
-        w.ghi_ky_uc(me.id, f"vợ chồng tôi sinh con {con.ten} ({cid})", doi=True)
+        # --- đủ điều kiện thì xét thụ thai (như legacy, thêm gate sinh học) ---
+        if not me.vo_chong:
+            continue
+        cha = w.agents.get(me.vo_chong)
+        if not cha or not cha.con_song:
+            continue
+        if not (t_min <= me.tuoi_nam <= t_max):
+            continue
+        kh = ke_hoach.get(aid)
+        if kh is not None:
+            me.y_dinh_sinh_con = kh.y_dinh_sinh_con
+        an_ninh = _an_ninh_luong_thuc(w, aid, nc, tt)
+        p = ss["p_goc"] * an_ninh * me.y_dinh_sinh_con
+        if g.random() >= p:
+            continue
+        sinh_du_kien = int(w.tick + gate["thai_ky_tick"])
+        thai_ky[aid] = {"cha": cha.id, "thu_thai_tick": int(w.tick),
+                        "sinh_tick": sinh_du_kien}
+        w.events.ghi(w.tick, "thu_thai", me=aid, cha=cha.id, sinh_du_kien=sinh_du_kien)
+        w.ghi_ky_uc(aid, "tôi đang mang thai, sắp đến ngày sinh")
+
+
+def sinh_con(w: World, ke_hoach: dict[str, KeHoach]) -> None:
+    ss = w.cfg.get("nhan_khau.sinh_san")
+    nc = w.cfg.raw()["nhu_cau"]
+    tt = w.cfg.get("nhan_khau.tuoi_truong_thanh")
+    g = w.rng.get("sinh_con", w.tick)
+    gate = _thai_ky_cfg(ss)
+    if gate is None:
+        _sinh_con_tuc_thi(w, ke_hoach, ss, nc, tt, g)
+    else:
+        _sinh_con_thai_ky(w, ke_hoach, ss, nc, tt, g, gate)
 
 
 def _q_nam(tuoi: float, gp: dict[str, float], ns: dict) -> float:
@@ -284,6 +471,9 @@ def cai_chet(w: World) -> list[str]:
             )
             metrics_demography.ghi_chet(w, a.tuoi_nam, ly_do_metric)
             a.con_song = False
+            # Thai kỳ/hậu sản là state ảnh hưởng tương lai: người chết phải rời state ngay
+            # trong tick chết, không chờ một vòng sinh sản sau và không thành ghost actor.
+            _xoa_sinh_san_khi_chet(w, aid)
             # Refund a deceased participant's still-held project materials
             # before the estate path distributes their ledger balance.
             projects.xu_ly_nguoi_chet(w, aid)

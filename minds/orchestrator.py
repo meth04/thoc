@@ -85,6 +85,10 @@ class MindMock:
         self.so_api_call = 0
         self.so_api_call_bi_tu_choi = 0
         self._agent_bi_chan_tick: set[str] = set()
+        # Exactly-one terminal decision state for every scheduled agent/tick. This is an
+        # accounting invariant independent of whether a provider request ever started.
+        self._scheduled_decisions_tick: set[str] = set()
+        self._terminal_decisions_tick: dict[str, str] = {}
         self.het_ngan_sach = False
         self.ly_do_dung = ""
         # mock: gather TUẦN TỰ theo sorted-id, chia sẻ da_nham (giữ hành vi phân bố thửa
@@ -96,8 +100,10 @@ class MindMock:
         # trần đồng thời (real tự co giãn theo số key ở MindReal.__init__)
         self.concurrency = int(w.cfg.get("minds.concurrency"))
 
-    def _du_ngan_sach(self, w: World, thinkers: list[str]) -> bool:
+    def _du_ngan_sach(self, w: World, thinkers: list[str],
+                       triggers: dict[str, list[str]] | None = None) -> bool:
         """Mock luôn đủ; MindReal override bằng budget guard thật (per-agent)."""
+        _ = triggers
         return True
 
     def _dich_intent_la(self, w: World, thung: list, ke_hoach: dict) -> None:
@@ -124,6 +130,10 @@ class MindMock:
                 error_message=str(error) if error is not None else resp.text,
                 tool_turns=resp.tool_turns,
                 tool_catalog_hash=resp.tool_catalog_hash,
+                logical_id=req.logical_id,
+                logical_kind=req.logical_kind,
+                decision_id=req.decision_id,
+                source=req.attempt_source or req.logical_kind,
             )
         self.tok_in += resp.tok_in
         self.tok_out += resp.tok_out
@@ -140,11 +150,94 @@ class MindMock:
         if fallback:
             st["fallback"] = st.get("fallback", 0) + 1
 
+    def _bind_attempt_log(self) -> None:
+        """Wire the per-HTTP-attempt sink without changing ``MindReal``'s public constructor."""
+        gateway = getattr(self, "gateway", None)
+        if gateway is not None and hasattr(gateway, "dat_attempt_log"):
+            gateway.dat_attempt_log(self.log)
+        provider_gateway = getattr(getattr(self, "provider", None), "gw", None)
+        if provider_gateway is not None and hasattr(provider_gateway, "dat_attempt_log"):
+            provider_gateway.dat_attempt_log(self.log)
+
+    @staticmethod
+    def _decision_id(w: World, aid: str) -> str:
+        return f"decision:{w.tick}:{aid}"
+
+    def _tao_request_quyet_dinh(
+        self,
+        w: World,
+        aid: str,
+        triggers: dict[str, list[str]],
+        ctx: dict,
+        *,
+        json_repair: bool = False,
+    ) -> LLMRequest:
+        prompt = (f"[mock 1-to-1] id={aid} tick={w.tick}" if self._tuan_tu
+                  else build_agent_prompt(w, aid, triggers))
+        if json_repair:
+            prompt += "\n[LỖI JSON — trả lại đúng schema]"
+        max_api = (int(self._cfg_ngan_sach_tick["toi_da_moi_task"])
+                   if self._ngan_sach_tick is not None else None)
+        return LLMRequest(
+            prompt=prompt,
+            ctx={**ctx, "aid": aid},
+            tier=tier_cua(w, aid),
+            batch_ids=[aid],
+            tick_budget=self._ngan_sach_tick,
+            logical_id=f"agent:{aid}",
+            logical_kind="decision",
+            max_api_calls=max_api,
+            tick=w.tick,
+            decision_id=self._decision_id(w, aid),
+            attempt_source="json_repair" if json_repair else "decision_initial",
+        )
+
+    def _ghi_terminal_decision(
+        self,
+        w: World,
+        aid: str,
+        req: LLMRequest,
+        reason: str,
+        *,
+        error: Exception | None = None,
+    ) -> None:
+        """Record/consume exactly one terminal state for a scheduled decision."""
+        if aid in self._terminal_decisions_tick:
+            raise RuntimeError(
+                f"duplicate terminal decision for {aid} at tick {w.tick}: "
+                f"{self._terminal_decisions_tick[aid]} then {reason}"
+            )
+        self._terminal_decisions_tick[aid] = reason
+        if (reason == "budget_denied" and error is not None
+                and not bool(getattr(error, "attempt_accounted", False))):
+            gateway = getattr(self, "gateway", None)
+            if gateway is not None and hasattr(gateway, "ghi_budget_denied_before_start"):
+                gateway.ghi_budget_denied_before_start(req)
+                error.attempt_accounted = True
+        consume = getattr(self.provider, "consume_terminal", None)
+        if callable(consume):
+            consume(req, reason)
+        if self.transcript is not None:
+            self.transcript.ghi_terminal(
+                tick=w.tick,
+                req=req,
+                terminal_reason=reason,
+                terminal_state=("decision_accepted" if reason == "response"
+                                else "fallback_selected"),
+                error_type=type(error).__name__ if error is not None else None,
+                error_message=str(error) if error is not None else None,
+                tool_turns=list(getattr(error, "tool_turns", []) or []),
+                tool_catalog_hash=getattr(error, "tool_catalog_hash", None),
+            )
+
     def __call__(self, w: World) -> dict[str, KeHoach]:
         from minds.rulebot import _BoiCanhTick, bo_sung_ke_hoach_entity
 
         self.provider.w = w  # sau resume, w là object mới
         self.stats_tick = {}  # reset telemetry của tick này
+        self._scheduled_decisions_tick = set()
+        self._terminal_decisions_tick = {}
+        self._bind_attempt_log()
         self._cfg_ngan_sach_tick = cau_hinh_ngan_sach(w.cfg)
         self._ngan_sach_tick = None
         self._agent_bi_chan_tick = set()
@@ -195,15 +288,21 @@ class MindMock:
             aid for aid in sorted(triggers)
             if (a := w.agents.get(aid)) is not None and a.con_song
         ]
-        # Preserve the intended cohort in telemetry even if the real-provider
-        # guard later rejects the tick.  Replacing this with zero would make a
-        # failed 50-person autonomy preflight look like a quiet village.
+        # Preserve the intended cohort in telemetry even if the real-provider guard rejects
+        # the tick. A scheduled turn always receives one explicit terminal state.
         so_task_logic = len(thinkers)
+        self._scheduled_decisions_tick = set(thinkers)
+        self.so_nghi += len(thinkers)
 
         # hook ngân sách (real: budget guard per-agent; mock: luôn đủ)
-        if thinkers and not self._du_ngan_sach(w, thinkers):
+        if thinkers and not self._du_ngan_sach(w, thinkers, triggers):
             self.het_ngan_sach = True
             for aid in thinkers:
+                req_denied = self._tao_request_quyet_dinh(
+                    w, aid, triggers, {**ctx, "da_nham": set()}
+                )
+                exc = LoiVuotNganSachTick("budget guard denied before provider start")
+                self._ghi_terminal_decision(w, aid, req_denied, "budget_denied", error=exc)
                 self.so_fallback += 1
                 ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, da_nham)
                 record_plan(w, aid, "fallback", detail="budget_guard")
@@ -211,7 +310,6 @@ class MindMock:
             thinkers = []
 
         if thinkers:
-            self.so_nghi += len(thinkers)
             # PHA GATHER: mock chạy ĐỒNG BỘ (CPU thuần — asyncio/thread chỉ tổ tốn); real
             # override _gather_song_song bằng asyncio fan-out (I/O). Cả hai trả {aid: QĐ|None}.
             if self._tuan_tu:
@@ -236,8 +334,27 @@ class MindMock:
             # PHA APPLY: duyệt SORTED ID — thứ tự ghi Ledger tất định (điều luật #4).
             # xung đột thửa công (nhiều agent cùng nhắm) do engine dedup apply-time
             # (production.da_canh_tick_nay theo sorted id) — không cần da_nham ở mind.
+            decider_injected = (
+                getattr(self._nghi_dong_bo, "__func__", None) is not MindMock._nghi_dong_bo
+            )
             for aid in sorted(ket):
                 qd = ket[aid]
+                if aid not in self._terminal_decisions_tick:
+                    if not decider_injected:
+                        raise RuntimeError(
+                            f"production decision path returned without terminal state: "
+                            f"{aid} tick {w.tick}"
+                        )
+                    # Explicit test seam: a fixture replaced the whole provider/parse method,
+                    # so no lower layer exists to record a terminal. Account its returned value
+                    # at the orchestrator boundary without weakening the production invariant.
+                    req_injected = self._tao_request_quyet_dinh(
+                        w, aid, triggers, {**ctx, "da_nham": set()}
+                    )
+                    self._ghi_terminal_decision(
+                        w, aid, req_injected,
+                        "response" if qd is not None else "parse_unusable",
+                    )
                 if qd is None:  # fallback: giữ thẻ cũ, không hành động mới
                     self.so_fallback += 1
                     ke_hoach[aid] = thi_hanh_the(w, aid, _the_cua(w, aid), bc, set())
@@ -300,6 +417,28 @@ class MindMock:
         if w.tick % int(w.cfg.get("minds.reflection_moi_n_tick")) == 0:
             self._reflection(w)
         self.stats_tick["logical_task"] = so_task_logic
+        missing_terminal = sorted(
+            self._scheduled_decisions_tick - set(self._terminal_decisions_tick)
+        )
+        extra_terminal = sorted(
+            set(self._terminal_decisions_tick) - self._scheduled_decisions_tick
+        )
+        if missing_terminal or extra_terminal:
+            raise RuntimeError(
+                "decision terminal accounting violation: "
+                f"missing={missing_terminal} extra={extra_terminal}"
+            )
+        reason_counts: dict[str, int] = {}
+        for reason in self._terminal_decisions_tick.values():
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        self.stats_tick.update({
+            "scheduled_agent_decision": so_task_logic,
+            "completed_agent_decision_turn": len(self._terminal_decisions_tick),
+            "parsed_agent_decision": int(reason_counts.get("response", 0)),
+            "terminal_reason_by_agent": dict(sorted(self._terminal_decisions_tick.items())),
+            "terminal_reason_counts": dict(sorted(reason_counts.items())),
+            "exact_one_terminal_decision": True,
+        })
         if self._ngan_sach_tick is not None:
             tick_stats = self._ngan_sach_tick.thong_ke()
             tick_stats["api_call_by_agent"] = {
@@ -313,6 +452,11 @@ class MindMock:
             self.stats_tick.update(tick_stats)
             self.so_api_call += int(tick_stats["api_call"])
             self.so_api_call_bi_tu_choi += int(tick_stats["api_call_denied"])
+        # Explicit source/status counters are additive API for telemetry owner. Legacy
+        # ``api_call``/``retries`` aliases remain unchanged.
+        attempt_summary = self.log.attempt_summary(effective_only=True, tick=w.tick)
+        if attempt_summary:
+            self.stats_tick["http_attempt_accounting"] = attempt_summary
         self.log.flush()
         if self.transcript is not None:
             self.transcript.flush()
@@ -370,22 +514,9 @@ class MindMock:
                       triggers: dict[str, list[str]], ctx: dict):
         """Một agent = một call (đồng bộ). Parse + retry 1 lần; trả QuyetDinh hoặc None.
         Dùng trực tiếp cho mock (CPU) và trong thread pool cho real (HTTP)."""
-        # mock: PersonaBot quyết định từ ctx, KHÔNG đọc prompt → khỏi dựng prompt vật lý
-        # đắt tiền (chỉ để log tok_in giả). real: dựng prompt thật để LLM đọc + log đúng.
-        prompt = (f"[mock 1-to-1] id={aid} tick={w.tick}" if self._tuan_tu
-                  else build_agent_prompt(w, aid, triggers))
-        tier = tier_cua(w, aid)
-        req_ctx = {**ctx, "aid": aid}  # da_nham đã nằm trong ctx (chia sẻ/rỗng tùy chế độ)
-        # Every LLM-related request of this resident (decision, retry, MCP,
-        # memory, reflection, translation) shares one per-agent 1..N budget.
-        logical_id = f"agent:{aid}"
-        max_api = (int(self._cfg_ngan_sach_tick["toi_da_moi_task"])
-                   if self._ngan_sach_tick is not None else None)
-        req = LLMRequest(
-            prompt=prompt, ctx=req_ctx, tier=tier, batch_ids=[aid],
-            tick_budget=self._ngan_sach_tick, logical_id=logical_id,
-            logical_kind="decision", max_api_calls=max_api,
-        )
+        # mock: PersonaBot quyết định từ ctx, KHÔNG đọc prompt; real: prompt thật. Cả hai
+        # dùng cùng decision_id để nối provider attempts, JSON repair và terminal outcome.
+        req = self._tao_request_quyet_dinh(w, aid, triggers, ctx)
         # MCP (PART 5.2): real + cờ bật + provider hỗ trợ → vòng công cụ CHỈ ĐỌC
         dung_cong_cu = (not self._tuan_tu
                         and bool(w.cfg.get("minds.dung_cong_cu_the_gioi"))
@@ -395,13 +526,15 @@ class MindMock:
                 resp = self.provider.goi_agentic(req, w, aid)  # NGOÀI khoá — I/O song song
             else:
                 resp = self.provider.goi(req, attempt=0)  # NGOÀI khoá — I/O chạy song song
-        except LoiVuotNganSachTick:
+        except LoiVuotNganSachTick as e:
             with self._lock:
                 self._agent_bi_chan_tick.add(aid)
+                self._ghi_terminal_decision(w, aid, req, "budget_denied", error=e)
             return None
         except LoiHetQuota as e:
             with self._lock:
                 self._ghi_call_loi(w, req, e)
+                self._ghi_terminal_decision(w, aid, req, "provider_error", error=e)
                 self._dung_em(str(e))
             return None
         ok, hong = parse_batch(resp.text, [aid])
@@ -409,30 +542,33 @@ class MindMock:
             self.so_call += 1
             self._ghi_log(w, req, resp, False)
         if not hong:
+            with self._lock:
+                self._ghi_terminal_decision(w, aid, req, "response")
             return ok[aid]
         # retry 1 lần kèm nhắc lỗi (mock: sinh lại với attempt=1)
-        req2 = LLMRequest(
-            prompt=prompt + "\n[LỖI JSON — trả lại đúng schema]",
-            ctx=req_ctx, tier=tier, batch_ids=[aid],
-            tick_budget=self._ngan_sach_tick, logical_id=logical_id,
-            logical_kind="decision", max_api_calls=max_api,
-        )
+        req2 = self._tao_request_quyet_dinh(w, aid, triggers, ctx, json_repair=True)
         try:
             resp2 = self.provider.goi(req2, attempt=1)
-        except LoiVuotNganSachTick:
+        except LoiVuotNganSachTick as e:
             with self._lock:
                 self._agent_bi_chan_tick.add(aid)
+                self._ghi_terminal_decision(w, aid, req2, "budget_denied", error=e)
             return None
         except LoiHetQuota as e:
             with self._lock:
                 self._ghi_call_loi(w, req2, e)
+                self._ghi_terminal_decision(w, aid, req2, "provider_error", error=e)
                 self._dung_em(str(e))
             return None
-        resp2.retries = max(resp2.retries, 1)
+        resp2.retries = max(resp2.retries, 1)  # legacy alias
+        resp2.json_repair_retries = max(resp2.json_repair_retries, 1)
         ok2, hong2 = parse_batch(resp2.text, [aid])
         with self._lock:
             self.so_call += 1
             self._ghi_log(w, req2, resp2, bool(hong2))
+            self._ghi_terminal_decision(
+                w, aid, req2, "parse_unusable" if hong2 else "response"
+            )
         return ok2.get(aid)  # None → fallback thẻ cũ ở pha apply
 
     def _dung_em(self, ly_do: str) -> None:
@@ -445,9 +581,10 @@ class MindMock:
     def _ghi_call_loi(self, w: World, req: LLMRequest, e: Exception) -> None:
         """Call thất bại hẳn (hết quota / lỗi HTTP dai dẳng) cũng phải có vết trong
         llm_calls (điều luật #6) — raw là thông báo lỗi đã che key, tok=0."""
+        so_hong = int(getattr(e, "so_attempt_hong", 0))
         resp_loi = LLMResponse(
             text=f"[LOI] {che_key(str(e))[:500]}", provider="loi", model="",
-            retries=int(getattr(e, "so_attempt_hong", 0)),
+            retries=so_hong, provider_retries=so_hong,
         )
         self._ghi_log(w, req, resp_loi, True, error=e)
 

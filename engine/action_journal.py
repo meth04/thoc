@@ -13,8 +13,15 @@ filter an action that preflight has already rejected.
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from typing import Any
+
+# This private field belongs to a mutable ``KeHoach`` entry only.  It is attached
+# after intent parsing/preflight and lets an engine handler settle the exact
+# journal request that produced the entry, even when sibling entries have the
+# same actor/action/target.
+ENTRY_ACTION_ID = "_action_journal_id"
 
 
 def _enabled(w: Any) -> bool:
@@ -41,6 +48,45 @@ def _records(w: Any) -> list[dict[str, Any]]:
         reset_tick(w)
         rows = w.action_journal_tick
     return rows
+
+
+def bind_entry_action_id(entry: dict[str, Any], row: dict[str, Any] | None) -> None:
+    """Bind one mutable plan entry to its already-recorded journal request.
+
+    This is deliberately an engine-only annotation, added after an intent is
+    parsed.  A different id on an entry is an integrity error: silently
+    overwriting it could make a terminal outcome belong to a sibling request.
+    """
+    if row is None:
+        return
+    action_id = str(row["id"])
+    existing = entry.get(ENTRY_ACTION_ID)
+    if existing not in (None, "", action_id):
+        raise RuntimeError("plan entry is already bound to another action journal row")
+    entry[ENTRY_ACTION_ID] = action_id
+
+
+def entry_action_id(raw: Any) -> str | None:
+    """Return the exact request id carried by a plan entry, if any."""
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(ENTRY_ACTION_ID)
+    return str(value) if value not in (None, "") else None
+
+
+def _requested_quantity(action: str, params: dict[str, Any]) -> float | None:
+    """Extract the declared quantity for project-contribution audit rows."""
+    field = {
+        "gop_vat_lieu_du_an": "so_luong",
+        "gop_cong_du_an": "so_cong",
+    }.get(action)
+    if field is None:
+        return None
+    try:
+        quantity = float(params[field])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return quantity if math.isfinite(quantity) else None
 
 
 def _emit(w: Any, row: dict[str, Any], stage: str) -> None:
@@ -130,8 +176,15 @@ def request(w: Any, aid: str, action: str, *, origin: str = "external",
         "preflight": "pending",
         "execution": "planned",
         "reason_code": None,
-        "params": dict(params or {}),
+        # Do not expose the engine-only entry binding as an intent parameter.
+        "params": {
+            key: value for key, value in dict(params or {}).items()
+            if key != ENTRY_ACTION_ID
+        },
     }
+    requested_quantity = _requested_quantity(str(action), row["params"])
+    if requested_quantity is not None:
+        row["requested_quantity"] = requested_quantity
     rows.append(row)
     _emit(w, row, "request")
     return row
@@ -139,7 +192,7 @@ def request(w: Any, aid: str, action: str, *, origin: str = "external",
 
 def _find(w: Any, aid: str, action: str, target: str | None = None, *,
           include_terminal: bool = False) -> dict[str, Any] | None:
-    """Find a matching request, preferring an unsettled row deterministically."""
+    """Legacy lookup for handlers whose plan entry has no journal id."""
     terminal: dict[str, Any] | None = None
     for row in reversed(_records(w)):
         if row.get("aid") != str(aid) or row.get("action") != str(action):
@@ -153,6 +206,27 @@ def _find(w: Any, aid: str, action: str, target: str | None = None, *,
     return terminal
 
 
+def _find_exact(w: Any, action_id: str, aid: str, action: str,
+                target: str | None = None) -> dict[str, Any]:
+    """Resolve a bound entry without falling back to LIFO sibling matching."""
+    for row in _records(w):
+        if row.get("id") != str(action_id):
+            continue
+        if row.get("aid") != str(aid) or row.get("action") != str(action):
+            raise RuntimeError("action journal id does not belong to this execution")
+        if target not in (None, "") and row.get("target") != str(target):
+            raise RuntimeError("action journal id target does not match this execution")
+        return row
+    raise RuntimeError("bound action journal row is missing")
+
+
+def _resolve(w: Any, aid: str, action: str, target: str | None, action_id: str | None,
+             *, include_terminal: bool = False) -> dict[str, Any] | None:
+    if action_id not in (None, ""):
+        return _find_exact(w, str(action_id), aid, action, target)
+    return _find(w, aid, action, target, include_terminal=include_terminal)
+
+
 def preflight_ok(w: Any, row: dict[str, Any] | None) -> None:
     if row is None:
         return
@@ -162,11 +236,13 @@ def preflight_ok(w: Any, row: dict[str, Any] | None) -> None:
 
 
 def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = None,
-             detail: str | None = None, preflight: bool = False, feedback: bool = True) -> None:
+             detail: str | None = None, preflight: bool = False, feedback: bool = True,
+             action_id: str | None = None, requested_quantity: float | None = None,
+             executed_quantity: float | None = None) -> None:
     """Record a stable rejection; create a row if parsing never produced one."""
     if not _enabled(w):
         return
-    row = _find(w, aid, action, target)
+    row = _resolve(w, aid, action, target, action_id)
     if row is None:
         # A legacy handler may call ``ghi_unrecognized`` after reporting the
         # exact same outcome. Detect its terminal row rather than fabricating
@@ -182,6 +258,10 @@ def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = N
     if row is None:
         return
     row["reason_code"] = str(code)
+    if requested_quantity is not None:
+        row["requested_quantity"] = float(requested_quantity)
+    if executed_quantity is not None:
+        row["executed_quantity"] = float(executed_quantity)
     if detail:
         row["detail"] = str(detail)[:300]
     if preflight:
@@ -198,11 +278,13 @@ def rejected(w: Any, aid: str, action: str, code: str, *, target: str | None = N
 
 
 def executed(w: Any, aid: str, action: str, *, target: str | None = None,
-             code: str = "ok", detail: str | None = None, pending: bool = False) -> None:
+             code: str = "ok", detail: str | None = None, pending: bool = False,
+             action_id: str | None = None, requested_quantity: float | None = None,
+             executed_quantity: float | None = None) -> None:
     """Mark an engine-confirmed effect (or legitimate multi-tick pending state)."""
     if not _enabled(w):
         return
-    row = _find(w, aid, action, target)
+    row = _resolve(w, aid, action, target, action_id)
     if row is None:
         # Aggregate actions (for example one labour allocation cultivating
         # several fields) can emit more than one confirmed sub-effect. Those
@@ -216,6 +298,10 @@ def executed(w: Any, aid: str, action: str, *, target: str | None = None,
     previous = row.get("execution")
     row["execution"] = "pending" if pending else "executed"
     row["reason_code"] = str(code)
+    if requested_quantity is not None:
+        row["requested_quantity"] = float(requested_quantity)
+    if executed_quantity is not None:
+        row["executed_quantity"] = float(executed_quantity)
     if detail:
         row["detail"] = str(detail)[:300]
     _emit(w, row, "execution")
@@ -453,6 +539,28 @@ def _drop_rejected(kh: Any, raw: dict[str, Any]) -> None:
         kh.huy_bao_gia = [x for x in kh.huy_bao_gia if x != str(raw.get("ref", ""))]
 
 
+def _project_entry_for_preflight(kh: Any, action: str,
+                                 cursors: dict[str, int]) -> dict[str, Any] | None:
+    """Return the original project-contribution dict in wire-list order.
+
+    Capability rendering copies contribution dictionaries, so annotating its
+    transient raw action would not reach ``engine.projects``.  The cursor binds
+    repeated, otherwise-identical entries by their declared list order.
+    """
+    field = {
+        "gop_vat_lieu_du_an": "gop_vat_lieu_du_an",
+        "gop_cong_du_an": "gop_cong_du_an",
+    }.get(action)
+    if field is None:
+        return None
+    entries = getattr(kh, field, ())
+    index = cursors.get(field, 0)
+    cursors[field] = index + 1
+    if index >= len(entries) or not isinstance(entries[index], dict):
+        return None
+    return entries[index]
+
+
 def preflight_plans(w: Any, plans: dict[str, Any]) -> None:
     """Journal every public action and reject impossible land/project/quote refs visibly."""
     if not _enabled(w):
@@ -461,11 +569,15 @@ def preflight_plans(w: Any, plans: dict[str, Any]) -> None:
 
     for aid in sorted(plans):
         kh = plans[aid]
+        project_cursors: dict[str, int] = {}
         for raw in hanh_dong_tu_ke_hoach(kh):
             action = str(raw.get("loai", ""))
             target = _target(raw)
             row = request(w, aid, action, origin=_origin_for(w, aid, action, target),
                           target=target, params=raw)
+            entry = _project_entry_for_preflight(kh, action, project_cursors)
+            if entry is not None:
+                bind_entry_action_id(entry, row)
             code, detail = _preflight(w, aid, raw)
             if code is None:
                 preflight_ok(w, row)

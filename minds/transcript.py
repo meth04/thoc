@@ -36,7 +36,21 @@ from collections import deque
 from pathlib import Path
 
 from minds.gateway import LLMRequest, LLMResponse
-from minds.providers_real import LoiHetQuota, che_key
+from minds.providers_real import LoiHetQuota, LoiProviderHong, che_key
+from minds.tick_budget import LoiVuotNganSachTick
+
+TERMINAL_REASONS = frozenset({
+    "response", "budget_denied", "parse_unusable", "provider_error",
+})
+TERMINAL_STATES = frozenset({"decision_accepted", "fallback_selected"})
+TERMINAL_SCHEMA_VERSIONS = frozenset({"transcript-2"})
+
+
+def terminal_state_for_reason(reason: str) -> str:
+    """The only terminal state compatible with one replayed decision reason."""
+    if reason not in TERMINAL_REASONS:
+        raise ValueError(f"unknown terminal reason: {reason}")
+    return "decision_accepted" if reason == "response" else "fallback_selected"
 
 
 def bam_prompt(prompt: str) -> str:
@@ -82,7 +96,9 @@ class TranscriptWriter:
             prompt: str, response_raw: str, tok_in: int, tok_out: int,
             *, error_type: str | None = None, error_message: str | None = None,
             tool_turns: list[dict] | None = None,
-            tool_catalog_hash: str | None = None) -> None:
+            tool_catalog_hash: str | None = None,
+            logical_id: str = "", logical_kind: str = "decision",
+            decision_id: str = "", source: str = "") -> None:
         """Ghi cả response thành công lẫn lỗi terminal.
 
         Một lỗi provider là một nhánh điều khiển có tác dụng lên run (fallback/dừng êm),
@@ -92,6 +108,8 @@ class TranscriptWriter:
         self._n += 1
         is_error = error_type is not None or provider == "loi"
         self._f.write(json.dumps({
+            "schema_version": "transcript-2",
+            "record_type": "provider_call",
             "call_id": self._n,
             "run_uuid": self.run_uuid,
             "segment_id": self.segment_id,
@@ -100,6 +118,10 @@ class TranscriptWriter:
             "provider": provider,
             "model": model,
             "temperature": temperature,
+            "logical_id": logical_id,
+            "logical_kind": logical_kind,
+            "decision_id": decision_id,
+            "source": source or logical_kind,
             "prompt_hash": bam_prompt(prompt),  # băm prompt GỐC (khớp lúc replay)
             "request": che_key(prompt),         # lưu bản đã che để người đọc/kiểm tra
             "response_raw": che_key(response_raw or ""),
@@ -108,6 +130,61 @@ class TranscriptWriter:
             "error_message": che_key(error_message or "") if is_error else "",
             "tok_in": int(tok_in),
             "tok_out": int(tok_out),
+            "tool_turns": tool_turns or [],
+            "tool_catalog_hash": tool_catalog_hash,
+        }, ensure_ascii=False) + "\n")
+
+    def ghi_terminal(
+        self,
+        *,
+        tick: int,
+        req: LLMRequest,
+        terminal_reason: str,
+        terminal_state: str,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        tool_turns: list[dict] | None = None,
+        tool_catalog_hash: str | None = None,
+    ) -> None:
+        """Append the one terminal state of a scheduled agent decision.
+
+        Provider responses and decision terminals are separate record types. Replay therefore
+        never has to manufacture a transcript miss to select fallback: it consumes this row and
+        validates the same terminal branch explicitly.
+        """
+        expected_state = terminal_state_for_reason(terminal_reason)
+        if terminal_state not in TERMINAL_STATES:
+            raise ValueError(f"unknown terminal state: {terminal_state}")
+        if terminal_state != expected_state:
+            raise ValueError(
+                "inconsistent terminal state/reason: "
+                f"reason={terminal_reason!r} state={terminal_state!r}"
+            )
+        self._n += 1
+        self._f.write(json.dumps({
+            "schema_version": "transcript-2",
+            "record_type": "decision_terminal",
+            "call_id": self._n,
+            "run_uuid": self.run_uuid,
+            "segment_id": self.segment_id,
+            "tick": int(tick),
+            "tier": req.tier,
+            "provider": "decision",
+            "model": "",
+            "logical_id": req.logical_id,
+            "logical_kind": req.logical_kind,
+            "decision_id": req.decision_id,
+            "source": req.attempt_source or req.logical_kind,
+            "prompt_hash": bam_prompt(req.prompt),
+            "request": che_key(req.prompt),
+            "response_raw": "",
+            "outcome": "terminal",
+            "terminal_reason": terminal_reason,
+            "terminal_state": terminal_state,
+            "error_type": error_type,
+            "error_message": che_key(error_message or "") if error_message else "",
+            "tok_in": 0,
+            "tok_out": 0,
             "tool_turns": tool_turns or [],
             "tool_catalog_hash": tool_catalog_hash,
         }, ensure_ascii=False) + "\n")
@@ -137,35 +214,84 @@ class TranscriptReader:
     def __init__(self, path: Path):
         self.path = Path(path)
         self._theo_hash: dict[str, deque] = {}
+        self._terminal_theo_decision: dict[str, deque] = {}
+        self._terminal_theo_hash: dict[str, deque] = {}
         self.tong = 0
         self.misses = 0
+        self.terminal_total = 0
+        self.terminal_consumed = 0
+        # A transcript without an explicitly declared terminal schema predates decision-terminal
+        # records and is replayed through the legacy path.  Once transcript-2 is declared, a
+        # missing terminal is an artifact failure rather than a fallback control signal.
+        self.co_terminal_schema = False
         if self.path.exists():
             for line in self.path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line:
                     continue
                 d = json.loads(line)
-                self._theo_hash.setdefault(d["prompt_hash"], deque()).append(d)
+                if d.get("schema_version") in TERMINAL_SCHEMA_VERSIONS:
+                    self.co_terminal_schema = True
+                if d.get("record_type") == "decision_terminal":
+                    self.co_terminal_schema = True
+                    self.terminal_total += 1
+                    decision_id = str(d.get("decision_id") or "")
+                    if decision_id:
+                        self._terminal_theo_decision.setdefault(decision_id, deque()).append(d)
+                    else:
+                        self._terminal_theo_hash.setdefault(d["prompt_hash"], deque()).append(d)
+                else:
+                    # Rows before transcript-2 have no record_type and remain provider calls.
+                    self._theo_hash.setdefault(d["prompt_hash"], deque()).append(d)
                 self.tong += 1
 
-    def lay(self, prompt: str) -> dict:
-        """Rút (pop FIFO) response đã ghi cho prompt; thiếu → KeyError + đếm miss."""
+    def lay(self, prompt: str, *, dem_miss: bool = True) -> dict | None:
+        """Pop one provider-call row. Terminal rows never share this queue."""
         dq = self._theo_hash.get(bam_prompt(prompt))
         if not dq:
+            if dem_miss:
+                self.misses += 1
+                raise KeyError("transcript miss")
+            return None
+        return dq.popleft()
+
+    def xem_terminal(self, req: LLMRequest) -> dict | None:
+        """Peek the recorded terminal without consuming it (used before a denied request)."""
+        dq = (self._terminal_theo_decision.get(req.decision_id)
+              if req.decision_id else self._terminal_theo_hash.get(bam_prompt(req.prompt)))
+        return dq[0] if dq else None
+
+    def lay_terminal(self, req: LLMRequest) -> dict | None:
+        """Consume one terminal row, retaining only pre-terminal-schema compatibility.
+
+        Legacy rows have no terminal schema at all, so they return ``None`` explicitly.  A
+        transcript-2 artifact declares the schema and must contain a matching terminal row.
+        """
+        if not self.co_terminal_schema:
+            return None
+        dq = (self._terminal_theo_decision.get(req.decision_id)
+              if req.decision_id else self._terminal_theo_hash.get(bam_prompt(req.prompt)))
+        if not dq:
             self.misses += 1
-            raise KeyError("transcript miss")
+            raise KeyError("decision terminal transcript miss")
+        self.terminal_consumed += 1
         return dq.popleft()
 
     def con_lai(self) -> int:
-        """Số response CHƯA được tiêu thụ (replay đúng ⇒ 0 sau khi chạy hết)."""
-        return sum(len(dq) for dq in self._theo_hash.values())
+        """Số provider rows + terminal rows chưa được tiêu thụ (replay đúng ⇒ 0)."""
+        return (
+            sum(len(dq) for dq in self._theo_hash.values())
+            + sum(len(dq) for dq in self._terminal_theo_decision.values())
+            + sum(len(dq) for dq in self._terminal_theo_hash.values())
+        )
 
 
 class TranscriptProvider:
     """Provider thay mạng: trả response đã ghi theo prompt_hash (không call API).
 
-    Thiếu response (prompt lệch, hoặc tick GỐC đã dừng vì cạn ngân sách) → ``LoiHetQuota``
-    để khớp đúng đường fallback/dừng-êm của orchestrator (điều luật #7)."""
+    Transcript-2 dùng ``decision_terminal`` để tái tạo budget denial/provider error/parse
+    unusable. Chỉ một prompt thật sự không có cả provider row lẫn terminal row mới là miss và
+    làm cổng replay fail; miss không còn là control signal cho fallback."""
 
     ten = "transcript"
 
@@ -176,7 +302,13 @@ class TranscriptProvider:
         return self._tra(req)
 
     def goi_agentic(self, req: LLMRequest, w, aid: str) -> LLMResponse:
-        d = self._lay(req)
+        try:
+            d = self._lay(req)
+        except LoiVuotNganSachTick as exc:
+            terminal = getattr(exc, "transcript_terminal", None)
+            if isinstance(terminal, dict):
+                self._kiem_tool_turns(terminal, w, aid)
+            raise
         self._kiem_tool_turns(d, w, aid)
         return self._phan_hoi(d)
 
@@ -184,17 +316,99 @@ class TranscriptProvider:
         return self._phan_hoi(self._lay(req))
 
     def _lay(self, req: LLMRequest) -> dict:
+        d = self.reader.lay(req.prompt, dem_miss=False)
+        if d is not None:
+            return d
+        terminal = self.reader.xem_terminal(req)
+        if terminal and terminal.get("terminal_reason") == "budget_denied":
+            exc = LoiVuotNganSachTick(
+                str(terminal.get("error_message") or "budget denied recorded in transcript")
+            )
+            exc.transcript_terminal = terminal
+            raise exc
         try:
-            return self.reader.lay(req.prompt)
+            self.reader.lay(req.prompt, dem_miss=True)
         except KeyError:
             raise LoiHetQuota("transcript thiếu response cho prompt") from None
+        raise AssertionError("unreachable")
+
+    def consume_terminal(
+        self,
+        req: LLMRequest,
+        expected_reason: str,
+        expected_state: str | None = None,
+    ) -> dict | None:
+        """Consume and validate the reason and exact terminal state selected by replay.
+
+        ``expected_state`` is optional solely for the existing orchestrator call seam: its
+        canonical value is derived from ``expected_reason``.  Callers that supply it must agree
+        with that canonical mapping, so neither a caller nor a tampered transcript can turn a
+        fallback into an accepted decision (or the reverse).
+        """
+        try:
+            canonical_state = terminal_state_for_reason(expected_reason)
+        except ValueError as exc:
+            raise TranscriptTerminalMismatch(str(exc)) from None
+        if expected_state is None:
+            expected_state = canonical_state
+        elif expected_state not in TERMINAL_STATES:
+            raise TranscriptTerminalMismatch(
+                f"unknown expected terminal state: {expected_state!r}"
+            )
+        elif expected_state != canonical_state:
+            raise TranscriptTerminalMismatch(
+                "inconsistent expected terminal state/reason: "
+                f"reason={expected_reason!r} state={expected_state!r}"
+            )
+        try:
+            row = self.reader.lay_terminal(req)
+        except KeyError as exc:
+            raise TranscriptTerminalMismatch(str(exc)) from None
+        if row is None:
+            return None  # explicitly legacy: transcript contains no terminal schema
+        actual_reason = row.get("terminal_reason")
+        if actual_reason not in TERMINAL_REASONS:
+            raise TranscriptTerminalMismatch(
+                f"unknown terminal reason for {req.decision_id or req.logical_id}: "
+                f"recorded={actual_reason!r}"
+            )
+        actual_state = row.get("terminal_state")
+        if actual_state is None or actual_state == "":
+            raise TranscriptTerminalMismatch(
+                f"missing terminal state for {req.decision_id or req.logical_id}"
+            )
+        if actual_state not in TERMINAL_STATES:
+            raise TranscriptTerminalMismatch(
+                f"unknown terminal state for {req.decision_id or req.logical_id}: "
+                f"recorded={actual_state!r}"
+            )
+        recorded_canonical_state = terminal_state_for_reason(actual_reason)
+        if actual_state != recorded_canonical_state:
+            raise TranscriptTerminalMismatch(
+                "inconsistent recorded terminal state/reason for "
+                f"{req.decision_id or req.logical_id}: reason={actual_reason!r} "
+                f"state={actual_state!r}"
+            )
+        if actual_reason != expected_reason:
+            raise TranscriptTerminalMismatch(
+                f"terminal reason mismatch for {req.decision_id or req.logical_id}: "
+                f"recorded={actual_reason!r} replay={expected_reason!r}"
+            )
+        if actual_state != expected_state:
+            raise TranscriptTerminalMismatch(
+                f"terminal state mismatch for {req.decision_id or req.logical_id}: "
+                f"recorded={actual_state!r} replay={expected_state!r}"
+            )
+        return row
 
     @staticmethod
     def _phan_hoi(d: dict) -> LLMResponse:
         if d.get("outcome") == "error" or d.get("provider") == "loi":
             message = str(d.get("error_message") or d.get("response_raw")
                           or "provider error recorded in transcript")
-            raise LoiHetQuota(message)
+            error_type = str(d.get("error_type") or "")
+            exc_type = LoiProviderHong if error_type == "LoiProviderHong" else LoiHetQuota
+            raise exc_type(message)
         return LLMResponse(
             text=d.get("response_raw", ""), provider=d.get("provider", "transcript"),
             model=d.get("model", ""), tok_in=int(d.get("tok_in", 0)),
@@ -238,6 +452,10 @@ class TranscriptToolMismatch(RuntimeError):
     """A recorded MCP information set cannot be reproduced on the replay snapshot."""
 
 
+class TranscriptTerminalMismatch(RuntimeError):
+    """Replay selected a different or missing terminal decision branch."""
+
+
 def tao_mind_replay(w, cfg, mode: str, reader: TranscriptReader, p_malformed=None):
     """Dựng mind replay-from-transcript cho mock/real: pipeline y hệt run gốc nhưng provider
     = TranscriptProvider (không mạng, không quota, không kiểm ngân sách). KHÔNG ghi file
@@ -264,13 +482,20 @@ def tao_mind_replay(w, cfg, mode: str, reader: TranscriptReader, p_malformed=Non
         mind.provider = prov  # quyết định agent: từ transcript (thay GatewayCoPacing)
         mind.gateway = _GatewayReplay()  # route nền: ghi_call no-op, không mạng
         mind._goi_nen_co_cho = lambda req, route: prov.goi(req)  # nén/phản tư/dịch intent
-        mind._du_ngan_sach = lambda w, thinkers: True  # miss transcript tự tái hiện dừng-êm
+        # Infrastructure budget is not re-spent during replay. Explicit terminal rows recreate
+        # denial/fallback branches; a miss is always artifact failure, never a control signal.
+        mind._du_ngan_sach = lambda w, thinkers, triggers=None: True
         return mind
     raise ValueError(f"mode replay không hỗ trợ: {mode}")
 
 
 class _GatewayReplay:
-    """Gateway giả cho replay real: chỉ giữ quota.ghi_call no-op (route nền gọi tới)."""
+    """Gateway giả cho replay real: route chỉ là metadata, quota không được dùng.
+
+    ``MindReal`` vẫn hỏi route nền khi nén hồi ký/phản tư. Trong replay, request đó
+    đi thẳng vào :class:`TranscriptProvider`, nên route chỉ cần giữ identity để call
+    path giống live; nó không được admission, đọc quota, hay tạo HTTP client.
+    """
 
     class _Quota:
         def ghi_call(self, *a, **k) -> None:  # noqa: ANN002, ANN003
@@ -278,3 +503,15 @@ class _GatewayReplay:
 
     def __init__(self):
         self.quota = _GatewayReplay._Quota()
+
+    @staticmethod
+    def route_cau_hinh(provider: str, model: str):
+        """Return inert background-route metadata for an already-recorded request.
+
+        Zero limits and an absent TPM policy make accidental use for admission fail
+        closed. Replay only passes this identity to its transcript-backed background
+        call seam; it never invokes a provider or touches quota state.
+        """
+        from minds.providers_real import Route
+
+        return Route(provider=str(provider), model=str(model), rpm=0, rpd=0)

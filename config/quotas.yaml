@@ -2,23 +2,34 @@
 # reset theo reset_hour_local (xem giờ reset thật trên trang quota của bạn).
 
 chung:
+  # Áp cho quota công bố khi GatewayReal dựng Route effective. Admission và preflight
+  # dùng cùng Route effective, không được có trần riêng trong code.
   safety_margin: 0.85
   reset_hour_local: 8
   timezone: "Asia/Ho_Chi_Minh"
+  token_admission:
+    # Không gọi tokenizer ngoài. Số byte UTF-8 của JSON body là cận trên bảo thủ cho
+    # token input; cộng thêm phần overhead minh bạch này và maxOutputTokens đã request.
+    fixed_overhead_tokens: 128
 
 aistudio:                       # ⚠️ QUOTA TÍNH CHO TỪNG KEY — gateway tự nhân với số key
   concurrency: 6                # tìm thấy trong .env (mỗi cặp key×model một bộ đếm riêng)
   models:
-    "gemini-3.1-flash-lite": {rpm: 4,  rpd: 450}     # trần công bố: 5 RPM / 500 RPD → 90%
+    # Quota công bố AI Studio: 15 RPM / 250k TPM / 500 RPD. Gateway áp safety_margin
+    # 0.85 một lần khi nhận route: 12 RPM / 212500 TPM / 425 RPD effective mỗi key.
+    "gemini-3.1-flash-lite":
+      {rpm: 15, tpm: 250000, rpd: 500, tpm_policy: published}
     # gemma-4-31b-it đã gỡ (Google trả 500 khi smoke — xem DECISIONS.md)
 
 ninerouter:                     # NGÂN SÁCH TỔNG (9router tự xoay 3 tài khoản CLI phía sau;
   concurrency: 4                # ảnh quota: 1.000/ngày/model/tài khoản → 3.000 × 0.9)
   models:
-    "gc/gemini-3.1-flash-lite-preview": {rpm: 20, rpd: 3000}
-    "gc/gemini-2.5-flash-lite":         {rpm: 20, rpd: 1500}
-    "gc/gemini-2.5-flash":              {rpm: 20, rpd: 1500}
-    "gc/gemini-2.5-pro":                {rpm: 8,  rpd: 900}   # pro chậm → RPM thấp hơn
+    # TPM thật đã xác minh: 250000 token/phút cho MỖI key (chủ dự án xác nhận 2026-07-16).
+    # Gateway áp safety_margin 0.85 → 212500 TPM effective/key. `verified` mở lại admission.
+    "gc/gemini-3.1-flash-lite-preview": {rpm: 20, tpm: 250000, rpd: 3000, tpm_policy: verified}
+    "gc/gemini-2.5-flash-lite":         {rpm: 20, tpm: 250000, rpd: 1500, tpm_policy: verified}
+    "gc/gemini-2.5-flash":              {rpm: 20, tpm: 250000, rpd: 1500, tpm_policy: verified}
+    "gc/gemini-2.5-pro":                {rpm: 8,  tpm: 250000, rpd: 900, tpm_policy: verified}   # pro chậm → RPM thấp hơn
 
 # cooldown_429_s: cooldown GỐC khi key 429; cooldown_toi_da_s: TRẦN (RPM-429 tự hết sau
 # ~60s cửa sổ RPM → phạt lũy tiến dài chỉ đẩy key ra khỏi vòng quay, làm lệch tải).

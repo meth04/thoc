@@ -162,9 +162,14 @@ class NganSachLLMTick:
                 min_met = (bool(self.da_bat_dau >= min_required)
                            if self.toi_thieu_ap_dung else None)
             return {
+                # Legacy aliases remain for old telemetry. New names state the accounting
+                # boundary explicitly: a request counted here passed the atomic start gate;
+                # a denied request did not leave the process.
                 "api_call": int(self.da_bat_dau),
+                "provider_request_started": int(self.da_bat_dau),
                 "api_call_cap": int(self.toi_da),
                 "api_call_denied": int(self.bi_tu_choi),
+                "provider_request_denied_before_start": int(self.bi_tu_choi),
                 "api_call_by_kind": dict(sorted(self.theo_loai.items())),
                 "api_call_by_task": dict(sorted(self.theo_task.items())),
                 "api_call_min_required": int(min_required),

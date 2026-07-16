@@ -40,7 +40,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "journal-1"
+SCHEMA_VERSION = "journal-2"
 
 # Duyệt theo thứ tự tên đã sort ở MỌI vòng lặp (flush/capture/truncate/quarantine) để file
 # manifest byte-stable với cùng input (deterministic tie-break, INV-J bổ trợ).
@@ -61,7 +61,21 @@ MA_IDENTITY: dict[str, str] = {
     "config_sha256": "E-JM-03",
     "prompt_template_hash": "E-JM-04",
     "capability_catalog_hash": "E-JM-05",
+    "runtime_source_identity": "E-JM-12",
 }
+
+
+def _co_runtime_source_identity(value: object) -> bool:
+    """Return whether a journal carries the minimum versioned source evidence.
+
+    The journal module intentionally does not import ``tools.experiments``: journal evidence is
+    artifact infrastructure, while source-inventory construction belongs to the experiment tool.
+    A final artifact nevertheless needs a nonempty versioned digest to prove which executable
+    law produced its checkpoint.
+    """
+    return (isinstance(value, dict)
+            and isinstance(value.get("sha256"), str)
+            and bool(value["sha256"]))
 
 
 class LoiJournal(Exception):
@@ -95,6 +109,10 @@ class JournalIdentity(BaseModel):
     config_sha256: str | None = None
     prompt_template_hash: str | None = None
     capability_catalog_hash: str | None = None
+    # Full versioned runtime Python inventory from tools.experiments.  It is metadata outside
+    # World and therefore never participates in world_hash, but it is mandatory for new-run
+    # resume evidence: a changed or missing source inventory is a different executable law.
+    runtime_source_identity: dict[str, Any] | None = None
     git_revision: str | None = None
 
 
@@ -109,6 +127,10 @@ class SqliteState(BaseModel):
     kind: Literal["sqlite"] = "sqlite"
     max_call_id: int
     record_count: int
+    # Additive attempt-ledger checkpoint identity. ``None`` is reserved for a
+    # pre-attempt-accounting checkpoint; it is never silently equivalent to 0.
+    max_attempt_id: int | None = None
+    attempt_record_count: int | None = None
     sha256_prefix: None = None
 
 
@@ -385,8 +407,21 @@ class RunJournals:
                 if "call_id" in cot:
                     row = conn.execute(
                         "SELECT COALESCE(MAX(call_id),0), COUNT(*) FROM llm_calls").fetchone()
-                    states["llm_calls"] = SqliteState(max_call_id=int(row[0]),
-                                                      record_count=int(row[1]))
+                    attempt_max: int | None = None
+                    attempt_count: int | None = None
+                    has_attempts = conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name='llm_attempts'"
+                    ).fetchone()
+                    if has_attempts:
+                        attempt_row = conn.execute(
+                            "SELECT COALESCE(MAX(attempt_id),0), COUNT(*) FROM llm_attempts"
+                        ).fetchone()
+                        attempt_max, attempt_count = int(attempt_row[0]), int(attempt_row[1])
+                    states["llm_calls"] = SqliteState(
+                        max_call_id=int(row[0]), record_count=int(row[1]),
+                        max_attempt_id=attempt_max, attempt_record_count=attempt_count,
+                    )
             finally:
                 conn.close()
         states["metrics"] = DerivedState(record_count=len(w.metrics_lich_su))
@@ -472,32 +507,312 @@ class RunJournals:
                 )
         sq_state = entry.journals.get("llm_calls")
         sq = self.run_dir / TEN_FILE["llm_calls"]
-        if isinstance(sq_state, SqliteState) and sq.exists():
+        if isinstance(sq_state, SqliteState):
+            if not sq.exists():
+                raise LoiJournal("E-JM-08", "llm_calls.sqlite mất sau checkpoint.")
             conn = sqlite3.connect(sq)
             try:
-                n = conn.execute("SELECT COUNT(*) FROM llm_calls WHERE call_id <= ?",
-                                 (sq_state.max_call_id,)).fetchone()[0]
+                n, mn, mx = conn.execute(
+                    "SELECT COUNT(*), COALESCE(MIN(call_id),0), COALESCE(MAX(call_id),0) "
+                    "FROM llm_calls WHERE call_id <= ?",
+                    (sq_state.max_call_id,),
+                ).fetchone()
+                if (int(n) != sq_state.record_count or int(mx) != sq_state.max_call_id
+                        or sq_state.max_call_id != sq_state.record_count
+                        or (int(n) and int(mn) != 1)):
+                    raise LoiJournal(
+                        "E-JM-08",
+                        f"llm_calls: {n} row/MIN={mn}/MAX={mx} có call_id ≤ "
+                        f"{sq_state.max_call_id}, manifest ghi {sq_state.record_count}. "
+                        "Sổ chi phí không còn prefix liên tục 1..N.",
+                    )
+                has_attempts = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' "
+                    "AND name='llm_attempts'"
+                ).fetchone()
+                attempt_rows = int(conn.execute(
+                    "SELECT COUNT(*) FROM llm_attempts"
+                ).fetchone()[0]) if has_attempts else 0
+                attempt_columns = {
+                    row[1] for row in conn.execute("PRAGMA table_info(llm_attempts)")
+                } if has_attempts else set()
+                attempt_metadata = (
+                    sq_state.max_attempt_id is not None
+                    and sq_state.attempt_record_count is not None
+                )
+                if attempt_rows and not attempt_metadata:
+                    raise LoiJournal(
+                        "E-JM-09",
+                        "llm_attempts có row nhưng checkpoint không ghi max_attempt_id/"
+                        "attempt_record_count. Không biết prefix attempt nào thuộc checkpoint; "
+                        "resume bị từ chối thay vì xác minh ngầm artifact thiếu bằng chứng.",
+                    )
+                if attempt_metadata:
+                    if "attempt_id" not in attempt_columns or "superseded" not in attempt_columns:
+                        raise LoiJournal(
+                            "E-JM-10",
+                            "llm_attempts checkpoint prefix thiếu attempt_id hoặc superseded; "
+                            "không thể xác minh forensic identity.",
+                        )
+                    n_attempt, mn_attempt, mx_attempt = conn.execute(
+                        "SELECT COUNT(*), COALESCE(MIN(attempt_id),0), "
+                        "COALESCE(MAX(attempt_id),0) FROM llm_attempts WHERE attempt_id <= ?",
+                        (sq_state.max_attempt_id,),
+                    ).fetchone()
+                    bad_attempt_sup = int(conn.execute(
+                        "SELECT COUNT(*) FROM llm_attempts WHERE attempt_id <= ? "
+                        "AND (superseded IS NULL OR superseded NOT IN (0,1))",
+                        (sq_state.max_attempt_id,),
+                    ).fetchone()[0])
+                    if (int(n_attempt) != sq_state.attempt_record_count
+                            or int(mx_attempt) != sq_state.max_attempt_id
+                            or sq_state.max_attempt_id != sq_state.attempt_record_count
+                            or (int(n_attempt) and int(mn_attempt) != 1)
+                            or bad_attempt_sup):
+                        raise LoiJournal(
+                            "E-JM-10",
+                            f"llm_attempts: {n_attempt} row/MIN={mn_attempt}/MAX={mx_attempt} "
+                            f"có attempt_id ≤ {sq_state.max_attempt_id}, manifest ghi "
+                            f"{sq_state.attempt_record_count}; superseded invalid={bad_attempt_sup}. "
+                            "Sổ attempt không còn prefix liên tục/binary.",
+                        )
             finally:
                 conn.close()
-            if int(n) != sq_state.record_count:
+        return entry
+
+    @classmethod
+    def verify_final_checkpoint(
+        cls,
+        run_dir: Path,
+        *,
+        expected_run_name: str,
+        expected_run_uuid: str | None,
+        expected_tick: int,
+        expected_world_hash: str | None,
+        expected_identity: JournalIdentity | None = None,
+    ) -> CheckpointEntry:
+        """Validate immutable evidence for a completed run without mutating it.
+
+        Resume verification intentionally accepts a live tail after the selected checkpoint.
+        A completed artifact has no such allowance: its current Class-A files and SQLite call
+        ledger must be *exactly* the prefix recorded by the final checkpoint.  The pointer,
+        manifest, metadata identities, segment history, and recovery log form one evidence
+        chain; a valid JSONL stream alone is not sufficient evidence of a verified artifact.
+        """
+        run_dir = Path(run_dir)
+        manifest = cls.doc_manifest(run_dir)
+        if manifest is None:
+            raise LoiJournal(
+                "E-JM-11",
+                "thiếu checkpoints/journal_manifest.json; artifact legacy không có bằng chứng "
+                "checkpoint-prefix nên chỉ có thể là diagnostic_only_unreplayable.",
+            )
+        if manifest.schema_version != SCHEMA_VERSION:
+            raise LoiJournal(
+                "E-JM-11",
+                f"journal schema không hỗ trợ: {manifest.schema_version!r}; "
+                f"cần {SCHEMA_VERSION!r} để xác minh final checkpoint.",
+            )
+        if not _co_runtime_source_identity(manifest.identity.runtime_source_identity):
+            raise LoiJournal(
+                "E-JM-12",
+                "journal final checkpoint thiếu runtime_source_identity versioned; "
+                "artifact không chứng minh được executable runtime law.",
+            )
+        if manifest.run_name != expected_run_name:
+            raise LoiJournal(
+                "E-JM-11",
+                f"journal run_name={manifest.run_name!r} ≠ run={expected_run_name!r}",
+            )
+        if not manifest.run_uuid or not expected_run_uuid or manifest.run_uuid != expected_run_uuid:
+            raise LoiJournal(
+                "E-JM-11",
+                "run_uuid giữa journal manifest và run metadata thiếu hoặc không khớp.",
+            )
+        if manifest.checkpoint_tick != int(expected_tick):
+            raise LoiJournal(
+                "E-JM-11",
+                f"journal checkpoint_tick={manifest.checkpoint_tick} ≠ tick cuối={expected_tick}",
+            )
+        journal = cls(run_dir, manifest)
+        entry = journal.entry_cua_tick(expected_tick)
+        if entry.segment_id != manifest.segment_id:
+            raise LoiJournal(
+                "E-JM-11",
+                f"checkpoint segment={entry.segment_id} ≠ active/final segment={manifest.segment_id}",
+            )
+        if entry.world_hash != expected_world_hash:
+            raise LoiJournal(
+                "E-JM-11",
+                "world_hash của final checkpoint không khớp run metadata/manifest outcome.",
+            )
+        if _digest_states(manifest.journals) != _digest_states(entry.journals):
+            raise LoiJournal(
+                "E-JM-11",
+                "top-level journals của manifest không còn đúng state final checkpoint.",
+            )
+        if expected_identity is not None:
+            for field_name, code in sorted(MA_IDENTITY.items()):
+                expected = getattr(expected_identity, field_name)
+                actual = getattr(manifest.identity, field_name)
+                if expected != actual:
+                    raise LoiJournal(
+                        code,
+                        f"final journal identity {field_name}={actual!r} ≠ manifest={expected!r}",
+                    )
+
+        pointer_path = run_dir / "checkpoints" / "checkpoint_moi_nhat.json"
+        if not pointer_path.exists():
+            raise LoiJournal("E-JM-11", "thiếu checkpoint_moi_nhat.json cho checkpoint cuối.")
+        try:
+            pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LoiJournal("E-JM-11", f"checkpoint_moi_nhat.json không đọc được: {exc}") from exc
+        if (
+            int(pointer.get("tick", -1)) != int(expected_tick)
+            or pointer.get("world_hash") != expected_world_hash
+            or pointer.get("journal_manifest") != "journal_manifest.json"
+            or pointer.get("run_uuid") != manifest.run_uuid
+            or int(pointer.get("segment_id", -1)) != entry.segment_id
+            or pointer.get("journal_state_sha256") != _digest_states(entry.journals)
+        ):
+            raise LoiJournal(
+                "E-JM-11",
+                "checkpoint_moi_nhat không trỏ đúng final journal state/run_uuid/segment/hash.",
+            )
+        if not (run_dir / "checkpoints" / f"checkpoint_{int(expected_tick):04d}.pkl").exists():
+            raise LoiJournal("E-JM-11", "thiếu pickle của final checkpoint.")
+
+        cls._verify_final_prefixes(run_dir, entry)
+        cls._verify_final_history(run_dir, manifest, entry, expected_tick)
+        return entry
+
+    @staticmethod
+    def _verify_final_prefixes(run_dir: Path, entry: CheckpointEntry) -> None:
+        """Require exact final Class-A/SQLite state, not merely a valid checkpoint prefix."""
+        for name in CLASS_A:
+            state = entry.journals.get(name)
+            if not isinstance(state, JsonlState):
+                raise LoiJournal("E-JM-11", f"checkpoint cuối thiếu JsonlState cho {name}.")
+            path = Path(run_dir) / TEN_FILE[name]
+            size = path.stat().st_size if path.exists() else 0
+            count = _dem_dong(path, size)
+            digest = _sha256_prefix(path, size)
+            if (size != state.byte_offset or count != state.record_count
+                    or digest != state.sha256_prefix):
+                raise LoiJournal(
+                    "E-JM-11",
+                    f"{TEN_FILE[name]} không đúng final prefix: size/count/sha256 "
+                    f"={size}/{count}/{digest[:16]} nhưng checkpoint ghi "
+                    f"{state.byte_offset}/{state.record_count}/{state.sha256_prefix[:16]}.",
+                )
+        state = entry.journals.get("llm_calls")
+        path = Path(run_dir) / TEN_FILE["llm_calls"]
+        if state is None and not path.exists():
+            return  # rulebot artifact: no provider cost ledger was ever created.
+        if not isinstance(state, SqliteState):
+            raise LoiJournal("E-JM-11", "checkpoint cuối thiếu SqliteState cho llm_calls.")
+        if not path.exists():
+            raise LoiJournal("E-JM-08", "llm_calls.sqlite mất sau final checkpoint.")
+        conn = sqlite3.connect(path)
+        try:
+            n, distinct, minimum, maximum = conn.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT call_id), COALESCE(MIN(call_id),0), "
+                "COALESCE(MAX(call_id),0) FROM llm_calls"
+            ).fetchone()
+            if (int(n) != state.record_count or int(maximum) != state.max_call_id
+                    or int(distinct) != int(n) or state.max_call_id != state.record_count
+                    or (int(n) and int(minimum) != 1)):
                 raise LoiJournal(
                     "E-JM-08",
-                    f"llm_calls: {n} row có call_id ≤ {sq_state.max_call_id}, manifest ghi "
-                    f"{sq_state.record_count}. Sổ chi phí đã bị sửa (row bị xóa?).",
+                    "llm_calls không còn đúng final SQLite prefix 1..N của checkpoint.",
                 )
-        return entry
+            has_attempts = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='llm_attempts'"
+            ).fetchone()
+            if state.max_attempt_id is not None or state.attempt_record_count is not None:
+                if not has_attempts:
+                    raise LoiJournal(
+                        "E-JM-10", "final checkpoint ghi attempt prefix nhưng llm_attempts đã mất."
+                    )
+                an, ad, amin, amax = conn.execute(
+                    "SELECT COUNT(*), COUNT(DISTINCT attempt_id), COALESCE(MIN(attempt_id),0), "
+                    "COALESCE(MAX(attempt_id),0) FROM llm_attempts"
+                ).fetchone()
+                if (state.max_attempt_id is None or state.attempt_record_count is None
+                        or int(an) != state.attempt_record_count
+                        or int(amax) != state.max_attempt_id or int(ad) != int(an)
+                        or state.max_attempt_id != state.attempt_record_count
+                        or (int(an) and int(amin) != 1)):
+                    raise LoiJournal(
+                        "E-JM-10", "llm_attempts không còn đúng final SQLite prefix 1..N."
+                    )
+            elif has_attempts and int(conn.execute("SELECT COUNT(*) FROM llm_attempts").fetchone()[0]):
+                raise LoiJournal(
+                    "E-JM-10", "llm_attempts có row nhưng final checkpoint thiếu attempt prefix."
+                )
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _verify_final_history(run_dir: Path, manifest: JournalManifest,
+                              entry: CheckpointEntry, expected_tick: int) -> None:
+        """Validate segment/recovery lineage and its append-only external evidence."""
+        segments = sorted(manifest.segments, key=lambda item: item.segment_id)
+        ids = [segment.segment_id for segment in segments]
+        if ids != list(range(manifest.segment_id + 1)):
+            raise LoiJournal("E-JM-11", "segment_id không liên tục 0..segment cuối.")
+        if not segments or segments[-1].status != "closed" or segments[-1].ended_at_tick != expected_tick:
+            raise LoiJournal("E-JM-11", "final segment chưa đóng đúng tick cuối.")
+        if segments[-1].segment_id != entry.segment_id:
+            raise LoiJournal("E-JM-11", "final segment không khớp checkpoint cuối.")
+        expected_links = {(segment.segment_id - 1, segment.segment_id)
+                          for segment in segments if segment.segment_id > 0}
+        actual_links = {(recovery.from_segment_id, recovery.new_segment_id)
+                        for recovery in manifest.recoveries if recovery.new_segment_id > 0}
+        if actual_links != expected_links:
+            raise LoiJournal("E-JM-11", "recoveries không tạo lineage một-đối-một cho segments.")
+        recovery_path = Path(run_dir) / "journal_recovery.jsonl"
+        if manifest.recoveries and not recovery_path.exists():
+            raise LoiJournal("E-JM-11", "manifest có recovery nhưng thiếu journal_recovery.jsonl.")
+        logged: set[tuple[int, int, str]] = set()
+        if recovery_path.exists():
+            try:
+                rows = [json.loads(line) for line in recovery_path.read_text(
+                    encoding="utf-8").splitlines() if line.strip()]
+            except json.JSONDecodeError as exc:
+                raise LoiJournal("E-JM-11", f"journal_recovery.jsonl không phải JSON: {exc}") from exc
+            for row in rows:
+                if row.get("run_uuid") != manifest.run_uuid:
+                    raise LoiJournal("E-JM-11", "journal_recovery có run_uuid khác manifest.")
+                logged.add((int(row.get("from_segment_id", -99)),
+                            int(row.get("new_segment_id", -99)), str(row.get("kind", ""))))
+        for recovery in manifest.recoveries:
+            key = (recovery.from_segment_id, recovery.new_segment_id, recovery.kind)
+            if key not in logged:
+                raise LoiJournal("E-JM-11", "một RecoveryEntry không có evidence journal_recovery.")
+            for state in recovery.journals.values():
+                quarantine = state.get("quarantine_file")
+                if quarantine and not (Path(run_dir) / quarantine).is_file():
+                    raise LoiJournal(
+                        "E-JM-11", f"thiếu quarantine evidence {quarantine} của recovery.")
 
     def _kiem_identity(self, hien_tai: JournalIdentity) -> None:
         cu = self.manifest.identity
         for truong, ma in sorted(MA_IDENTITY.items()):
             a, b = getattr(cu, truong), getattr(hien_tai, truong)
-            if a is not None and b is not None and a != b:
+            # The source inventory is a new non-negotiable provenance field.  Unlike older
+            # optional identity fields, a missing value cannot be assumed compatible: it would
+            # permit an old/unknown executable tree to append a new trajectory.
+            source_missing = truong == "runtime_source_identity" and (a is None or b is None)
+            if source_missing or (a is not None and b is not None and a != b):
+                a_text = str(a)[:16]
+                b_text = str(b)[:16]
                 raise LoiJournal(
                     ma,
-                    f"{truong} đổi giữa hai segment: manifest {a[:16]} ≠ hiện tại {b[:16]}. "
-                    "Resume sẽ tạo một artifact hai-nửa-hai-luật, không qua nổi cổng replay "
-                    "(transcript khóa theo prompt_hash; tập action hợp lệ khóa theo catalog). "
-                    "Hãy chạy run mới.",
+                    f"{truong} đổi hoặc thiếu giữa hai segment: manifest {a_text} ≠ "
+                    f"hiện tại {b_text}. Resume sẽ tạo một artifact hai-nửa-hai-luật, không "
+                    "qua nổi cổng replay. Hãy chạy run mới.",
                 )
 
     # ---------- restore: truncate-with-quarantine ----------
@@ -524,8 +839,9 @@ class RunJournals:
             self._hasher[ten] = h
         sq_state = entry.journals.get("llm_calls")
         max_call = sq_state.max_call_id if isinstance(sq_state, SqliteState) else 0
+        max_attempt = sq_state.max_attempt_id if isinstance(sq_state, SqliteState) else None
         ghi_nhan["llm_calls"] = self._supersede_llm_calls(
-            max_call_id=max_call, checkpoint_tick=int(tick),
+            max_call_id=max_call, max_attempt_id=max_attempt, checkpoint_tick=int(tick),
             from_segment=seg_cu, new_segment=seg_moi,
         )
         rec = RecoveryEntry(
@@ -565,7 +881,7 @@ class RunJournals:
             self._count[ten] = 0
             self._hasher[ten] = hashlib.sha256()
         ghi_nhan["llm_calls"] = self._supersede_llm_calls(
-            max_call_id=None, checkpoint_tick=int(tick),
+            max_call_id=None, max_attempt_id=None, checkpoint_tick=int(tick),
             from_segment=seg_cu, new_segment=seg_moi,
         )
         rec = RecoveryEntry(
@@ -607,7 +923,8 @@ class RunJournals:
             ghi_nhan[ten] = self._cat_va_cach_ly(ten, rong, qdir)
         if sq.exists():
             ghi_nhan["llm_calls"] = self._supersede_llm_calls(
-                max_call_id=None, checkpoint_tick=-1, from_segment=-1, new_segment=0)
+                max_call_id=None, max_attempt_id=None, checkpoint_tick=-1,
+                from_segment=-1, new_segment=0)
         rec = RecoveryEntry(
             at_utc=_bay_gio(), kind="fresh_run_reset", resumed_checkpoint_tick=0,
             from_segment_id=-1, new_segment_id=0,
@@ -645,18 +962,29 @@ class RunJournals:
             "quarantine_file": str(dich.relative_to(self.run_dir)).replace("\\", "/"),
         }
 
-    def _supersede_llm_calls(self, *, max_call_id: int | None, checkpoint_tick: int,
-                             from_segment: int, new_segment: int) -> dict[str, Any]:
-        """KHÔNG BAO GIỜ DELETE. Row của đoạn bị bỏ đã tiêu token/quota/USD thật; xóa chúng
-        là làm đẹp chi phí (vi phạm điều luật #6). Chỉ đánh dấu ``superseded=1``."""
+    def _supersede_llm_calls(self, *, max_call_id: int | None, max_attempt_id: int | None,
+                             checkpoint_tick: int, from_segment: int,
+                             new_segment: int) -> dict[str, Any]:
+        """Supersede the discarded prefix tail in both immutable cost ledgers.
+
+        ``llm_attempts`` is deliberately handled *here*, before ``RecoveryEntry`` is committed.
+        A denied-before-start tail has no logical ``llm_calls`` row, so the old gateway-side
+        post-recovery mutation had no durable counterpart. This journal-owned transaction records
+        the attempt count/range in the same recovery evidence as logical calls.
+        """
         sq = self.run_dir / TEN_FILE["llm_calls"]
+        empty = {
+            "rows_superseded": 0, "call_id_range": None,
+            "attempt_record_count": 0, "attempt_id_range": None,
+            "attempt_rows_superseded": 0, "deleted": 0,
+        }
         if not sq.exists():
-            return {"rows_superseded": 0, "call_id_range": None}
+            return empty
         conn = sqlite3.connect(sq)
         try:
             cot = _cot_llm_calls(conn)
             if not cot:
-                return {"rows_superseded": 0, "call_id_range": None}
+                return empty
             if "segment_id" not in cot:  # migration additive (write path duy nhất)
                 conn.execute("ALTER TABLE llm_calls ADD COLUMN segment_id INTEGER")
             if "superseded" not in cot:
@@ -668,29 +996,71 @@ class RunJournals:
                     new_segment_id INTEGER, call_id_lo INTEGER, call_id_hi INTEGER,
                     rows_superseded INTEGER)"""
             )
-            if max_call_id is None:  # không biết prefix ⇒ cắt theo tick (recover/reset)
-                dk, tham = "tick > ?", (checkpoint_tick,)
+            if max_call_id is None:  # explicit recovery/reset has no trustworthy prefix
+                call_where, call_params = "tick > ?", (checkpoint_tick,)
             else:
-                dk, tham = "call_id > ?", (max_call_id,)
-            row = conn.execute(
+                call_where, call_params = "call_id > ?", (max_call_id,)
+            call_row = conn.execute(
                 f"SELECT MIN(call_id), MAX(call_id), COUNT(*) FROM llm_calls "  # noqa: S608
-                f"WHERE {dk} AND COALESCE(superseded,0)=0", tham).fetchone()
-            lo, hi, n = row[0], row[1], int(row[2])
-            if n:
+                f"WHERE {call_where} AND COALESCE(superseded,0)=0", call_params,
+            ).fetchone()
+            call_lo, call_hi, call_count = call_row[0], call_row[1], int(call_row[2])
+
+            has_attempts = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='llm_attempts'"
+            ).fetchone()
+            attempt_lo = attempt_hi = None
+            attempt_count = 0
+            if has_attempts:
+                attempt_columns = {
+                    row[1] for row in conn.execute("PRAGMA table_info(llm_attempts)")
+                }
+                if "superseded" not in attempt_columns:
+                    conn.execute(
+                        "ALTER TABLE llm_attempts ADD COLUMN superseded INTEGER DEFAULT 0"
+                    )
+                if max_attempt_id is None:
+                    attempt_where, attempt_params = "tick > ?", (checkpoint_tick,)
+                else:
+                    attempt_where, attempt_params = "attempt_id > ?", (max_attempt_id,)
+                attempt_row = conn.execute(
+                    f"SELECT MIN(attempt_id), MAX(attempt_id), COUNT(*) FROM llm_attempts "  # noqa: S608
+                    f"WHERE {attempt_where} AND COALESCE(superseded,0)=0", attempt_params,
+                ).fetchone()
+                attempt_lo, attempt_hi, attempt_count = (
+                    attempt_row[0], attempt_row[1], int(attempt_row[2])
+                )
+
+            if call_count:
                 conn.execute(
                     f"UPDATE llm_calls SET superseded=1, segment_id=COALESCE(segment_id,?) "  # noqa: S608
-                    f"WHERE {dk} AND COALESCE(superseded,0)=0", (from_segment, *tham))
+                    f"WHERE {call_where} AND COALESCE(superseded,0)=0",
+                    (from_segment, *call_params),
+                )
                 conn.execute(
                     "INSERT INTO journal_recovery (at_utc, resumed_checkpoint_tick,"
                     " from_segment_id, new_segment_id, call_id_lo, call_id_hi, rows_superseded)"
                     " VALUES (?,?,?,?,?,?,?)",
-                    (_bay_gio(), checkpoint_tick, from_segment, new_segment, lo, hi, n),
+                    (_bay_gio(), checkpoint_tick, from_segment, new_segment,
+                     call_lo, call_hi, call_count),
+                )
+            if attempt_count:
+                conn.execute(
+                    f"UPDATE llm_attempts SET superseded=1 "  # noqa: S608
+                    f"WHERE {attempt_where} AND COALESCE(superseded,0)=0",
+                    attempt_params,
                 )
             conn.commit()
         finally:
             conn.close()
-        return {"rows_superseded": n, "call_id_range": [lo, hi] if n else None,
-                "deleted": 0}
+        return {
+            "rows_superseded": call_count,
+            "call_id_range": [call_lo, call_hi] if call_count else None,
+            "attempt_record_count": attempt_count,
+            "attempt_id_range": [attempt_lo, attempt_hi] if attempt_count else None,
+            "attempt_rows_superseded": attempt_count,
+            "deleted": 0,
+        }
 
     def _dong_segment(self, seg_id: int, trang_thai: str) -> None:
         for s in self.manifest.segments:
@@ -710,6 +1080,11 @@ class RunJournals:
                                      for v in rec.journals.values()),
             "rows_superseded": int(rec.journals.get("llm_calls", {}).get(
                 "rows_superseded", 0)),
+            "attempt_record_count": int(rec.journals.get("llm_calls", {}).get(
+                "attempt_record_count", 0)),
+            "attempt_rows_superseded": int(rec.journals.get("llm_calls", {}).get(
+                "attempt_rows_superseded", 0)),
+            "attempt_id_range": rec.journals.get("llm_calls", {}).get("attempt_id_range"),
             "files_moved": [v["quarantine_file"] for v in rec.journals.values()
                             if v.get("quarantine_file")],
             "quarantine_dir": rec.quarantine_dir,
@@ -826,23 +1201,51 @@ def kiem_lien_tuc(run_dir: Path) -> dict[str, Any]:
 
     tr = run_dir / TEN_FILE["transcript"]
     if tr.exists():
-        ids: list[int] = []
+        expected_call_id = 1
+        transcript_records = 0
+        malformed = missing = non_integer = discontinuous = 0
         with open(tr, encoding="utf-8") as f:
-            for line in f:
+            for physical_line, line in enumerate(f, start=1):
                 s = line.strip()
                 if not s:
                     continue
-                d = json.loads(s)
-                if "call_id" in d:
-                    ids.append(int(d["call_id"]))
-        kq["transcript_records"] = len(ids)
-        dup = len(ids) - len(set(ids))
-        kq["transcript_dup_call_id"] = dup
-        if dup:
+                transcript_records += 1
+                try:
+                    d = json.loads(s)
+                except (TypeError, json.JSONDecodeError):
+                    malformed += 1
+                    kq["loi"].append(
+                        f"transcript dòng vật lý {physical_line} không phải JSON hợp lệ")
+                    continue
+                if not isinstance(d, dict) or "call_id" not in d:
+                    missing += 1
+                    kq["loi"].append(
+                        f"transcript dòng vật lý {physical_line} thiếu call_id")
+                    continue
+                call_id = d["call_id"]
+                if isinstance(call_id, bool) or not isinstance(call_id, int):
+                    non_integer += 1
+                    kq["loi"].append(
+                        f"transcript dòng vật lý {physical_line} call_id không phải int")
+                    continue
+                if call_id != expected_call_id:
+                    discontinuous += 1
+                    kq["loi"].append(
+                        f"transcript dòng vật lý {physical_line} call_id={call_id}, "
+                        f"phải là {expected_call_id} (gap/đảo/lặp/zero)")
+                    # Keep the expected physical sequence unchanged: a later valid value cannot
+                    # repair a corrupt physical line by merely resynchronizing the counter.
+                    continue
+                expected_call_id += 1
+        kq["transcript_records"] = transcript_records
+        kq["transcript_max_call_id"] = expected_call_id - 1
+        kq["transcript_malformed"] = malformed
+        kq["transcript_missing_call_id"] = missing
+        kq["transcript_noninteger_call_id"] = non_integer
+        kq["transcript_discontinuous_call_id"] = discontinuous
+        kq["transcript_dup_call_id"] = discontinuous  # compatibility counter; continuity is exact.
+        if malformed or missing or non_integer or discontinuous:
             kq["ok"] = False
-            kq["loi"].append(
-                f"transcript: {dup} call_id BỊ DÙNG LẠI ⇒ TranscriptReader FIFO trả response "
-                "của phiên trước ⇒ replay lệch hash")
 
     sq = run_dir / TEN_FILE["llm_calls"]
     if sq.exists():
@@ -850,35 +1253,86 @@ def kiem_lien_tuc(run_dir: Path) -> dict[str, Any]:
         try:
             cot = _cot_llm_calls(conn)
             if cot:
-                tong = conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0]
-                kq["llm_calls_burned"] = int(tong)
+                tong = int(conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0])
+                kq["llm_calls_burned"] = tong
                 if "superseded" in cot:
+                    bad_call_sup = int(conn.execute(
+                        "SELECT COUNT(*) FROM llm_calls WHERE superseded IS NULL "
+                        "OR superseded NOT IN (0,1)"
+                    ).fetchone()[0])
+                    if bad_call_sup:
+                        kq["ok"] = False
+                        kq["loi"].append(
+                            f"llm_calls: {bad_call_sup} superseded không phải binary 0/1")
                     hl, sup = conn.execute(
-                        "SELECT SUM(CASE WHEN COALESCE(superseded,0)=0 THEN 1 ELSE 0 END),"
-                        " SUM(CASE WHEN COALESCE(superseded,0)=1 THEN 1 ELSE 0 END)"
-                        " FROM llm_calls").fetchone()
+                        "SELECT SUM(CASE WHEN superseded=0 THEN 1 ELSE 0 END),"
+                        " SUM(CASE WHEN superseded=1 THEN 1 ELSE 0 END) FROM llm_calls"
+                    ).fetchone()
                     hl, sup = int(hl or 0), int(sup or 0)
                 else:
                     hl, sup = tong, 0
                 kq["llm_calls_effective"] = hl
                 kq["llm_calls_superseded"] = sup
-                # `journal_recovery` là sổ ĐỐI ỨNG của cột `superseded`: mỗi lần resume ghi
-                # số row nó vừa đánh dấu. Tổng hai bên phải bằng nhau — nếu ai đó DELETE row
-                # (làm đẹp chi phí) thì cột `superseded` tụt xuống dưới con số sổ đã tuyên bố.
                 co_rec = conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='journal_recovery'"
                 ).fetchone()
                 kq["llm_recovery_rows"] = int(conn.execute(
                     "SELECT COALESCE(SUM(rows_superseded),0) FROM journal_recovery"
                 ).fetchone()[0]) if co_rec else 0
-                if "call_id" in cot:
-                    n, d, mx = conn.execute(
-                        "SELECT COUNT(*), COUNT(DISTINCT call_id), COALESCE(MAX(call_id),0)"
-                        " FROM llm_calls").fetchone()
-                    kq["llm_calls_max_id"] = int(mx)
-                    if int(n) != int(d):
+                n, d, mn, mx = conn.execute(
+                    "SELECT COUNT(*), COUNT(DISTINCT call_id), COALESCE(MIN(call_id),0),"
+                    " COALESCE(MAX(call_id),0) FROM llm_calls"
+                ).fetchone()
+                kq["llm_calls_max_id"] = int(mx)
+                if int(n) != int(d) or (int(n) and (int(mn) != 1 or int(mx) != int(n))):
+                    kq["ok"] = False
+                    kq["loi"].append("llm_calls: call_id không liên tục 1..N")
+
+            has_attempts = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='llm_attempts'"
+            ).fetchone()
+            if not has_attempts:
+                kq["llm_attempts_evidence"] = "unavailable"
+            else:
+                attempt_columns = {
+                    row[1] for row in conn.execute("PRAGMA table_info(llm_attempts)")
+                }
+                if "attempt_id" not in attempt_columns:
+                    kq["llm_attempts_evidence"] = "unavailable"
+                    kq["ok"] = False
+                    kq["loi"].append("llm_attempts: thiếu attempt_id")
+                elif "superseded" not in attempt_columns:
+                    kq["llm_attempts_evidence"] = "unavailable"
+                    kq["ok"] = False
+                    kq["loi"].append("llm_attempts: thiếu cột superseded")
+                else:
+                    n, d, mn, mx = conn.execute(
+                        "SELECT COUNT(*), COUNT(DISTINCT attempt_id),"
+                        " COALESCE(MIN(attempt_id),0), COALESCE(MAX(attempt_id),0) "
+                        "FROM llm_attempts"
+                    ).fetchone()
+                    attempts_burned = int(n)
+                    kq["llm_attempts_evidence"] = "available"
+                    kq["llm_attempts_burned"] = attempts_burned
+                    kq["llm_attempts_max_id"] = int(mx)
+                    if (int(n) != int(d)
+                            or (attempts_burned and (int(mn) != 1 or int(mx) != attempts_burned))):
                         kq["ok"] = False
-                        kq["loi"].append("llm_calls: call_id trùng")
+                        kq["loi"].append("llm_attempts: attempt_id không liên tục 1..N")
+                    bad_attempt_sup = int(conn.execute(
+                        "SELECT COUNT(*) FROM llm_attempts WHERE superseded IS NULL "
+                        "OR superseded NOT IN (0,1)"
+                    ).fetchone()[0])
+                    if bad_attempt_sup:
+                        kq["ok"] = False
+                        kq["loi"].append(
+                            f"llm_attempts: {bad_attempt_sup} superseded không phải binary 0/1")
+                    eff, sup = conn.execute(
+                        "SELECT SUM(CASE WHEN superseded=0 THEN 1 ELSE 0 END),"
+                        " SUM(CASE WHEN superseded=1 THEN 1 ELSE 0 END) FROM llm_attempts"
+                    ).fetchone()
+                    kq["llm_attempts_effective"] = int(eff or 0)
+                    kq["llm_attempts_superseded"] = int(sup or 0)
         finally:
             conn.close()
 
@@ -933,12 +1387,36 @@ def kiem_lien_tuc(run_dir: Path) -> dict[str, Any]:
             kq["ok"] = False
             kq["loi"].append("metrics: tick không liên tục 1..M")
 
-    mf = RunJournals.doc_manifest(run_dir)
+    try:
+        mf = RunJournals.doc_manifest(run_dir)
+    except Exception as exc:  # noqa: BLE001 — malformed evidence is a hard continuity failure
+        mf = None
+        kq["ok"] = False
+        kq["loi"].append(f"journal_manifest không hợp lệ: {type(exc).__name__}: {exc}")
     if mf is not None:
         kq["run_uuid"] = mf.run_uuid
         kq["segment_id"] = mf.segment_id
         kq["replay_complete"] = mf.replay_complete
         kq["artifact_status_forced"] = mf.artifact_status_forced
+        attempt_recovery_counts: list[int] = []
+        attempt_recovery_incomplete = False
+        for recovery in mf.recoveries:
+            ledger = recovery.journals.get("llm_calls", {})
+            if "attempt_rows_superseded" not in ledger:
+                attempt_recovery_incomplete = True
+                continue
+            attempt_recovery_counts.append(int(ledger["attempt_rows_superseded"]))
+        kq["llm_attempt_recovery_rows"] = (
+            None if attempt_recovery_incomplete else sum(attempt_recovery_counts)
+        )
+        metadata_missing = []
+        for checkpoint in mf.checkpoints:
+            state = checkpoint.journals.get("llm_calls")
+            if (isinstance(state, SqliteState)
+                    and (state.max_attempt_id is None
+                         or state.attempt_record_count is None)):
+                metadata_missing.append(checkpoint.tick)
+        kq["llm_attempt_checkpoint_metadata_missing"] = metadata_missing
         for ten in CLASS_A:
             st = mf.journals.get(ten)
             if not isinstance(st, JsonlState):

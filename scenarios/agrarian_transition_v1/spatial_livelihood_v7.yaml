@@ -1,0 +1,26 @@
+# spatial_livelihood_v7.yaml — ADR 0009 survival-feasibility and shelter ordering treatment.
+#
+# Apply AFTER spatial_v1.yaml plus spatial_livelihood_v2.yaml through v6.yaml.  v6 remains
+# the reproductive-timing treatment; this overlay neither edits it nor retcons old artifacts.
+# All values here are design_assumption, not calibrated historical facts.
+
+minds:
+  survival_feasibility:
+    bat: true
+    # Prompt/tool card giữ MỌI path khả thi + tối đa N path bất khả thi mỗi loại, phần còn
+    # lại thay bằng đếm + lý do phổ biến (không truncate im lặng). v7 sinh 1 path cho mỗi
+    # thửa công (~252 ở t0, gần hết infeasible cùng lý do) → 75KB nhiễu/agent, trần cả pool
+    # key ở 16/50 agent full-autonomy. Đây là design_assumption về mật độ thông tin card,
+    # không phải hằng vật lý. Report v5 §P0-3 yêu cầu card TẬP TRUNG thay vì xoay hết ruộng.
+    max_path_moi_loai: 12
+  san_cho_o_toi_thieu:
+    bat: true
+    phien_ban: v7
+    # V7 only: food is projected after common-land allocation before any floor action.
+    nguong_health_khoi_cong: 60
+    cong_gop_moi_tick: 60
+
+hop_dong:
+  # Declared protocol identity for the follow-up generic signing/delivery implementation.
+  gop_cong_lich: signing_tick_half_open_v2
+  tiep_can_vat_ly_v2: true

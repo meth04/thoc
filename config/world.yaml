@@ -114,6 +114,11 @@ nhan_khau:
   sinh_san: {p_goc: 0.15, tuoi_me: [16, 45], rui_ro_me: 0.02, hoi_y_dinh_moi_n_tick: 20,
              y_te_giam_rui_ro_san: 0.2}   # rủi ro sinh nở không giảm dưới 20% mức gốc
   # p_goc 0.22 → 0.15: hiệu chỉnh Phase 1 để dân số cân bằng ≤500 (xem DECISIONS.md)
+  # WP-E (REPORT_REAL15_V5 §9) — thai kỳ và khoảng cách ca sinh được gate bằng SỰ HIỆN
+  # DIỆN của `thai_ky_tick`. Base cố ý KHÔNG có khóa active: vắng khóa giữ nguyên code path,
+  # thứ tự RNG và world-hash legacy. Treatment công khai nằm tại scenario overlay versioned
+  # `scenarios/agrarian_transition_v1/spatial_livelihood_v6.yaml`; các giá trị ở đó đều mang
+  # nhãn `design_assumption` trong provenance.csv, không phải hiệu chuẩn lịch sử.
   tu_vong_gompertz: {q20: 0.005, q60: 0.03, q75: 0.12}
   tu_vong_noi_suy: {moc_tuoi: [20, 60, 75], tran_q_nam: 0.8}  # mốc nội suy log-linear + trần q/năm
   dot_bien_persona: {bien_do: 2, min: 1, max: 9}  # con = trung bình cha mẹ ± biên độ, clip [min,max]

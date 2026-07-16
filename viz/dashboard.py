@@ -82,10 +82,20 @@ def main() -> None:
     with tab_kt:
         c1, c2 = st.columns(2)
         c1.line_chart(df.set_index("nam")[["gini_dat", "gini_thoc"]])
+        if "n_thua_tu_huu" in df and df["gini_dat"].isna().any():
+            c1.caption("Gini đất = missing khi không có thửa tư hữu; không được đọc là bình đẳng 0.")
         c1.line_chart(df.set_index("nam")[["thoc_moi_nguoi"]])
         c2.line_chart(df.set_index("nam")[["kl_giao_dich"]])
         if "so_may" in df:
             c2.line_chart(df.set_index("nam")[["so_may", "so_entity"]])
+        if "gdp_price_coverage" in df:
+            latest_coverage = df["gdp_price_coverage"].iloc[-1]
+            if isinstance(latest_coverage, dict):
+                c2.caption(
+                    "GDP price coverage (ledger components, tick cuối): "
+                    f"{latest_coverage.get('priced_components', 0)}/"
+                    f"{latest_coverage.get('components', 0)}."
+                )
 
     with tab_xh:
         c1, c2 = st.columns(2)

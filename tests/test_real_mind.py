@@ -165,6 +165,41 @@ def test_bo_dich_intent_la_anh_xa_duoc(tmp_path):
     assert "cay_lua" not in mind._loai_bo_tay
 
 
+def test_background_translation_success_settles_rpd_exactly_once(tmp_path):
+    """Translator nền thành công một lần không được ghi RPD lần hai."""
+    import time
+
+    from engine.intents import KeHoach
+    from minds.keypool import key_hash
+
+    w = the_gioi_test(seed=641, giu_lai=1, thoc_moi_nguoi=2000)
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        payload = json.loads(request.content)
+        translated = [{"stt": 0, "hanh_dong": [
+            {"loai": "phan_bo_cong", "hoc": False},
+        ]}]
+        return _resp(payload, json.dumps(translated, ensure_ascii=False))
+
+    mind = lam_mind(w, tmp_path, httpx.MockTransport(handler))
+    aid = next(iter(w.agents))
+    plans = {aid: KeHoach(id=aid)}
+    mind._dich_intent_la(
+        w, [(aid, {"loai": "cay_lua", "canh_o": "P14_25"}, "intent lạ")], plans
+    )
+
+    route = mind._route_nen()
+    hashes = [key_hash(key) for key in lam_env().gemini_keys]
+    now = time.time()
+    assert len(requests) == 1
+    assert sum(mind.quota.rpd_da_dung(route.provider, route.model, kh, now)
+               for kh in hashes) == 1
+    assert sum(mind.quota.rpd_da_du_tru(route.provider, route.model, kh, now)
+               for kh in hashes) == 0
+
+
 def test_chet_doi_duoc_ghi_dung_nhan():
     """Người kiệt sức vì thiếu ăn phải chết với nhãn 'chet_doi' (không phải tuổi già)."""
 

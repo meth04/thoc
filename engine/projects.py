@@ -75,7 +75,8 @@ def _registry(w: Any) -> dict[str, dict[str, Any]]:
 
 
 def _record_failure(w: Any, aid: str, code: str, detail: str, *,
-                    action: str | None = None, target: str | None = None) -> None:
+                    action: str | None = None, target: str | None = None,
+                    action_id: str | None = None) -> None:
     """Emit identical human and machine-readable feedback for a rejected intent."""
     agent = w.agents.get(aid)
     if agent is not None and agent.con_song:
@@ -84,7 +85,10 @@ def _record_failure(w: Any, aid: str, code: str, detail: str, *,
     if action is not None:
         from engine.action_journal import rejected as journal_rejected
 
-        journal_rejected(w, aid, action, code, target=target, detail=detail, feedback=False)
+        journal_rejected(
+            w, aid, action, code, target=target, detail=detail, feedback=False,
+            action_id=action_id, executed_quantity=0.0 if action_id is not None else None,
+        )
 
 
 def _new_id(w: Any) -> str:
@@ -224,19 +228,29 @@ def dang_ky_du_an(w: Any, ke_hoach: dict[str, Any]) -> None:
             _create(w, aid, raw)
 
 
-def _get_open(w: Any, aid: str, raw: Any, action: str) -> DuAn | None:
+def _entry_action_id(raw: Any) -> str | None:
+    """Read the exact preflight request bound to one contribution entry."""
+    from engine.action_journal import entry_action_id
+
+    return entry_action_id(raw)
+
+
+def _get_open(w: Any, aid: str, raw: Any, action: str, *,
+              action_id: str | None = None) -> DuAn | None:
     target = str(raw.get("ref", "")) if isinstance(raw, dict) and raw.get("ref") else None
     if not isinstance(raw, dict):
-        _record_failure(w, aid, "bad_params", "đóng góp dự án phải là object", action=action)
+        _record_failure(w, aid, "bad_params", "đóng góp dự án phải là object", action=action,
+                        action_id=action_id)
         return None
     project_id = str(raw.get("ref", ""))
     project = getattr(w, "du_an", {}).get(project_id)
     if project is None:
         _record_failure(w, aid, "project_not_found", "không có dự án này",
-                        action=action, target=target)
+                        action=action, target=target, action_id=action_id)
         return None
     if project.trang_thai != "dang_lam":
-        _record_failure(w, aid, "project_closed", "dự án đã đóng", action=action, target=target)
+        _record_failure(w, aid, "project_closed", "dự án đã đóng", action=action, target=target,
+                        action_id=action_id)
         return None
     return project
 
@@ -249,38 +263,39 @@ def _can_reach(w: Any, aid: str, project: DuAn) -> bool:
 
 def _contribute_material(w: Any, aid: str, raw: Any) -> None:
     action = "gop_vat_lieu_du_an"
+    action_id = _entry_action_id(raw)
     target = str(raw.get("ref", "")) if isinstance(raw, dict) and raw.get("ref") else None
-    project = _get_open(w, aid, raw, action)
+    project = _get_open(w, aid, raw, action, action_id=action_id)
     if project is None:
         return
     if not _can_reach(w, aid, project):
         _record_failure(w, aid, "no_access", "chưa tới được địa điểm dự án",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     try:
         asset = str(raw.get("tai_san", ""))
         requested = float(raw.get("so_luong", 0.0))
     except (TypeError, ValueError):
         _record_failure(w, aid, "bad_params", "vật liệu hoặc lượng không đọc được",
-                        action=action, target=target)
+                        action=action, target=target, action_id=action_id)
         return
     if asset not in project.vat_lieu_can or not math.isfinite(requested) or requested <= EPSILON:
         _record_failure(w, aid, "bad_params", "vật liệu không thuộc recipe hoặc lượng không dương",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     remaining = max(0.0, project.vat_lieu_can[asset] - project.vat_lieu_da[asset])
     actual = min(requested, remaining, w.ledger.so_du(aid, asset))
     if actual <= EPSILON:
         code = "no_inventory" if w.ledger.so_du(aid, asset) <= EPSILON else "material_complete"
         _record_failure(w, aid, code, "không còn vật liệu có thể ký quỹ cho dự án",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     try:
         w.ledger.chuyen(aid, _holder(project.id), asset, actual,
                          f"ký quỹ vật liệu dự án {project.id}", w.tick)
     except LoiSoKep:
         _record_failure(w, aid, "no_inventory", "số dư vật liệu không đủ",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     project.vat_lieu_da[asset] += actual
     by_person = project.dong_gop_vat_lieu.setdefault(aid, {})
@@ -291,41 +306,45 @@ def _contribute_material(w: Any, aid: str, raw: Any) -> None:
                  remaining=round(project.vat_lieu_can[asset] - project.vat_lieu_da[asset], 9))
     from engine.action_journal import executed as journal_executed
 
-    journal_executed(w, aid, "gop_vat_lieu_du_an", target=project.id, code=code)
+    journal_executed(
+        w, aid, "gop_vat_lieu_du_an", target=project.id, code=code,
+        action_id=action_id, requested_quantity=requested, executed_quantity=actual,
+    )
 
 
 def _contribute_labour(w: Any, aid: str, raw: Any) -> None:
     action = "gop_cong_du_an"
+    action_id = _entry_action_id(raw)
     target = str(raw.get("ref", "")) if isinstance(raw, dict) and raw.get("ref") else None
-    project = _get_open(w, aid, raw, action)
+    project = _get_open(w, aid, raw, action, action_id=action_id)
     if project is None:
         return
     if not _can_reach(w, aid, project):
         _record_failure(w, aid, "no_access", "chưa tới được địa điểm dự án",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     try:
         requested = float(raw.get("so_cong", 0.0))
     except (TypeError, ValueError):
         _record_failure(w, aid, "bad_params", "lượng công không đọc được",
-                        action=action, target=target)
+                        action=action, target=target, action_id=action_id)
         return
     if not math.isfinite(requested) or requested <= EPSILON:
         _record_failure(w, aid, "bad_params", "lượng công phải dương",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     remaining = max(0.0, project.cong_can - project.cong_da)
     actual = min(requested, remaining, w.ledger.so_du(aid, "cong"))
     if actual <= EPSILON:
         code = "insufficient_labor" if w.ledger.so_du(aid, "cong") <= EPSILON else "labor_complete"
         _record_failure(w, aid, code, "không còn công khả dụng để góp dự án",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     try:
         w.ledger.huy(aid, "cong", actual, "dung", f"góp công dự án {project.id}", w.tick)
     except LoiSoKep:
         _record_failure(w, aid, "insufficient_labor", "công khả dụng không đủ",
-                        action=action, target=project.id)
+                        action=action, target=project.id, action_id=action_id)
         return
     from engine.production import ghi_cong_dung
 
@@ -338,7 +357,10 @@ def _contribute_labour(w: Any, aid: str, raw: Any) -> None:
                  remaining=round(project.cong_can - project.cong_da, 9))
     from engine.action_journal import executed as journal_executed
 
-    journal_executed(w, aid, "gop_cong_du_an", target=project.id, code=code)
+    journal_executed(
+        w, aid, "gop_cong_du_an", target=project.id, code=code,
+        action_id=action_id, requested_quantity=requested, executed_quantity=actual,
+    )
 
 
 def _ready(project: DuAn) -> bool:

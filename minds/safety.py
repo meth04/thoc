@@ -9,10 +9,18 @@ thiểu và chưa hề có ai trong hộ dự định canh.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
+
 from engine.economy import household_food_equivalent, household_food_need, households
 from engine.intents import KeHoach
 from engine.world import World
 from minds.provenance import record_action
+
+
+def _shelter_v7_enabled(w: World) -> bool:
+    cfg = w.cfg.get("minds.san_cho_o_toi_thieu", {})
+    return isinstance(cfg, dict) and bool(cfg.get("bat", False)) and cfg.get("phien_ban") == "v7"
 
 
 def ap_dung_san_an_toi_thieu(w: World, ke_hoach: dict[str, KeHoach], bc,
@@ -161,6 +169,8 @@ def ap_dung_san_an_sau_phan_bo_ruong_cong(w: World, ke_hoach: dict[str, KeHoach]
 def ap_dung_san_cho_o_toi_thieu(w: World, ke_hoach: dict[str, KeHoach]) -> int:
     """Keep a feasible shelter project moving when exposure is life-threatening.
 
+    V7 is deliberately deferred to the engine tick after common-land allocation;
+    calling this legacy entry point there would violate ADR 0009 food-first order.
     This is the housing analogue of the public food floor above.  It never
     creates wood, labour, land or a house; it only turns an already feasible
     survival response into auditable project intents.  A resident can still
@@ -168,6 +178,8 @@ def ap_dung_san_cho_o_toi_thieu(w: World, ke_hoach: dict[str, KeHoach]) -> int:
     after the transparent health threshold in the active scenario has been
     crossed.
     """
+    if _shelter_v7_enabled(w):
+        return 0
     cfg = w.cfg.get("minds.san_cho_o_toi_thieu", {})
     nha_cfg = w.cfg.get("suc_khoe.nha_o", {})
     if (not isinstance(cfg, dict) or not bool(cfg.get("bat", False))
@@ -311,3 +323,177 @@ def ap_dung_san_cho_o_toi_thieu(w: World, ke_hoach: dict[str, KeHoach]) -> int:
                          ), 3), che_do="mo_du_an")
             da_bao_ve += 1
     return da_bao_ve
+
+
+def _health_without_shelter_v7(w: World, members: tuple[str, ...], gap: float,
+                                need: float) -> float:
+    """Pure current-tick health projection with no benefit from a floor intent."""
+    food_ratio = 1.0 if need <= 1e-9 else max(0.0, min(1.0, (need - gap) / need))
+    health_cfg = w.cfg.raw()["suc_khoe"]
+    shelter_cfg = w.cfg.get("suc_khoe.nha_o", {})
+    age_cfg = w.cfg.raw()["lao_dong_theo_tuoi"]
+    values: list[float] = []
+    for aid in members:
+        agent = w.agents[aid]
+        health = float(agent.health)
+        if agent.tuoi_nam > float(age_cfg["tuoi_giam_suc"]):
+            health -= float(age_cfg["hao_suc_gia_moi_tick"])
+        if food_ratio >= 1.0 - 1e-9:
+            recovery = float(health_cfg["hoi_khi_an_du"])
+            if isinstance(shelter_cfg, dict) and bool(shelter_cfg.get("bat", False)):
+                recovery *= float(shelter_cfg.get("he_so_hoi_khi_vo_gia_cu", 1.0))
+            health += recovery
+        else:
+            health -= float(health_cfg["mat_toi_da_khi_doi"]) * (1.0 - food_ratio)
+        if isinstance(shelter_cfg, dict) and bool(shelter_cfg.get("bat", False)):
+            key = "mat_suc_khoe_mua_mua" if w.mua_mua() else "mat_suc_khoe_mua_kho"
+            health -= float(shelter_cfg.get(key, 0.0))
+        if bool(getattr(w, "dich_benh_tick", False)):
+            health -= float(w.cfg.get("cu_soc.dich_benh.mat_suc_khoe_moi_tick", 0.0))
+        values.append(max(0.0, min(100.0, health)))
+    return min(values, default=100.0)
+
+
+@dataclass(frozen=True)
+class ShelterFloorDelta:
+    """One immutable v7 shelter intent derived from post-lottery engine facts.
+
+    It describes a possible addition but cannot mutate a plan, provenance, action
+    journal, ledger, event stream, or any other part of ``World``.  The engine
+    owns application and validation in ``engine.shelter_floor``.
+    """
+
+    aid: str
+    action: Literal["chon_dat_o", "phan_bo_cong", "gop_cong_du_an", "tao_du_an"]
+    target: str | None
+    value: tuple[str, ...] | float
+    detail: str
+
+
+def de_xuat_san_cho_o_toi_thieu_v7(
+    w: World, ke_hoach: dict[str, KeHoach], da_phan_ruong_cong: set[str]
+) -> tuple[ShelterFloorDelta, ...]:
+    """Return bounded v7 shelter deltas without mutating ``w`` or ``ke_hoach``.
+
+    This is the minds-side, facts-only half of ADR 0009 §5.2.  It deliberately
+    returns no journal rows or provenance records: those are engine observations
+    emitted only when the engine accepts and applies a proposed delta.
+    """
+    if not _shelter_v7_enabled(w):
+        return ()
+    from engine.projects import _du_an_bat
+    from engine.settlement import _dat_o_bat, lo_cong_kha_dung, lo_cua, lo_uu_tien
+    from engine.survival_feasibility import project_post_plan_survival
+
+    cfg = w.cfg.get("minds.san_cho_o_toi_thieu")
+    shelter_cfg = w.cfg.get("suc_khoe.nha_o", {})
+    if (not _du_an_bat(w) or not isinstance(shelter_cfg, dict)
+            or not bool(shelter_cfg.get("bat", False))):
+        return ()
+    threshold = float(cfg["nguong_health_khoi_cong"])
+    configured_cap = float(cfg["cong_gop_moi_tick"])
+    adult_age = float(w.cfg.get("nhan_khau.tuoi_truong_thanh"))
+    deltas: list[ShelterFloorDelta] = []
+
+    # ``households`` is normalized/sorted; derive the serialized residence id
+    # from its first live member rather than inventing a new mutable group id.
+    for household in households(w):
+        members = tuple(sorted(aid for aid in household if w.agents[aid].con_song))
+        if not members:
+            continue
+        from engine.household import rid_cua
+
+        residence_id = rid_cua(w, members[0]) or f"legacy:{members[0]}"
+        projection = project_post_plan_survival(w, residence_id, ke_hoach, da_phan_ruong_cong)
+        # ADR 0009 food-first gate: a projected current-tick deficit forbids
+        # every floor action, including a seemingly harmless lot request.
+        if projection.gap.kg_thoc_equivalent > 1e-9:
+            continue
+        if any(w.ledger.so_du(aid, "nha") >= 1.0 for aid in members):
+            continue
+        if _health_without_shelter_v7(
+            w, members, projection.gap.kg_thoc_equivalent, projection.need.kg_thoc_equivalent
+        ) > threshold:
+            continue
+        adults = [aid for aid in members if w.agents[aid].tuoi_nam >= adult_age]
+        if not adults:
+            continue
+        residual = {row.aid: row.residual_conservative for row in projection.labor}
+
+        holders = [(w.agents[aid].health, aid, lo_cua(w, aid)) for aid in adults]
+        holders = [row for row in holders if row[2]]
+        if not holders and _dat_o_bat(w):
+            pending = any(
+                set(getattr(ke_hoach.get(aid), "chon_dat_o", ()) or ())
+                & set(lo_cong_kha_dung(w, aid)) for aid in adults
+            )
+            if not pending:
+                _health, builder = min((w.agents[aid].health, aid) for aid in adults)
+                options = tuple(lo_uu_tien(w, builder))
+                if options:
+                    deltas.append(ShelterFloorDelta(
+                        aid=builder, action="chon_dat_o", target=options[0], value=options,
+                        detail="v7_food_secure_shelter_entry",
+                    ))
+            continue
+
+        projects = [
+            project for project in getattr(w, "du_an", {}).values()
+            if project.trang_thai == "dang_lam" and project.loai == "nha" and project.chu in members
+        ]
+        if projects:
+            project = min(projects, key=lambda p: (p.tick_tao, p.id))
+            builder = project.chu
+            cap = min(configured_cap, residual.get(builder, 0.0))
+            plan = ke_hoach.get(builder)
+            missing_wood = max(0.0, float(project.vat_lieu_can.get("go", 0.0))
+                               - float(project.vat_lieu_da.get("go", 0.0)))
+            if missing_wood > 1e-9 and cap > 0:
+                # ``cong_khai_go`` is one scalar execution request.  Once a voluntary
+                # request occupies it, this plan representation cannot preserve a
+                # provenance split between that request and an added floor delta.
+                # Fail closed rather than relabelling voluntary work.
+                if plan is not None and float(plan.cong_khai_go) > 1e-9:
+                    continue
+                extraction = w.cfg.get("san_xuat.khai_thac", {})
+                per_wood = max(1e-9, float(extraction.get("cong_moi_go", 1.0)))
+                efficiency = (1.0 if w.ledger.so_du(builder, "cong_cu") >= 1.0 else float(
+                    extraction.get("hieu_suat_khong_cong_cu", 1.0)
+                ))
+                delta = min(cap, missing_wood * per_wood / max(efficiency, 1e-9))
+                if delta > 0:
+                    deltas.append(ShelterFloorDelta(
+                        aid=builder, action="phan_bo_cong", target=None, value=delta,
+                        detail="v7_shelter_materials",
+                    ))
+            else:
+                remaining = max(0.0, float(project.cong_can) - float(project.cong_da))
+                delta = min(cap, remaining)
+                if delta > 0:
+                    deltas.append(ShelterFloorDelta(
+                        aid=builder, action="gop_cong_du_an", target=project.id, value=delta,
+                        detail="v7_shelter_continuation",
+                    ))
+            continue
+
+        candidates = []
+        for aid in adults:
+            site = lo_cua(w, aid)
+            owned = sorted(parcel.id for parcel in w.parcels.values() if parcel.chu == aid)
+            if site or owned:
+                candidates.append((w.agents[aid].health, aid, site or owned[0]))
+        if candidates:
+            _health, builder, site = min(candidates)
+            plan = ke_hoach.get(builder)
+            if plan is None or not any(
+                str(row.get("loai_du_an", "")) == "nha"
+                for row in plan.tao_du_an if isinstance(row, dict)
+            ):
+                deltas.append(ShelterFloorDelta(
+                    aid=builder, action="tao_du_an", target=site, value=(),
+                    detail="v7_food_secure_shelter_project",
+                ))
+    return tuple(deltas)
+
+
+__all__ = ["ShelterFloorDelta", "de_xuat_san_cho_o_toi_thieu_v7"]

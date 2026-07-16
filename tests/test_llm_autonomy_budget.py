@@ -178,14 +178,13 @@ def test_rpm_preflight_does_not_double_count_a_route_shared_by_t0_and_t1():
                   nine_base="", llm_mode="real")
     gateway = GatewayReal(cfg, env, QuotaCounter(None))
 
-    # 15×4 = 60 raw slots but the global safety headroom makes 51 available.
-    # T0 and T1 share that one aistudio route; treating each tier independently
-    # would incorrectly claim 102 slots and permit a partial 60-person cohort.
-    ok, _reason = burst_guard(gateway, {"T0": 25, "T1": 25})
+    # Published 15 RPM with the one-time 0.85 route margin yields 12 effective
+    # starts/key, hence 180 across 15 keys. T0/T1 still share one route.
+    ok, _reason = burst_guard(gateway, {"T0": 80, "T1": 80})
     assert ok
-    ok, reason = burst_guard(gateway, {"T0": 30, "T1": 30})
+    ok, reason = burst_guard(gateway, {"T0": 100, "T1": 100})
     assert not ok
-    assert "phân bổ được 51" in reason
+    assert "phân bổ được 180" in reason
 
 
 def test_run_driver_keeps_world_at_tick_zero_when_autonomy_preflight_fails(
@@ -210,6 +209,10 @@ def test_run_driver_keeps_world_at_tick_zero_when_autonomy_preflight_fails(
 
     def factory(_mode, w, _args):
         w.cfg.raw()["minds"]["llm_tick"]["cho_burst_rpm_toi_s"] = 0
+        # Keep this RPM-specific fixture from failing earlier on intentionally
+        # unverified 9router TPM policy.
+        for policy in w.cfg.raw()["quotas"]["ninerouter"]["models"].values():
+            policy.update({"tpm": 1_000_000, "tpm_policy": "verified"})
         env = EnvKeys(gemini_keys=["fixture-key-0", "fixture-key-1"],
                       nine_key="fixture-nine-key", nine_base="http://fixture.invalid/v1",
                       llm_mode="real")
@@ -274,6 +277,9 @@ def test_malformed_translator_sequence_number_is_ignored_not_raised():
 def test_ninerouter_mcp_records_every_physical_request_in_quota():
     """Nine-router tool turns must not look like one cheap quota call."""
     cfg = _cfg()
+    cfg.raw()["quotas"]["ninerouter"]["models"][
+        "gc/gemini-3.1-flash-lite-preview"
+    ].update({"tpm": 1_000_000, "tpm_policy": "verified"})
     w = tao_the_gioi(cfg, seed=72, events_path=None)
     aid = sorted(w.agents)[0]
     budget = NganSachLLMTick(tick=1, toi_thieu=1, toi_da=10, default_toi_da_moi_task=10)

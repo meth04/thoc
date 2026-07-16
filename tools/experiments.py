@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -19,11 +20,73 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS_DIR = ROOT / "scenarios"
-MANIFEST_SCHEMA = 1
+MANIFEST_SCHEMA = 3
+IDENTITY_CONTRACT_VERSION = 2
+RUNTIME_SOURCE_IDENTITY_VERSION = 1
+RUNTIME_SOURCE_IDENTITY_ALGORITHM = "sha256-canonical-python-source-v1"
+# Runtime source is executable Python only.  Data/artifacts, tests, documents, secrets, and
+# generated caches are deliberately excluded; this does not consult Git, so untracked runtime
+# modules are evidence too.
+RUNTIME_SOURCE_EXCLUDED_PARTS = frozenset({
+    ".env", ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tmp",
+    ".venv", "__pycache__", "build", "data", "dist", "docs", "tests", "venv",
+})
+# Only these importable/executable roots constitute THÓC's runtime.  A random root-level Python
+# probe is neither imported by the application nor lawful runtime source merely because it ends
+# in .py; keeping that distinction avoids treating test/provider utilities as simulation law.
+RUNTIME_SOURCE_DIRECTORIES = ("engine", "minds", "observatory", "tools", "viz")
 
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _runtime_source_files(root: Path) -> list[dict[str, str]]:
+    """Return the canonical executable-Python file inventory without consulting Git.
+
+    Relative POSIX paths make the identity portable across checkout locations.  Reading is
+    limited to ``*.py`` outside explicit excluded trees, so this routine never reads ``.env``.
+    """
+    root = Path(root).resolve()
+    # Python imports these two conventional root modules automatically when they are present.
+    # They are exceptional executable roots, unlike arbitrary root-level ``*.py`` probes.
+    candidates = [root / name for name in ("run.py", "sitecustomize.py", "usercustomize.py")]
+    for directory in RUNTIME_SOURCE_DIRECTORIES:
+        source_root = root / directory
+        if source_root.is_dir():
+            candidates.extend(source_root.rglob("*.py"))
+    files: list[dict[str, str]] = []
+    for path in sorted(candidates):
+        relative = path.relative_to(root)
+        if any(part in RUNTIME_SOURCE_EXCLUDED_PARTS for part in relative.parts):
+            continue
+        if not path.is_file():
+            continue
+        files.append({
+            "path": relative.as_posix(),
+            "sha256": sha256_file(path),
+        })
+    return files
+
+
+def runtime_source_identity(root: Path = ROOT) -> dict[str, Any]:
+    """Versioned exact identity of every Python source file that may run the runtime.
+
+    The file inventory plus individual file hashes is retained for forensic comparison; the
+    canonical aggregate digest is the constant-time equality key.  This is provenance only and
+    must never influence RNG, prompts, checkpoints, or ``world_hash``.
+    """
+    files = _runtime_source_files(root)
+    payload = {
+        "algorithm": RUNTIME_SOURCE_IDENTITY_ALGORITHM,
+        "files": files,
+        "version": RUNTIME_SOURCE_IDENTITY_VERSION,
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return {
+        **payload,
+        "sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
 
 
 # Mọi file chứa CODE RENDER PROMPT. Băm một file là không đủ: sau P0.1, thân hàm render
@@ -135,7 +198,7 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
             "path": str(resolved),
             "sha256": sha256_file(resolved),
         })
-    return {
+    manifest = {
         "schema_version": MANIFEST_SCHEMA,
         "created_at_utc": datetime.now(UTC).isoformat(),
         "run": {
@@ -162,25 +225,93 @@ def build_manifest(*, run_name: str, mode: str, seed: int, ticks_requested: int,
             "calendar": calendar,
             "git_revision": git_revision(),
             "python": sys.version,
+            "runtime_source_identity": runtime_source_identity(),
         },
     }
+    return refresh_manifest_identity_contract(manifest)
+
+
+def manifest_identity_contract(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Canonical identity shared by manifest, final meta, and checkpoint pointer.
+
+    This is artifact provenance, not world state: it must never enter a prompt, RNG stream,
+    checkpoint pickle, or ``world_hash``.  ``None`` is a meaningful recorded value for an
+    inapplicable LLM field or an ordinary horizon completion without a terminal reason.
+    """
+    run = manifest.get("run", {})
+    repro = manifest.get("reproducibility", {})
+    outcome = manifest.get("outcome", {})
+    return {
+        "contract_version": IDENTITY_CONTRACT_VERSION,
+        "run": {
+            "name": run.get("name"),
+            "mode": run.get("mode"),
+            "seed": run.get("seed"),
+            "run_uuid": run.get("run_uuid"),
+            "ticks_requested": run.get("ticks_requested"),
+        },
+        "execution": {
+            "config_sha256": repro.get("config_sha256"),
+            "policy": repro.get("policy"),
+            "prompt_template_hash": repro.get("prompt_template_hash"),
+            # This is the available action/tool-catalog identity. A future independent world-tool
+            # catalog hash can be added as a new contract version without reinterpreting v1.
+            "capability_catalog_hash": repro.get("capability_catalog_hash"),
+            "model_snapshot": repro.get("model_snapshot"),
+            "temperature": repro.get("temperature"),
+            "git_revision": repro.get("git_revision"),
+            "runtime_source_identity": repro.get("runtime_source_identity"),
+        },
+        "outcome": {
+            "tick_final": outcome.get("tick_final"),
+            "world_hash": outcome.get("world_hash"),
+            "segment_id": outcome.get("segment_id"),
+            "terminal_reason": outcome.get("terminal_reason"),
+        },
+    }
+
+
+def refresh_manifest_identity_contract(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Synchronize the stored v1 contract after the manifest itself changes."""
+    manifest["identity_contract"] = manifest_identity_contract(manifest)
+    return manifest
+
+
+def _write_json_atomic(path: Path, value: dict[str, Any]) -> Path:
+    """Atomically replace metadata JSON; a crash keeps the prior complete document."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    with open(temporary, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(value, f, ensure_ascii=False, indent=2, sort_keys=True)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    temporary.replace(path)
+    return path
 
 
 def write_manifest(run_dir: Path, manifest: dict[str, Any]) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "experiment_manifest.json"
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
-                    encoding="utf-8")
-    return path
+    refresh_manifest_identity_contract(manifest)
+    return _write_json_atomic(path, manifest)
 
 
-def update_manifest_outcome(run_dir: Path, outcome: dict[str, Any]) -> Path:
+def update_manifest_outcome(run_dir: Path, outcome: dict[str, Any]) -> dict[str, Any]:
+    """Store terminal outcome and return the synchronized manifest for sibling metadata."""
     path = run_dir / "experiment_manifest.json"
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["outcome"] = outcome
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
-                    encoding="utf-8")
-    return path
+    refresh_manifest_identity_contract(manifest)
+    _write_json_atomic(path, manifest)
+    return manifest
+
+
+def write_checkpoint_identity(checkpoint_path: Path, contract: dict[str, Any]) -> Path:
+    """Add the artifact identity contract to an existing checkpoint pointer atomically."""
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    checkpoint["identity_contract"] = contract
+    return _write_json_atomic(checkpoint_path, checkpoint)
 
 
 def permute_personas(world) -> None:

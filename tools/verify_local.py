@@ -16,6 +16,7 @@ import argparse
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,13 +56,20 @@ def main(argv: list[str] | None = None) -> int:
         "scenario_validation", [py, "-m", "tools.validation", args.scenario])))
 
     if not args.skip_sim:
-        run_name = f"verify_local_{args.scenario}_s{args.seed}"
-        results.append(("smoke_run", _run("smoke_run", [
+        # A verification smoke is a new experiment, never permission to overwrite
+        # an earlier artifact with the same convenient name.  The nonce is runtime
+        # identity only; ``run.py`` records the complete reproducibility contract.
+        run_name = f"verify_local_{args.scenario}_s{args.seed}_{uuid.uuid4().hex[:12]}"
+        smoke_ok = _run("smoke_run", [
             py, "run.py", "--mode", "rulebot", "--ticks", str(args.ticks),
             "--seed", str(args.seed), "--scenario", args.scenario, "--run-name", run_name,
-        ])))
-        results.append(("verify_research_run", _run(
-            "verify_research_run", [py, "-m", "tools.verify_research_run", run_name])))
+        ])
+        results.append(("smoke_run", smoke_ok))
+        if smoke_ok:
+            results.append(("verify_research_run", _run(
+                "verify_research_run", [py, "-m", "tools.verify_research_run", run_name])))
+        else:
+            results.append(("verify_research_run", False))
 
     print("\n===== TỔNG KẾT =====")
     for name, ok in results:

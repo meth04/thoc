@@ -7,7 +7,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from engine.contracts import HopDong, validate_hop_dong
+from engine.contracts import (
+    HopDong,
+    _v7_delivery_enabled,
+    delivery_failure_code,
+    gia_tri_thi_truong,
+    validate_hop_dong,
+)
 
 
 @dataclass
@@ -55,8 +61,100 @@ def mo_tip_hop_dong(hd: HopDong) -> str:
     return "+".join(sorted(c.loai for c in hd.dieu_khoan))
 
 
+def signing_failure_code(w, hd: HopDong) -> str | None:
+    """Return the v7 code for an unexecutable at-signing tangible leg."""
+    if not _v7_delivery_enabled(w):
+        return None
+    for ck in hd.dieu_khoan:
+        if ck.loai == "chuyen_giao_mot_lan" and ck.tai == "ky_ket":
+            code = delivery_failure_code(w, ck.tu, ck.den)
+            if code is not None:
+                return code
+    return None
+
+
+def _hoan_tat_ky_hop_dong(w, hd: HopDong, *, atomic_positions: bool = False) -> None:
+    """Publish a contract only after all required signing commits succeeded."""
+    w._next_hd += 1
+    hd.id = f"HD{w._next_hd:05d}"
+    hd.tick_ky = w.tick
+    hd.trang_thai = "hieu_luc"
+    w.hop_dong[hd.id] = hd
+    if atomic_positions:
+        # Position mints are themselves one ledger commit. Their FlowRegistry
+        # entries are registered after normal legs have committed successfully.
+        from engine.ledger import DongSinhHuy, Transaction
+
+        tokens = tuple(f"vi_the:{hd.id}:{ben}" for ben in hd.cac_ben)
+        for ts in tokens:
+            w.ledger.flows.dang_ky(ts, "ky_hd", "nguon")
+            w.ledger.flows.dang_ky(ts, "het_hd", "sink")
+        w.ledger.ap_dung(Transaction(
+            tick=w.tick, ly_do=f"vị thế {hd.id}",
+            sinh_huy=tuple(DongSinhHuy(ben, ts, 1.0, "ky_hd")
+                           for ben, ts in zip(hd.cac_ben, tokens, strict=True)),
+        ))
+    else:
+        # Legacy token history is deliberately left byte-for-byte equivalent in
+        # transition semantics when the v7 pair is absent.
+        for ben in hd.cac_ben:
+            ts = f"vi_the:{hd.id}:{ben}"
+            w.ledger.flows.dang_ky(ts, "ky_hd", "nguon")
+            w.ledger.flows.dang_ky(ts, "het_hd", "sink")
+            w.ledger.sinh(ben, ts, 1.0, "ky_hd", f"vị thế {hd.id}", w.tick)
+    for a in hd.cac_ben:
+        for b in hd.cac_ben:
+            if a < b:
+                w.cong_quan_he(a, b, w.cfg.get("quan_he.cong_moi_tuong_tac"))
+    w.events.ghi(w.tick, "ky_hd", hd=hd.id, cac_ben=hd.cac_ben,
+                 hinh_thuc=hd.hinh_thuc, mo_tip=mo_tip_hop_dong(hd),
+                 thoi_han=hd.thoi_han)
+    for ben in hd.cac_ben:
+        khac = [b for b in hd.cac_ben if b != ben]
+        w.ghi_ky_uc(ben, f"tôi ký giao kèo {hd.id} với {khac} "
+                         f"({mo_tip_hop_dong(hd)}, hạn {hd.thoi_han} tick)")
+
+
+def _ky_hop_dong_v7(w, hd: HopDong) -> bool:
+    """ADR 0009 signing: all immediate tangible legs are one ledger transaction."""
+    from engine.ledger import ButToan, LoiSoKep, Transaction
+
+    ly_do = validate_hop_dong(hd, w)
+    if ly_do is not None or signing_failure_code(w, hd) is not None:
+        return False
+    legs = [
+        ck for ck in hd.dieu_khoan
+        if ck.loai == "chuyen_giao_mot_lan" and ck.tai == "ky_ket"
+    ]
+    entries = tuple(
+        entry
+        for ck in legs
+        for entry in (
+            ButToan(ck.tu, ck.tai_san, -ck.so_luong),
+            ButToan(ck.den, ck.tai_san, ck.so_luong),
+        )
+    )
+    prospective_id = f"HD{w._next_hd + 1:05d}"
+    try:
+        w.ledger.ap_dung(Transaction(
+            tick=w.tick, ly_do=f"ký kết {prospective_id}", but_toan=entries
+        ))
+    except LoiSoKep:
+        return False
+    w.kl_hd_tick = getattr(w, "kl_hd_tick", 0.0) + sum(
+        gia_tri_thi_truong(w, ck.tai_san, ck.so_luong) for ck in legs
+    )
+    _hoan_tat_ky_hop_dong(w, hd, atomic_positions=True)
+    return True
+
+
 def _ky_hop_dong(w, hd: HopDong) -> bool:
     """Ký: thi hành mọi chuyển giao tại ký kết NGUYÊN TỬ; thất bại → không ký."""
+    if _v7_delivery_enabled(w):
+        return _ky_hop_dong_v7(w, hd)
+
+    # LEGACY: keep the historical sequential schedule and its compensating
+    # rollback unchanged when either v7 config key is absent.
     from engine.contracts import _chuyen_an_toan
 
     ly_do = validate_hop_dong(hd, w)
@@ -72,28 +170,7 @@ def _ky_hop_dong(w, hd: HopDong) -> bool:
                 for c2 in da_chuyen:
                     _chuyen_an_toan(w, c2.den, c2.tu, c2.tai_san, c2.so_luong, "hoàn ký hụt")
                 return False
-    w._next_hd += 1
-    hd.id = f"HD{w._next_hd:05d}"
-    hd.tick_ky = w.tick
-    hd.trang_thai = "hieu_luc"
-    w.hop_dong[hd.id] = hd
-    # vị thế mỗi bên = token chuyển nhượng được (SPEC 2.3)
-    for ben in hd.cac_ben:
-        ts = f"vi_the:{hd.id}:{ben}"
-        w.ledger.flows.dang_ky(ts, "ky_hd", "nguon")
-        w.ledger.flows.dang_ky(ts, "het_hd", "sink")
-        w.ledger.sinh(ben, ts, 1.0, "ky_hd", f"vị thế {hd.id}", w.tick)
-    for a in hd.cac_ben:
-        for b in hd.cac_ben:
-            if a < b:
-                w.cong_quan_he(a, b, w.cfg.get("quan_he.cong_moi_tuong_tac"))
-    w.events.ghi(w.tick, "ky_hd", hd=hd.id, cac_ben=hd.cac_ben,
-                 hinh_thuc=hd.hinh_thuc, mo_tip=mo_tip_hop_dong(hd),
-                 thoi_han=hd.thoi_han)
-    for ben in hd.cac_ben:
-        khac = [b for b in hd.cac_ben if b != ben]
-        w.ghi_ky_uc(ben, f"tôi ký giao kèo {hd.id} với {khac} "
-                         f"({mo_tip_hop_dong(hd)}, hạn {hd.thoi_han} tick)")
+    _hoan_tat_ky_hop_dong(w, hd)
     return True
 
 
@@ -159,14 +236,15 @@ def khop_bang_rao(w) -> None:
                         for vai in ("tu", "den"):
                             if getattr(ck.phat_chuyen_giao, vai, None) == "?":
                                 setattr(ck.phat_chuyen_giao, vai, ai)
+                signing_code = signing_failure_code(w, hd)
                 if _ky_hop_dong(w, hd):
                     khop_xong = True
                     nguoi_ky = ai
                     journal_executed(w, ai, "tra_loi_hop_dong", target=dn_id,
                                      code="contract_signed", detail=f"contract={hd.id}")
                     break
-                journal_rejected(w, ai, "tra_loi_hop_dong", "contract_not_executable",
-                                 target=dn_id)
+                journal_rejected(w, ai, "tra_loi_hop_dong",
+                                 signing_code or "contract_not_executable", target=dn_id)
             elif isinstance(tl, HopDong):  # mặc cả: gửi lại bản sửa cho người đăng
                 if dn.vong_mac_ca < toi_da_vong:
                     ref_moi = dang_de_nghi(w, ai, tl, den=dn.tu, vong=dn.vong_mac_ca + 1)

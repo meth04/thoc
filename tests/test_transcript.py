@@ -143,6 +143,9 @@ def test_real_replay_tu_transcript_trung_hash(tmp_path):
     mind2 = tao_mind_replay(w2, w2.cfg, "real", reader)
     chay_tick(w2, mind2, 4)
 
+    # Tick 4 invokes the background memory route. Replay must supply inert route
+    # metadata and still consume the recorded response, without provider/quota work.
+    assert w2.tick == 4
     assert w2.world_hash() == h_goc, "replay real-from-transcript phải trùng world-hash"
     assert reader.misses == 0
     assert reader.con_lai() == 0

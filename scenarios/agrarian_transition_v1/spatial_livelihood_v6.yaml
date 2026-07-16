@@ -1,0 +1,18 @@
+# spatial_livelihood_v6.yaml — reproductive-timing treatment after real15_v5 review §9.
+#
+# Apply AFTER spatial_v1.yaml + spatial_livelihood_v2.yaml + v3.yaml + v4.yaml + v5.yaml.
+# This is a new versioned mechanism treatment. It does not edit the base legacy config or
+# retroactively change real15_v5. Every active value below is a design assumption, not a
+# calibrated historical fact; provenance.csv records the unit and claim boundary.
+
+nhan_khau:
+  sinh_san:
+    # Three-season calendar from spatial_v1: conception at t, birth at t+2 (about 8 months).
+    thai_ky_tick: 2
+    # Earliest next conception is birth_tick + 3; with gestation this makes consecutive
+    # deliveries at least 5 ticks apart (about 20 months). This is a disclosed treatment,
+    # not an empirical calibration of a specific population.
+    khoang_cach_sinh_toi_thieu_tick: 3
+    # Independent draw per delivery. A twin delivery creates two birth records and one
+    # sinh_doi event, but zero-length spacing is never counted as a new delivery interval.
+    p_sinh_doi: 0.02

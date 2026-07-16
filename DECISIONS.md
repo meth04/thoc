@@ -434,3 +434,9 @@ ADR 0006 §D.3. **DESIGN ONLY** — chưa engine change nào.
   đọc config) áp dụng cho treatment không gian/V3. Baseline một-bờ giữ các heuristic lịch sử đã pin
   để mock seed 11 × 8 tick tiếp tục ra `f9afb079…`; vì base và spatial là control/treatment khác
   nhau, không retcon control chỉ để dùng chung một policy surface.
+
+## 2026-07-15 — Safety of standalone provider probe
+
+- `test.py` không lưu thông tin xác thực trong source. Nó chỉ nhận credential thử nghiệm qua biến
+  môi trường có default rỗng; guard hiện hữu phải dừng trước khi tạo HTTP client khi biến này không
+  được đặt. Vì vậy chạy thông thường không được gọi mạng.

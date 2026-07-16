@@ -116,6 +116,9 @@ def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
         shelter_floor = minds.get("san_cho_o_toi_thieu")
         if not isinstance(shelter_floor, dict) or not bool(shelter_floor.get("bat", False)):
             minds.pop("san_cho_o_toi_thieu", None)
+        survival = minds.get("survival_feasibility")
+        if not isinstance(survival, dict) or not bool(survival.get("bat", False)):
+            minds.pop("survival_feasibility", None)
 
     demography = cfg.get("nhan_khau")
     if isinstance(demography, dict):
@@ -131,6 +134,21 @@ def _behavioral_config(raw: dict[str, Any]) -> dict[str, Any]:
         quotes = trade.get("bao_gia")
         if not isinstance(quotes, dict) or not bool(quotes.get("bat", False)):
             trade.pop("bao_gia", None)
+
+    # Persistent call-auction orders are versioned by TTL. Missing/invalid/=1 all execute
+    # the exact legacy intratick path, so the knob must also be absent from behavioral identity.
+    book = cfg.get("cho")
+    if isinstance(book, dict):
+        try:
+            ttl = max(1, int(book.get("lenh_ton_tai_tick", 1)))
+        except (TypeError, ValueError):
+            ttl = 1
+        if ttl <= 1:
+            book.pop("lenh_ton_tai_tick", None)
+            if not book:
+                cfg.pop("cho", None)
+    else:
+        cfg.pop("cho", None)
 
     # Generic work orders are another versioned treatment. A disabled registry
     # has the same transition function as an old configuration with no project
@@ -236,6 +254,10 @@ class World:
     # scenario gate is enabled.
     du_an: dict[str, Any] = field(default_factory=dict)
     _next_du_an: int = 0
+    # Versioned persistent call-auction book. It is behavior/hash state only when
+    # ``cho.lenh_ton_tai_tick > 1``; TTL absent/=1 stays on the exact legacy intratick path.
+    lenh_cho: list[Any] = field(default_factory=list)  # market.LenhCho, kept Any to avoid cycle
+    _next_lenh_cho: int = 0
     # Versioned public residential-lot permits: ``site id -> living holder``.  This is not
     # a farm-land title and lives outside Agent so legacy Agent canonical layout stays exact.
     # It enters behavioral_state only when ``khong_gian.dat_o.bat`` is on.
@@ -298,11 +320,16 @@ class World:
     # raw action journal this affects a future decision, so it is inserted in
     # behavioral_state only behind the versioned action-journal gate.
     action_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    # Reproductive timing is behavioral state owned exclusively by engine.demography.
+    # These fields enter the hash only while the versioned gestation gate is active.
+    thai_ky: dict[str, dict[str, Any]] = field(default_factory=dict)
+    hau_san: dict[str, int] = field(default_factory=dict)
     # P4 demographic observation state. It is intentionally excluded from
     # behavioral_state: it records completed facts but never controls a future
     # transition. engine.metrics_demography owns its contents.
     nhan_khau_tick: dict[str, Any] = field(default_factory=dict)
     nhan_khau_lich_su: list[dict[str, Any]] = field(default_factory=list)
+    nhan_khau_khoang_sinh: dict[str, Any] = field(default_factory=dict)
     tu_vong_sinh_no_tick: set[str] = field(default_factory=set)
     # ben_kia_tick (ADR 0005 §2.3): tập agent ĐÃ QUA SÔNG tick này (trả phí đò thành công
     # hoặc tự chèo thuyền). Transient — reset đầu pha sản xuất, KHÔNG vào world_hash (như
@@ -767,6 +794,24 @@ class World:
                 "quotes": self.bao_gia,
                 "next_quote_id": self._next_bao_gia,
             }
+        from engine.market import lenh_ton_tai_tick
+
+        if lenh_ton_tai_tick(self) > 1:
+            # Pending quantity changes future matching and therefore belongs in replay/hash.
+            # The counter is part of deterministic price-time tie-breaking for future orders.
+            state["market"]["persistent_orders"] = {
+                "orders": self.lenh_cho,
+                "next_order_id": self._next_lenh_cho,
+            }
+        from engine.demography import _thai_ky_cfg
+
+        if _thai_ky_cfg(self.cfg.get("nhan_khau.sinh_san")) is not None:
+            # Pregnancy/postpartum state changes whether and when a future birth occurs.
+            # Gate OFF omits the key entirely so pinned legacy hashes stay byte-identical.
+            state["reproduction"] = {
+                "thai_ky": self.thai_ky,
+                "hau_san": self.hau_san,
+            }
         from engine.projects import _du_an_bat
 
         if _du_an_bat(self):
@@ -902,6 +947,14 @@ class World:
             w.nhan_khau_tick = {}
         if not hasattr(w, "nhan_khau_lich_su"):
             w.nhan_khau_lich_su = []
+        # Behavioral reproduction state: old checkpoints do not imply a historical
+        # pregnancy or postpartum interval. Observation history likewise starts empty.
+        if "thai_ky" not in vars(w):
+            w.thai_ky = {}
+        if "hau_san" not in vars(w):
+            w.hau_san = {}
+        if "nhan_khau_khoang_sinh" not in vars(w):
+            w.nhan_khau_khoang_sinh = {"tick_sinh_truoc": {}, "khoang": []}
         if not hasattr(w, "tu_vong_sinh_no_tick"):
             w.tu_vong_sinh_no_tick = set()
         if not hasattr(w, "canh_tick"):
@@ -935,6 +988,19 @@ class World:
             w.di_san_xong = {}
         if not hasattr(w, "_next_di_san"):
             w._next_di_san = 0
+        # Persistent-market migration is deliberately conditional. TTL absent/=1 never reads
+        # these fields and must preserve an old checkpoint byte-for-byte at the hash boundary.
+        # TTL>1 checkpoints from the pre-book schema can only migrate to an empty book: the old
+        # engine discarded every unfilled order, so there is no hidden history to invent.
+        from engine.market import lenh_ton_tai_tick
+
+        if lenh_ton_tai_tick(w) > 1:
+            # Scalar dataclass defaults also exist as class attributes, so ``hasattr`` would
+            # falsely claim an old pickle owns the counter. Inspect instance state directly.
+            if "lenh_cho" not in vars(w):
+                w.lenh_cho = []
+            if "_next_lenh_cho" not in vars(w):
+                w._next_lenh_cho = 0
         # Quote/escrow migration. OFF checkpoint stays hash-neutral because the commerce key is
         # omitted; ON legacy checkpoint gets an empty book, not an invented trade history.
         if not hasattr(w, "bao_gia"):
@@ -1066,10 +1132,14 @@ def _endowment_t0_kg(cfg: Config, la_nguoi_lon: bool) -> float:
 def tao_the_gioi(cfg: Config, seed: int, events_path: Path | None = None) -> World:
     """Khởi tạo thế giới t0: bản đồ + người lớn độc thân (tham số mục khoi_tao), 0 đất."""
     from engine.household import khoi_tao_cu_tru, kiem_tra_cau_hinh
+    from engine.survival_feasibility import validate_survival_config
 
     # Fail-closed TRƯỚC khi có world nào tồn tại (ADR 0007 §D.6/§G.2): cấu hình route di sản
     # về một sink không có drain thì DỪNG, không có nhánh "chạy tạm rồi tính sau".
     kiem_tra_cau_hinh(cfg)
+    # ADR 0009 only validates an explicitly marked v7 treatment; legacy/v1-v6
+    # overlays retain their historical configuration and transition function.
+    validate_survival_config(cfg)
     rng = RngTree(seed)
     w = World(cfg=cfg, seed=seed, rng=rng, events=EventLog(events_path))
     dang_ky_flows(w.ledger)

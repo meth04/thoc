@@ -4,6 +4,7 @@ import asyncio
 import csv
 import json
 import math
+import os
 import statistics
 import subprocess
 import sys
@@ -17,7 +18,7 @@ from typing import Any
 # =====================================================================
 
 # API key của 9Router
-API_KEY = "sk-da6f5da3604d3663-jp8mwo-45708b37"
+API_KEY = os.getenv("THOC_TEST_API_KEY", "")
 
 # Endpoint chat completions.
 # 9Router local thường có dạng:
@@ -900,7 +901,6 @@ async def cooldown() -> None:
 async def main() -> None:
     if (
         not API_KEY
-        or API_KEY == "PASTE_API_KEY_HERE"
     ):
         raise SystemExit(
             "Hãy dán API key vào biến API_KEY "

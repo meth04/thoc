@@ -150,7 +150,10 @@ def _tinh_hinh_viec_lang(w: World) -> str:
 
 
 SCHEMA_DAU = """[ĐỊNH DẠNG TRẢ LỜI — BẮT BUỘC]
-Trả về DUY NHẤT JSON (không lời dẫn, không markdown). Quyết định của một người có dạng:
+Bạn được phép gọi function/tool chỉ-đọc trong các lượt trung gian để lấy thêm dữ kiện. Một
+function/tool call KHÔNG phải câu trả lời quyết định và không cần mang hình dạng JSON bên dưới.
+Sau khi đã đủ dữ kiện, CÂU TRẢ LỜI CUỐI CÙNG phải là DUY NHẤT một JSON object (không lời dẫn,
+không markdown) có dạng:
 {"id":"A0001","the_chinh_sach":{...tùy chọn},"hanh_dong":[...],"ly_do":"1 câu"}.
 Không hành động gì thì để "hanh_dong":[]. Quyết định ĐỘC LẬP theo tính cách riêng của bạn.
 
@@ -454,7 +457,8 @@ def build_agent_prompt(w: World, aid: str, triggers: dict[str, list[str]]) -> st
     return f"{dau}{luat_vat_ly(w)}\n\n{chung}\n\n{rieng}\n\n" \
            f"{schema_quyet_dinh_cho(w, muc_xao)}\n\n" \
            f"{VI_DU_QUYET_DINH}\n" \
-           f'Trả về DUY NHẤT một JSON object cho chính bạn (id "{aid}"): ' \
+           f'Sau các function/tool call trung gian nếu có, câu trả lời CUỐI CÙNG phải là ' \
+           f'DUY NHẤT một JSON object cho chính bạn (id "{aid}"): ' \
            f'{{"id":"{aid}","hanh_dong":[...],"ly_do":"1 câu"}}.'
 
 
@@ -583,25 +587,58 @@ def _fact_cards_cuc_bo(w: World, aid: str) -> list[str]:
     inventing a parcel id or repeatedly clearing a rice field.
     """
     from engine.spatial import co_the_o_bo
+    from minds.world_tools import homestead_fact
 
     reachable = [p for p in w.parcels.values() if co_the_o_bo(w, aid, p.bo)]
-    all_fields = sorted((p for p in reachable if p.loai == "ruong" and p.chu is None
-                         and p.homestead_ai in (None, aid)),
-                        key=lambda p: p.id)
-    # A shared "first six" board was a measurable prompt-level bottleneck: independent
-    # agents repeatedly selected P00_05/P00_06/P00_07 and engine order then favoured low ids.
-    # This is only a rotated public listing; the full registry remains observable through the
-    # world tool and simultaneous allocation decides conflicts.
-    if all_fields:
-        offset = int(w.rng.get(f"ruong_cong_board:{aid}", w.tick).integers(0, len(all_fields)))
-        fields = (all_fields[offset:] + all_fields[:offset])[:6]
-    else:
-        fields = []
+    all_held_fields = sorted(
+        (p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None
+         and p.homestead_ai == aid),
+        key=lambda p: p.id,
+    )
+    held_fields = [p for p in all_held_fields if co_the_o_bo(w, aid, p.bo)]
+    unheld_fields = sorted(
+        (p for p in reachable if p.loai == "ruong" and p.chu is None
+         and p.homestead_ai is None),
+        key=lambda p: p.id,
+    )
+    # A shared "first six" board was a measurable prompt-level bottleneck.  Preserve every
+    # field already reserved to this resident at the front; rotate ONLY genuinely unheld
+    # commons, then let simultaneous allocation resolve any collision.
+    if unheld_fields:
+        offset = int(
+            w.rng.get(f"ruong_cong_board:{aid}", w.tick).integers(0, len(unheld_fields))
+        )
+        unheld_fields = unheld_fields[offset:] + unheld_fields[:offset]
+    fields = [*held_fields, *unheld_fields][:6]
     rows: list[str] = []
+    for parcel in all_held_fields:
+        fact = homestead_fact(w, aid, parcel)
+        if fact is None:
+            continue
+        access = "có thể tiếp cận hiện tại" if fact["co_the_tiep_can_hien_tai"] else (
+            "chưa thể tiếp cận hiện tại"
+        )
+        rows.append(
+            f"FACT CARD — HOMESTEAD BẠN ĐANG TÍCH LŨY: {fact['thua']}; tiến độ "
+            f"{fact['tien_do_mua_lua']}/{fact['nguong_title_mua_lua']} mùa lúa liên tiếp; "
+            f"độ màu hiện tại {fact['do_mau_hien_tai']:g}; sản lượng cơ sở theo độ màu "
+            f"{fact['san_luong_co_so_theo_do_mau_kg']:g}kg trước thời tiết/công cụ/sức khỏe; "
+            f"mùa lúa cần tiếp tục: {fact['mua_lua_can_tiep_tuc']}; {access}. Quyền hiện tại "
+            "vẫn là đất công được bảo lưu homestead; dùng phan_bo_cong.canh_thua với đúng id. "
+            "Nếu thửa không được canh trong một mùa lúa, tiến độ engine đặt lại 0."
+        )
     if fields:
+        def field_label(parcel) -> str:
+            fact = homestead_fact(w, aid, parcel)
+            suffix = (
+                f", homestead {fact['tien_do_mua_lua']}/{fact['nguong_title_mua_lua']}"
+                if fact is not None else ""
+            )
+            return f"{parcel.id}(màu {parcel.mau_mo:.2f}{suffix})"
+
         rows.append(
             "FACT CARD — RUỘNG CÔNG CÓ THỂ CANH: "
-            + ", ".join(f"{p.id}(màu {p.mau_mo:.2f})" for p in fields)
+            + ", ".join(field_label(p) for p in fields)
             + ". Dùng phan_bo_cong.canh_thua; đây KHÔNG phải mục tiêu khai_hoang."
         )
     if bool(w.cfg.get("khong_gian.khai_hoang.bat", False)):
@@ -650,16 +687,35 @@ def _fact_cards_cuc_bo(w: World, aid: str) -> list[str]:
     return rows
 
 
+def render_survival_fact_card(w: World, aid: str) -> str:
+    """Render the exact validated v7 tool payload without recomputing engine facts.
+
+    A missing/invalid engine API omits the card instead of falling back to invented food,
+    labor, reachability or price facts. Compact JSON keeps prompt and tool schemas identical.
+    """
+    from minds.world_tools import canonical_json, survival_fact_payload
+
+    payload = survival_fact_payload(w, aid)
+    if payload.get("status") != "available":
+        return ""
+    return "[FACT CARD — SURVIVAL FEASIBILITY V7] " + canonical_json(payload)
+
+
 def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
-    from engine.economy import household_food_equivalent, household_food_need
+    from minds.world_tools import survival_feasibility_enabled
 
     a = w.agents[aid]
     tai_san = w.ledger.tai_san_cua(aid)
-    ho_song = [member for member in w.ho_cua(aid)
-               if member in w.agents and w.agents[member].con_song]
-    luong_thuc_ho = household_food_equivalent(w, ho_song)
-    nhu_cau_ho = household_food_need(w, ho_song)
-    tick_du_tru = luong_thuc_ho / nhu_cau_ho if nhu_cau_ho > 1e-9 else 0.0
+    survival_v7 = survival_feasibility_enabled(w)
+    luong_thuc_ho = nhu_cau_ho = tick_du_tru = 0.0
+    if not survival_v7:
+        from engine.economy import household_food_equivalent, household_food_need
+
+        ho_song = [member for member in w.ho_cua(aid)
+                   if member in w.agents and w.agents[member].con_song]
+        luong_thuc_ho = household_food_equivalent(w, ho_song)
+        nhu_cau_ho = household_food_need(w, ho_song)
+        tick_du_tru = luong_thuc_ho / nhu_cau_ho if nhu_cau_ho > 1e-9 else 0.0
     tai_san_str = ", ".join(
         f"{ts}: {sl:.0f}" for ts, sl in sorted(tai_san.items())
         if not ts.startswith("vi_the:")
@@ -750,13 +806,21 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
             if b.con_song and b.vo_chong is None and b.gioi_tinh == khac
             and b.truong_thanh(16) and b.lang == a.lang and not can_huyet(w, aid, b.id)
         ][:6]
-    # đất công gần làng (để khai hoang/canh)
+    # Đất công gần làng: pin thửa đang tích homestead; chỉ phần chưa ai giữ xếp theo khoảng cách.
+    from engine.spatial import co_the_o_bo
+
     lang = w.villages[a.lang]
-    dat_cong = sorted(
+    dat_homestead = sorted(
         (p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None
-         and p.homestead_ai in (None, aid)),
+         and p.homestead_ai == aid and co_the_o_bo(w, aid, p.bo)),
+        key=lambda p: p.id,
+    )
+    dat_chua_giu = sorted(
+        (p for p in w.parcels.values() if p.loai == "ruong" and p.chu is None
+         and p.homestead_ai is None and co_the_o_bo(w, aid, p.bo)),
         key=lambda p: (abs(p.r - lang.r) + abs(p.c - lang.c), p.id),
-    )[:5]
+    )
+    dat_cong = [*dat_homestead, *dat_chua_giu][:5]
     # entity mình điều hành / cổ phần (map điều hành cache MỘT lần mỗi tick)
     co_phan = [f"{ts.split(':', 1)[1]}: {sl:.0f}%" for ts, sl in sorted(tai_san.items())
                if ts.startswith("co_phan:")]
@@ -784,14 +848,21 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         f"Tính cách (1-9): {a.persona.as_dict()}.",
         f"Hồi ký: {a.hoi_ky or '(trống)'} | Gia huấn: \"{a.gia_huan or '(chưa có)'}\"",
         f"Tài sản: {tai_san_str or 'trắng tay'}. Đất của bạn: {dat_hien or 'không có'}.",
-        "[KHẢ NĂNG THỰC THI SỐNG CÒN] Trong suy nghĩ trước JSON, đối chiếu bốn phần: "
-        f"lương thực hộ {luong_thuc_ho:.1f}kg / nhu cầu {nhu_cau_ho:.1f}kg mỗi tick "
-        f"(~{tick_du_tru:.1f} tick dự trữ); sức khỏe và chỗ ở; công, giống, gỗ hay vật "
-        "liệu thực có; và một giao dịch hoặc hoạt động có thể thực hiện ngay. Công cụ chỉ-"
-        "đọc cho số liệu về tài sản, cơ hội sản xuất, nhà, giá, dự án và tài nguyên; nhan_tin "
-        "cùng đề nghị hợp đồng/báo giá là các kênh liên lạc với người khác. Không có hành "
-        "động nào tự tạo ra thóc, gỗ, công, quyền đất hay nhà.",
     ]
+    if survival_v7:
+        survival_card = render_survival_fact_card(w, aid)
+        if survival_card:
+            dong.append(survival_card)
+    else:
+        dong.append(
+            "[KHẢ NĂNG THỰC THI SỐNG CÒN] Trong suy nghĩ trước JSON, đối chiếu bốn phần: "
+            f"lương thực hộ {luong_thuc_ho:.1f}kg / nhu cầu {nhu_cau_ho:.1f}kg mỗi tick "
+            f"(~{tick_du_tru:.1f} tick dự trữ); sức khỏe và chỗ ở; công, giống, gỗ hay vật "
+            "liệu thực có; và một giao dịch hoặc hoạt động có thể thực hiện ngay. Công cụ chỉ-"
+            "đọc cho số liệu về tài sản, cơ hội sản xuất, nhà, giá, dự án và tài nguyên; nhan_tin "
+            "cùng đề nghị hợp đồng/báo giá là các kênh liên lạc với người khác. Không có hành "
+            "động nào tự tạo ra thóc, gỗ, công, quyền đất hay nhà."
+        )
     # Shelter is a measurable constraint, not a vague "be safe" exhortation.
     # Showing the same health transition that the engine will apply lets an
     # LLM judge a house project against food, labour and trade using facts.
@@ -906,24 +977,27 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
         dong.append(f"Người độc thân bạn quen: {ung_vien}.")
     if rao_cho_toi:
         dong.append(f"Đề nghị trên bảng rao bạn thấy: {rao_cho_toi}.")
-    # cảnh báo đói: dự trữ hộ so với miệng ăn
-    ho = w.ho_cua(aid)
-    nc = w.cfg.raw()["nhu_cau"]
-    from engine.economy import household_food_equivalent
+    # Legacy warning is deliberately bypassed under v7: the immutable engine schema above is
+    # the only source for opening food, owner-specific decay, settled inflow, need and gap.
+    if not survival_v7:
+        ho = w.ho_cua(aid)
+        nc = w.cfg.raw()["nhu_cau"]
+        from engine.economy import household_food_equivalent
 
-    thoc_ho = sum(w.ledger.so_du(m, "thoc") for m in ho)
-    food_ho = household_food_equivalent(w, ho)
-    nhu_cau = sum(
-        nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(16) else nc["tre_em_kg_tick"]
-        for m in ho
-    )
-    if nhu_cau > 0 and food_ho < nhu_cau * 2:
-        so_tick = food_ho / nhu_cau
-        dong.append(
-            f"⚠ NGUY CƠ ĐÓI: nhà bạn {len(ho)} miệng ăn cần {nhu_cau:.0f}kg thóc/tick, "
-            f"kho lương thực quy thóc còn {food_ho:.0f}kg (trong đó thóc {thoc_ho:.0f}kg) "
-            f"— đủ ăn ~{so_tick:.1f} tick nữa."
+        thoc_ho = sum(w.ledger.so_du(m, "thoc") for m in ho)
+        food_ho = household_food_equivalent(w, ho)
+        nhu_cau = sum(
+            nc["nguoi_lon_kg_tick"] if w.agents[m].truong_thanh(16)
+            else nc["tre_em_kg_tick"]
+            for m in ho
         )
+        if nhu_cau > 0 and food_ho < nhu_cau * 2:
+            so_tick = food_ho / nhu_cau
+            dong.append(
+                f"⚠ NGUY CƠ ĐÓI: nhà bạn {len(ho)} miệng ăn cần {nhu_cau:.0f}kg thóc/tick, "
+                f"kho lương thực quy thóc còn {food_ho:.0f}kg "
+                f"(trong đó thóc {thoc_ho:.0f}kg) — đủ ăn ~{so_tick:.1f} tick nữa."
+            )
     # hàng xóm quanh nhà — biết ƯỚC LƯỢNG tài sản của nhau (nhiễu ±30%, không biết
     # chính xác; thóc trong kho chỉ đoán mờ qua nếp sống)
     hang_xom = w.hang_xom_cua(aid)
@@ -993,10 +1067,12 @@ def build_user_rieng(w: World, aid: str, ly_do_trigger: list[str]) -> str:
     # orchestrator xóa su_co sau khi prompt của tick đã build xong
     if a.su_co:
         dong.append(f"Chuyện vừa rồi KHÔNG THÀNH (rút kinh nghiệm): {a.su_co}")
-    dong.append(
-        "KIỂM TRA SINH TỒN TRƯỚC KHI XUẤT JSON: không giả định cứu trợ hay tài sản tự xuất "
-        "hiện. Mọi đường sống trong quyết định cần dùng đúng tài sản, công, mùa và mã đối tác/"
-        "dự án/lô đã quan sát; khi dữ kiện chưa đủ, các công cụ chỉ-đọc được dùng trước câu trả lời."
-    )
+    if not survival_v7:
+        dong.append(
+            "KIỂM TRA SINH TỒN TRƯỚC KHI XUẤT JSON: không giả định cứu trợ hay tài sản tự xuất "
+            "hiện. Mọi đường sống trong quyết định cần dùng đúng tài sản, công, mùa và mã đối tác/"
+            "dự án/lô đã quan sát; khi dữ kiện chưa đủ, các công cụ chỉ-đọc được dùng trước câu "
+            "trả lời."
+        )
     dong.append(f"Vì sao bạn được hỏi lúc này: {ly_do_trigger}.")
     return "\n".join(dong)

@@ -7,10 +7,16 @@ from pathlib import Path
 import pytest
 
 from engine import projects
+from engine.action_journal import preflight_ok, preflight_plans, request
+from engine.action_journal import reset_tick as reset_action_journal
 from engine.audit import kiem_toan_the_gioi
 from engine.config import load_config
 from engine.intents import KeHoach
+from engine.shelter_floor import ap_dung_delta_san_cho_o_v7
 from engine.world import tao_the_gioi
+from minds.provenance import record_plan
+from minds.provenance import reset_tick as reset_decision_provenance
+from minds.safety import ShelterFloorDelta
 
 ROOT = Path(__file__).resolve().parents[1]
 SPATIAL = ROOT / "scenarios" / "agrarian_transition_v1" / "spatial_v1.yaml"
@@ -153,3 +159,70 @@ def test_disabled_project_state_does_not_change_legacy_hash():
     w.du_an["DA00001"] = object()
     w._next_du_an = 99
     assert w.world_hash() == h0
+
+
+def test_project_labor_journal_binds_same_target_llm_and_floor_entries_by_id():
+    """A floor append cannot reverse-attribution of an earlier LLM contribution."""
+    w, owner, worker, site, _wood, _labour = _world()
+    w.cfg.raw().setdefault("minds", {})["action_journal"] = {"bat": True, "enforce": True}
+    w.tick = 1
+    ref = _create_house(w, owner, site)
+    w.du_an[ref].cong_can = 5.0
+    _issue(w, worker, "cong", 5.0)
+
+    plan = KeHoach(id=worker, gop_cong_du_an=[{"ref": ref, "so_cong": 2.0}])
+    plans = {worker: plan}
+    reset_decision_provenance(w)
+    reset_action_journal(w)
+    record_plan(w, worker, "llm")
+    preflight_plans(w, plans)
+
+    floor_delta = ShelterFloorDelta(
+        aid=worker,
+        action="gop_cong_du_an",
+        target=ref,
+        value=5.0,
+        detail="fixture_floor_project_labor",
+    )
+    assert ap_dung_delta_san_cho_o_v7(w, plans, (floor_delta,)) == 1
+
+    projects.buoc_du_an(w, plans)
+
+    rows = [
+        row for row in w.action_journal_tick
+        if row["action"] == "gop_cong_du_an" and row["target"] == ref
+    ]
+    assert len(rows) == 2
+    by_origin = {row["origin"]: row for row in rows}
+    assert by_origin["llm"]["execution"] == "executed"
+    assert by_origin["llm"]["requested_quantity"] == pytest.approx(2.0)
+    assert by_origin["llm"]["executed_quantity"] == pytest.approx(2.0)
+    assert by_origin["llm"]["reason_code"] == "du_an_cong"
+    assert by_origin["survival_floor"]["execution"] == "executed"
+    assert by_origin["survival_floor"]["requested_quantity"] == pytest.approx(5.0)
+    assert by_origin["survival_floor"]["executed_quantity"] == pytest.approx(3.0)
+    assert by_origin["survival_floor"]["reason_code"] == "du_an_cong_mot_phan"
+    assert w.du_an[ref].cong_da == pytest.approx(5.0)
+
+
+def test_project_contribution_without_entry_id_keeps_legacy_journal_lookup():
+    """Direct legacy callers remain valid while only bound entries bypass LIFO."""
+    w, owner, worker, site, _wood, _labour = _world()
+    w.cfg.raw().setdefault("minds", {})["action_journal"] = {"bat": True, "enforce": True}
+    w.tick = 1
+    ref = _create_house(w, owner, site)
+    _issue(w, worker, "cong", 2.0)
+    legacy_entry = {"ref": ref, "so_cong": 2.0}
+    reset_action_journal(w)
+    row = request(
+        w, worker, "gop_cong_du_an", origin="external", target=ref,
+        params={"loai": "gop_cong_du_an", **legacy_entry},
+    )
+    preflight_ok(w, row)
+
+    projects.buoc_du_an(w, {worker: KeHoach(id=worker, gop_cong_du_an=[legacy_entry])})
+
+    assert "_action_journal_id" not in legacy_entry
+    assert row is not None and row["execution"] == "executed"
+    assert row["requested_quantity"] == pytest.approx(2.0)
+    assert row["executed_quantity"] == pytest.approx(2.0)

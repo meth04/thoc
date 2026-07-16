@@ -500,37 +500,56 @@ def _checkpoint_cuoi(run_dir: Path | None) -> Path | None:
 
 
 def kiem_d1(run_dir: Path) -> KetQua:
-    """D1: fallback_rate từ llm_calls.sqlite (+ run_meta), ngưỡng theo mode."""
-    db = run_dir / "llm_calls.sqlite"
-    if not db.exists():
-        return {"muc": "D1", "ket_luan": "khong_du_du_lieu",
-                "bang_chung": f"Không có {db.name} trong run."}
+    """D1: gate theo fallback *decision-level*, không phải lỗi provider per call.
+
+    Một provider retry thành công có thể làm call-level fallback thấp, trong khi nhiều
+    agent-tick vẫn kết thúc bằng policy/rulebot. Thiếu decision provenance là thiếu
+    evidence, không được hạ xuống call-level để pass artifact cũ.
+    """
+    from tools.telemetry import (
+        phan_tich,
+        phan_tich_fallback_quyet_dinh,
+        phan_tich_terminal_quyet_dinh,
+    )
+
     meta = {}
     mp = run_dir / "run_meta.json"
     if mp.exists():
         meta = json.loads(mp.read_text(encoding="utf-8"))
     nguong = 0.05 if meta.get("mode", "mock") == "mock" else 0.10
-    con = sqlite3.connect(db)
-    try:
-        rows = con.execute(
-            "SELECT COALESCE(model,'?'), COUNT(*), COALESCE(SUM(fallback),0), "
-            "COALESCE(SUM(batch_size),0) FROM llm_calls GROUP BY model"
-        ).fetchall()
-    finally:
-        con.close()
-    if not rows:
-        return {"muc": "D1", "ket_luan": "khong_du_du_lieu", "bang_chung": "llm_calls rỗng."}
-    xau, chi_tiet = [], []
-    for model, n_call, n_fb, n_batch in rows:
-        rate = n_fb / max(1, n_batch or n_call)
-        chi_tiet.append(f"{model}: {n_fb}/{n_batch or n_call} = {rate:.2%}")
-        if rate >= nguong:
-            xau.append(model)
-    bc = (f"mode={meta.get('mode', '?')}, ngưỡng {nguong:.0%}; theo model: "
-          + "; ".join(chi_tiet))
-    if "fallback_rate" in meta:
-        bc += f". run_meta: fallback_rate={meta['fallback_rate']}"
-    return {"muc": "D1", "ket_luan": "fail" if xau else "pass", "bang_chung": bc}
+    decision = phan_tich_fallback_quyet_dinh(run_dir)
+    if not decision.get("ap_dung"):
+        return {
+            "muc": "D1", "ket_luan": "khong_du_du_lieu",
+            "bang_chung": "Thiếu decision_provenance trong metrics.jsonl; không dùng "
+                           "call-level fallback thay thế decision-level gate.",
+        }
+    denominator = int(decision.get("agent_tick_nghi", 0))
+    if denominator == 0:
+        return {"muc": "D1", "ket_luan": "khong_du_du_lieu",
+                "bang_chung": "decision_provenance có mặt nhưng không có agent-tick được xếp nghĩ."}
+    fallback = int(decision["fallback_plans"])
+    rate = float(decision["rate"])
+    terminal = phan_tich_terminal_quyet_dinh(run_dir)
+    terminal_text = "terminal coverage: thiếu metric"
+    if terminal.get("ap_dung"):
+        coverage = terminal.get("terminal_coverage")
+        terminal_text = (
+            f"terminal coverage={coverage:.2%} "
+            f"({terminal['completed_agent_decision_turn']}/"
+            f"{terminal['scheduled_agent_decision']})"
+            if coverage is not None else "terminal coverage=N/A (0 scheduled)"
+        )
+    call_text = "call-level fallback: không có llm_calls.sqlite"
+    db = run_dir / "llm_calls.sqlite"
+    if db.exists():
+        calls = phan_tich(db)
+        call_text = (f"call-level fallback={calls['fallback_rate']:.2%} "
+                     f"({calls['fallback']}/{calls['tong_call']}) [chẩn đoán hạ tầng, "
+                     "không phải gate]")
+    bc = (f"mode={meta.get('mode', '?')}, ngưỡng decision {nguong:.0%}; "
+          f"decision fallback={fallback}/{denominator}={rate:.2%}; {terminal_text}; {call_text}.")
+    return {"muc": "D1", "ket_luan": "fail" if rate >= nguong else "pass", "bang_chung": bc}
 
 
 def kiem_d3() -> KetQua:

@@ -9,10 +9,14 @@ cũng chạy hoàn toàn trong tmp_path.
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
+
+import pytest
 
 import tools.verify_research_run as vrr
 from engine.config import load_config
+from engine.journal import kiem_lien_tuc
 from tools.experiments import build_manifest, write_manifest
 
 
@@ -62,16 +66,19 @@ def _build_run(
     (run_dir / "events.jsonl").write_text("", encoding="utf-8")
 
 
-def test_run_hop_le_du_bang_chung(tmp_path, monkeypatch):
-    """Run có đầy đủ bằng chứng + quick → không FAIL, mọi hard-check PASS."""
+def test_legacy_run_without_journal_schema_is_diagnostic_not_green(tmp_path, monkeypatch):
+    """Continuity alone cannot upgrade a legacy run with no checkpoint-prefix evidence."""
     monkeypatch.setattr(vrr, "DATA_DIR", tmp_path)
     _build_run(tmp_path / "r_ok")
+    before = {p.name: p.read_bytes() for p in (tmp_path / "r_ok").iterdir()}
     ket = vrr.verify_run("r_ok", quick=True)
-    assert ket.failed() is False, ket.render()
-    # không có hard-check nào FALSE
-    assert not [n for n, ok, _, hard in ket.items if ok is False and hard]
     assert _item(ket, "metrics_contiguous_to_final")[0] is True
     assert _item(ket, "events_present")[0] is True
+    assert _item(ket, "journal_manifest_present")[0] is False
+    assert _item(ket, "final_checkpoint_journal_evidence")[0] is False
+    assert ket.artifact_status == vrr.DIAGNOSTIC_ONLY
+    assert ket.ma_thoat() == vrr.EXIT_THIEU_BANG_CHUNG
+    assert {p.name: p.read_bytes() for p in (tmp_path / "r_ok").iterdir()} == before
 
 
 def test_thieu_manifest_fail(tmp_path, monkeypatch):
@@ -106,16 +113,16 @@ def test_outcome_hash_lech_fail(tmp_path, monkeypatch):
     assert ket.failed() is True
 
 
-def test_config_digest_troi_chi_la_warn(tmp_path, monkeypatch):
-    """Digest tái dựng lệch nhưng mọi hard-check khác pass → không FAIL (config_digest soft)."""
+def test_config_digest_drift_is_hard_failure(tmp_path, monkeypatch):
+    """Changed recorded configuration law cannot be downgraded to provenance warning."""
     monkeypatch.setattr(vrr, "DATA_DIR", tmp_path)
     # digest cố tình sai (ghi cùng vào manifest+meta để manifest_meta_consistent vẫn pass)
     _build_run(tmp_path / "r_drift", config_digest="0" * 64)
     ket = vrr.verify_run("r_drift", quick=True)
     ok, _, hard = _item(ket, "config_digest_reproduced")
     assert ok is False  # digest tái dựng KHÁC digest đã ghi
-    assert hard is False  # nhưng đây chỉ là WARN provenance
-    assert ket.failed() is False, ket.render()
+    assert hard is True
+    assert ket.failed() is True, ket.render()
 
 
 def test_replay_world_hash_trung_that(tmp_path, monkeypatch):
@@ -138,7 +145,10 @@ def test_replay_world_hash_trung_that(tmp_path, monkeypatch):
     ket = vrr.verify_run("r_replay", quick=False)
     ok, detail, _ = _item(ket, "replay_world_hash")
     assert ok is True, detail
-    assert ket.failed() is False, ket.render()
+    # A seed replay is not enough to certify an artifact that lacks final checkpoint evidence.
+    assert _item(ket, "final_checkpoint_journal_evidence")[0] is False
+    assert ket.artifact_status == vrr.DIAGNOSTIC_ONLY
+    assert ket.failed() is True, ket.render()
 
 
 def test_replay_tai_dung_policy_tu_manifest(tmp_path, monkeypatch):
@@ -179,4 +189,174 @@ def test_replay_tai_dung_policy_tu_manifest(tmp_path, monkeypatch):
     ket = vrr.verify_run("r_policy", quick=False)
     ok, detail, _ = _item(ket, "replay_world_hash")
     assert ok is True, detail  # trước fix M1: replay bằng rulebot → LỆCH → FAIL
-    assert ket.failed() is False, ket.render()
+    assert _item(ket, "final_checkpoint_journal_evidence")[0] is False
+    assert ket.artifact_status == vrr.DIAGNOSTIC_ONLY
+    assert ket.failed() is True, ket.render()
+
+
+def test_transcript_call_id_physical_continuity_fails_closed(tmp_path):
+    """Every nonblank transcript line must be JSON with the physical 1..N call_id sequence."""
+    cases = {
+        "gap": [{"call_id": 1}, {"call_id": 3}],
+        "reversal": [{"call_id": 1}, {"call_id": 2}, {"call_id": 1}],
+        "missing": [{"call_id": 1}, {"tick": 2}],
+        "noninteger": [{"call_id": 1}, {"call_id": "2"}],
+        "malformed": [{"call_id": 1}, "{not json"],
+    }
+    for name, rows in cases.items():
+        run_dir = tmp_path / name
+        run_dir.mkdir()
+        (run_dir / "transcript.jsonl").write_text(
+            "\n".join(row if isinstance(row, str) else json.dumps(row) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        result = kiem_lien_tuc(run_dir)
+        assert result["ok"] is False, name
+        assert any("transcript dòng vật lý" in error for error in result["loi"]), result["loi"]
+
+
+def _attempt_db(path: Path, *, ids: list[int], superseded: list[int | None]) -> None:
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("CREATE TABLE llm_calls (call_id INTEGER PRIMARY KEY)")
+        conn.execute("INSERT INTO llm_calls (call_id) VALUES (1)")
+        conn.execute(
+            "CREATE TABLE llm_attempts (attempt_id INTEGER PRIMARY KEY, superseded INTEGER)"
+        )
+        conn.executemany(
+            "INSERT INTO llm_attempts (attempt_id, superseded) VALUES (?, ?)",
+            list(zip(ids, superseded, strict=True)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_attempt_forensics_rejects_deleted_gap_and_invalid_superseded(tmp_path):
+    gap = tmp_path / "gap"
+    gap.mkdir()
+    _attempt_db(gap / "llm_calls.sqlite", ids=[1, 3], superseded=[0, 0])
+    gap_result = kiem_lien_tuc(gap)
+    assert gap_result["ok"] is False
+    assert gap_result["llm_attempts_max_id"] == 3
+    assert any("attempt_id không liên tục" in error for error in gap_result["loi"])
+
+    invalid = tmp_path / "invalid"
+    invalid.mkdir()
+    _attempt_db(invalid / "llm_calls.sqlite", ids=[1], superseded=[2])
+    invalid_result = kiem_lien_tuc(invalid)
+    assert invalid_result["ok"] is False
+    assert any("superseded không phải binary" in error for error in invalid_result["loi"])
+
+
+def test_real_legacy_without_attempt_table_is_diagnostic_not_verified(tmp_path, monkeypatch):
+    monkeypatch.setattr(vrr, "DATA_DIR", tmp_path)
+    run_dir = tmp_path / "legacy_real"
+    _build_run(run_dir, mode="real")
+    conn = sqlite3.connect(run_dir / "llm_calls.sqlite")
+    try:
+        conn.execute("CREATE TABLE llm_calls (call_id INTEGER PRIMARY KEY)")
+        conn.execute("INSERT INTO llm_calls (call_id) VALUES (1)")
+        conn.commit()
+    finally:
+        conn.close()
+
+    ket = vrr.verify_run("legacy_real", quick=True)
+    check = _item(ket, "attempt_forensic_identity")
+    assert check is not None and check[0] is False
+    assert "unavailable" in check[1]
+    assert ket.artifact_status == vrr.DIAGNOSTIC_ONLY
+    assert ket.ma_thoat() == vrr.EXIT_THIEU_BANG_CHUNG
+
+
+def _run_rulebot_artifact(tmp_path: Path, monkeypatch, name: str) -> Path:
+    """Create a final checkpoint in tmp_path; no provider/network/LLM is involved."""
+    import run as run_mod
+
+    monkeypatch.setattr(run_mod, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(vrr, "DATA_DIR", tmp_path)
+    args = run_mod._tao_parser().parse_args([
+        "--mode", "rulebot", "--run-name", name, "--ticks", "2", "--seed", "17",
+    ])
+    assert run_mod.chay_run(args) == 0
+    return tmp_path / name
+
+
+@pytest.mark.parametrize("call_ids", ([1, 3], [1, 2, 1]), ids=["gap", "reversal"])
+def test_direct_replay_rejects_bad_call_ids_before_transcript_reader(
+    tmp_path, monkeypatch, call_ids
+):
+    """Direct replay has the same physical call-id gate as the post-run verifier."""
+    import minds.transcript as transcript_mod
+    import tools.replay as replay
+
+    run_dir = tmp_path / "direct"
+    run_dir.mkdir()
+    (run_dir / "run_meta.json").write_text(json.dumps({
+        "run_name": "direct", "mode": "real", "seed": 1, "tick_cuoi": 0,
+        "world_hash": "deadbeef",
+    }), encoding="utf-8")
+    (run_dir / "transcript.jsonl").write_text(
+        "".join(json.dumps({"call_id": call_id, "prompt_hash": str(call_id)}) + "\n"
+                for call_id in call_ids),
+        encoding="utf-8",
+    )
+
+    class MustNotConstructReader:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("continuity must fail before TranscriptReader")
+
+    monkeypatch.setattr(transcript_mod, "TranscriptReader", MustNotConstructReader)
+    result = replay.replay_from_transcript(run_dir)
+    assert result.ok is False
+    assert "journal_continuity FAIL trước TranscriptReader" in result.reason
+    assert "call_id" in result.reason
+
+
+def test_final_checkpoint_evidence_detects_one_byte_event_prefix_tamper(tmp_path, monkeypatch):
+    """Changing one valid JSON byte without changing file length invalidates checkpoint SHA."""
+    run_dir = _run_rulebot_artifact(tmp_path, monkeypatch, "prefix_tamper")
+    clean = vrr.verify_run("prefix_tamper", quick=True)
+    assert _item(clean, "final_checkpoint_journal_evidence")[0] is True, clean.render()
+
+    events = run_dir / "events.jsonl"
+    raw = bytearray(events.read_bytes())
+    marker = b'"loai": "'
+    index = raw.find(marker)
+    assert index >= 0, "fixture needs a serialized event type"
+    position = index + len(marker)
+    raw[position] = ord("Z") if raw[position] != ord("Z") else ord("Y")
+    size = events.stat().st_size
+    events.write_bytes(raw)
+    assert events.stat().st_size == size, "tamper must preserve byte length"
+
+    tampered = vrr.verify_run("prefix_tamper", quick=True)
+    evidence = _item(tampered, "final_checkpoint_journal_evidence")
+    assert evidence is not None and evidence[0] is False
+    assert evidence[2] is True
+    assert "sha256" in evidence[1]
+    # The change preserves JSON/seq/tick continuity; only immutable prefix evidence detects it.
+    assert _item(tampered, "journal_continuity")[0] is True
+
+
+def test_scenario_digest_drift_is_hard_failure(tmp_path, monkeypatch):
+    """A changed declared scenario file is executable-law drift, not a soft provenance warning."""
+    from tools.experiments import sha256_file, write_manifest
+
+    run_dir = _run_rulebot_artifact(tmp_path, monkeypatch, "scenario_drift")
+    declared = tmp_path / "scenario_file.txt"
+    declared.write_text("before", encoding="utf-8")
+    manifest_path = run_dir / "experiment_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["reproducibility"]["scenario"] = "fixture_scenario"
+    manifest["reproducibility"]["scenario_files_sha256"] = {
+        "scenario_file.txt": sha256_file(declared),
+    }
+    write_manifest(run_dir, manifest)
+    declared.write_text("after ", encoding="utf-8")
+    monkeypatch.setattr(vrr, "ROOT", tmp_path)
+
+    result = vrr.verify_run("scenario_drift", quick=True)
+    check = _item(result, "scenario_files_unchanged")
+    assert check is not None and check[0] is False and check[2] is True
+    assert result.failed() is True

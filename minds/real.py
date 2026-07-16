@@ -18,7 +18,9 @@ from pathlib import Path
 from engine.world import World
 from minds.gateway import LLMRequest, LLMResponse
 from minds.orchestrator import MindMock, tier_cua
+from minds.prompts import build_agent_prompt
 from minds.provenance import record_action
+from minds.triggers import quet_trigger
 from minds.providers_real import (
     GatewayReal,
     LoiHetQuota,
@@ -139,8 +141,13 @@ class MindReal(MindMock):
             self._cfg_ngan_sach_tick.get("cho_burst_rpm_toi_s", 0.0)
         )
         poll_s = float(self._cfg_ngan_sach_tick.get("cho_burst_rpm_poll_s", 3.0))
+        trigger_snapshot = quet_trigger(w)
+        preflight_triggers = {
+            aid: list(trigger_snapshot.get(aid, ("dieu_phoi_toi_thieu",)))
+            for aid in thinkers
+        }
         while True:
-            if self._du_ngan_sach(w, thinkers):
+            if self._du_ngan_sach(w, thinkers, preflight_triggers):
                 self.ly_do_dung = ""
                 return True
             co_the_hoi = self.ly_do_dung.startswith("RPM burst không đủ")
@@ -153,7 +160,8 @@ class MindReal(MindMock):
             self.so_cho_burst_preflight_s += cho
 
     # ---------- budget guard (điều luật #7: không degrade) ----------
-    def _du_ngan_sach(self, w: World, thinkers: list) -> bool:
+    def _du_ngan_sach(self, w: World, thinkers: list,
+                       triggers: dict[str, list[str]] | None = None) -> bool:
         # The run must be able to honour the *minimum* independent turn of
         # every autonomous resident. Optional retries/tool turns are bounded
         # per resident later; requiring 10× here would falsely halt a viable
@@ -167,16 +175,33 @@ class MindReal(MindMock):
             int(self._cfg_ngan_sach_tick.get("toi_thieu", 1))
             if self._cfg_ngan_sach_tick.get("bat", False) else 2
         )
+        du_tru_token: dict[str, int] = {}
+        co_cong_cu = bool(w.cfg.get("minds.dung_cong_cu_the_gioi"))
+        trigger_map = triggers or {}
         for aid in thinkers:
             tier = tier_cua(w, aid)
             can[tier] = can.get(tier, 0) + toi_thieu
-        du, ly_do = budget_guard(self.gateway, can)
+            # Render the same private prompt shape used for the mandatory first
+            # turn.  Taking the largest reservation within a tier is conservative
+            # and prevents an early agent from consuming TPM needed by a later one.
+            prompt = build_agent_prompt(w, aid, trigger_map)
+            tier_cfg = self.gateway.strict_treatment_cfg if self.gateway.strict_treatment else \
+                self.cfg.get(f"models.tiers.{tier}")
+            max_output = int(tier_cfg.get("max_output_tokens", 2000))
+            reservations = [
+                self.gateway.du_tru_token_toi_thieu(
+                    route, prompt, max_output, co_cong_cu=co_cong_cu
+                )
+                for route in self.gateway.routes_cua_tier(tier)
+            ]
+            du_tru_token[tier] = max(du_tru_token.get(tier, 0), max(reservations, default=0))
+        du, ly_do = budget_guard(self.gateway, can, du_tru_token)
         if not du:
             self.ly_do_dung = ly_do
             return False
         if (self._cfg_ngan_sach_tick.get("bat", False)
                 and self._cfg_ngan_sach_tick.get("kiem_tra_burst_rpm", False)):
-            du_burst, ly_do_burst = burst_guard(self.gateway, can)
+            du_burst, ly_do_burst = burst_guard(self.gateway, can, du_tru_token)
             if not du_burst:
                 self.ly_do_dung = ly_do_burst
                 return False
@@ -196,10 +221,9 @@ class MindReal(MindMock):
             if can_nen > 0:
                 route = self._route_nen()
                 con = self.gateway.con_lai(route, time.time())
-                safety = float(self.cfg.get("quotas.chung.safety_margin"))
-                if con * safety < can_nen:
+                if con < can_nen:
                     self.ly_do_dung = (f"route nền {route.provider}/{route.model}: "
-                                        f"cần {can_nen} call, còn {con} (×{safety})")
+                                        f"cần {can_nen} call, còn {con} effective")
                     return False
         # Memory, reflection and intent translation are opportunistic.  They
         # share the per-tick cap later and may fall back locally; they must not
@@ -214,9 +238,7 @@ class MindReal(MindMock):
             # reflection/memory có thể vô tình dùng một "bộ não" khác với quyết định chính.
             return self.gateway.routes_cua_tier("T0")[0]
         nen_cfg = self.cfg.get("models.nen_hoi_ky")
-        q = self.cfg.raw()["quotas"][nen_cfg["provider"]]["models"].get(nen_cfg["model"], {})
-        return Route(nen_cfg["provider"], nen_cfg["model"],
-                     int(q.get("rpm", 4)), int(q.get("rpd", 100)))
+        return self.gateway.route_cau_hinh(nen_cfg["provider"], nen_cfg["model"])
 
     # ---------- nén hồi ký bằng LLM (route nen_hoi_ky) ----------
     def _nen_hoi_ky(self, w: World) -> None:
@@ -264,8 +286,6 @@ class MindReal(MindMock):
             )
             try:
                 resp = self._goi_nen_co_cho(req, route)
-                self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
-                                            time.time())
                 self.so_call += 1
                 self._ghi_log(w, req, resp, False)
                 du_lieu = sua_va_parse(resp.text)
@@ -348,8 +368,6 @@ class MindReal(MindMock):
         )
         try:
             resp = self._goi_nen_co_cho(req, route)
-            self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
-                                        time.time())
             self.so_call += 1
             self._ghi_log(w, req, resp, False)
             ket_qua = {}
@@ -418,8 +436,6 @@ class MindReal(MindMock):
         )
         try:
             resp = self._goi_nen_co_cho(req, route)
-            self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
-                                        time.time())
             self.so_call += 1
             self._ghi_log(w, req, resp, False)
             rows = sua_va_parse(resp.text) or []
@@ -516,8 +532,6 @@ class MindReal(MindMock):
             )
             try:
                 resp = self._goi_nen_co_cho(req, route)
-                self.gateway.quota.ghi_call(route.provider, route.model, resp.key_hash,
-                                            time.time())
                 self.so_call += 1
                 self._ghi_log(w, req, resp, False)
                 du_lieu = sua_va_parse(resp.text)

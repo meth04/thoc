@@ -334,6 +334,9 @@ class HanhDongCapability:
     ma_ket_qua: tuple[str, ...]
     thu_tu_phat: int  # thứ tự phát JSON (wire contract: đổi = đổi thứ tự lệnh chợ)
     cong_khai: bool = True
+    # Field JSON cấp cao nhất được phép bỏ. Chỉ các field này mới coi `null` tương đương
+    # omitted; field bắt buộc gửi null phải bị reject trước translator.
+    optional_fields: tuple[str, ...] = ()
     # chiều ngược do descriptor khác phát (chung field, phải giữ thứ tự trong list)
     nguoi_phat_nguoc: str | None = None
 
@@ -355,6 +358,7 @@ class HanhDongCapability:
             "ma_ket_qua": list(self.ma_ket_qua),
             "thu_tu_phat": self.thu_tu_phat,
             "cong_khai": self.cong_khai,
+            "optional_fields": list(self.optional_fields),
             "nguoi_phat_nguoc": self.nguoi_phat_nguoc,
         }
 
@@ -364,13 +368,17 @@ class HanhDongCapability:
 # --------------------------------------------------------------------------- #
 def _tk_phan_bo_cong(w: Any, kh: KeHoach, d: dict, thung: list | None) -> None:
     # NGUYÊN TỬ: parse hết vào biến cục bộ trước, chỉ mutate kh khi mọi conversion thành
-    # công (tránh áp nửa vời rồi lại bị dịch-intent áp lần hai)
-    canh_thua = [str(x) for x in d.get("canh_thua", [])][:10]
+    # công (tránh áp nửa vời rồi lại bị dịch-intent áp lần hai).
+    # `or []`: phòng thủ tại chỗ cho caller gọi thẳng to_kehoach — đường chính đã được
+    # `chuan_hoa_null_hanh_dong` lọc null ở `ap_dung_hanh_dong` (regression real15_v5:
+    # `"day_cho": null` làm phép lặp trên None nổ, khiến cả action mất luôn phần `hoc` và
+    # `khai_go_cong` vốn hợp lệ).
+    canh_thua = [str(x) for x in (d.get("canh_thua") or [])][:10]
     gop_cong_cho = str(d["gop_cong_cho"]) if d.get("gop_cong_cho") else None
     cong_khai_go = max(0.0, float(d.get("khai_go_cong", 0) or 0))
     cong_khai_quang = max(0.0, float(d.get("khai_quang_cong", 0) or 0))
     hoc = bool(d.get("hoc", False))
-    day_cho = [str(x) for x in d.get("day_cho", [])]
+    day_cho = [str(x) for x in (d.get("day_cho") or [])]
     kh.canh_thua = canh_thua
     if gop_cong_cho is not None:
         kh.gop_cong_cho = gop_cong_cho
@@ -476,6 +484,40 @@ def _tk_lap_phap_nhan(w: Any, kh: KeHoach, d: dict, thung: list | None) -> None:
 
 def _fk_lap_phap_nhan(kh: KeHoach) -> list[dict]:
     return [{"loai": "lap_phap_nhan", **kh.lap_phap_nhan}] if kh.lap_phap_nhan else []
+
+
+def chuan_hoa_null_hanh_dong(
+    cap: HanhDongCapability, d: dict[str, Any],
+) -> dict[str, Any]:
+    """Chuẩn hóa `null` cấp cao nhất theo optionality của chính descriptor.
+
+    `null` chỉ tương đương omitted khi field có tên trong `cap.optional_fields`. Đây là
+    regression thật của real15_v5: `day_cho:null` từng làm phép lặp trên ``None`` nổ và
+    khiến cả `phan_bo_cong` mất luôn `hoc`/`khai_go_cong` hợp lệ đi kèm.
+
+    Field bắt buộc gửi `null` bị reject tường minh, kể cả khi `_tk_*` có default phòng thủ;
+    nếu không, `{"mon":null}` có thể âm thầm biến thành xây nhà. Chỉ xét CẤP CAO NHẤT:
+    `null` trong HopDong/luat/von_gop vẫn được giữ nguyên để validator cấu trúc lồng từ chối.
+    Empty string/list/dict cũng được giữ nguyên; chúng không đồng nghĩa với omitted.
+    """
+    optional = frozenset(cap.optional_fields)
+    declared = frozenset(name for name, _kind in cap.schema_fields)
+    unknown_optional = optional - declared
+    if unknown_optional:
+        raise ValueError(
+            f"descriptor {cap.ten} khai optional field không có trong schema: "
+            f"{sorted(unknown_optional)}"
+        )
+    null_required = sorted(
+        key for key, value in d.items()
+        if key != "loai" and value is None and key not in optional
+    )
+    if null_required:
+        raise ValueError(f"field bắt buộc không được null: {', '.join(null_required)}")
+    return {
+        key: value for key, value in d.items()
+        if not (value is None and key in optional)
+    }
 
 
 def _chuan_hoa_hanh_dong_con(x: Any) -> dict[str, Any]:
@@ -1129,7 +1171,10 @@ def _gt_trong_rung(w: Any) -> dict[str, Any]:
 
 
 def _gt_bao_gia(w: Any) -> dict[str, Any]:
-    return {"han": so(_cfg(w).get("thuong_mai.bao_gia.het_han_tick", 0))}
+    return {
+        "han": so(_cfg(w).get("thuong_mai.bao_gia.het_han_tick", 0)),
+        "bang_chung_gia": _bang_chung_gia(w, "go"),
+    }
 
 
 def _gt_du_an(w: Any) -> dict[str, Any]:
@@ -1254,6 +1299,31 @@ def _gt_don_phuong_pha_vo(w: Any) -> dict[str, Any]:
     return {"phat": so(phat), "phat_lan": so(phat * lan)}
 
 
+def gia_vi_du(w: Any, tai_san: str) -> float | None:
+    """Giá khớp gần nhất của đúng tài sản, hoặc ``None`` khi chưa có bằng chứng.
+
+    Hàm không phát minh placeholder số và không mượn giá của tài sản khác. Catalog chỉ dùng
+    kết quả này như fact text; nó không chèn giá vào action example, nên không tạo neo giả.
+    """
+    gia = w.gia_gan_nhat(tai_san)
+    if gia is None or float(gia) <= 0:
+        return None
+    return float(gia)
+
+
+def _bang_chung_gia(w: Any, tai_san: str) -> str:
+    gia = gia_vi_du(w, tai_san)
+    if gia is None:
+        return (
+            f"Chưa có giao dịch {tai_san} khớp; catalog không nêu giá mẫu. "
+            "Trường giá phải là số dương do chính bạn chọn."
+        )
+    return (
+        f"Giá {tai_san} khớp gần nhất là {so(gia)} thóc; đây chỉ là bằng chứng lịch sử, "
+        "không phải giá chuẩn."
+    )
+
+
 def _gt_dat_lenh(w: Any) -> dict[str, Any]:
     return {"tai_san": "|".join(tai_san_giao_dich(w))}
 
@@ -1317,6 +1387,8 @@ CATALOG: tuple[HanhDongCapability, ...] = (
                     "thua_khong_hop_le", "chua_qua_song", "homestead_reserved",
                     "common_land_lottery_lost"),
         thu_tu_phat=10,
+        optional_fields=("canh_thua", "gop_cong_cho", "khai_go_cong",
+                         "khai_quang_cong", "hoc", "day_cho"),
     ),
     HanhDongCapability(
         ten="xay",
@@ -1703,6 +1775,7 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         },
         ma_ket_qua=("ok", "khong_du_chu", "the_chap_khong_hop_le", "ben_khong_hop_le"),
         thu_tu_phat=160,
+        optional_fields=("den",),
     ),
     HanhDongCapability(
         ten="tra_loi_hop_dong",
@@ -1721,6 +1794,7 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         },
         ma_ket_qua=("ok", "de_nghi_khong_ton_tai", "het_vong_mac_ca", "khong_du_dieu_kien"),
         thu_tu_phat=170,
+        optional_fields=("sua_doi",),
     ),
     HanhDongCapability(
         ten="don_phuong_pha_vo",
@@ -1763,11 +1837,11 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         engine_handler=("engine.market.phien_cho",),
         kha_dung_fn=_luon, kha_dung_key="luon",
         mau_prompt_template=(
-            '- {"loai":"dat_lenh","chieu":"mua"|"ban","tai_san":"$tai_san|\n'
-            '   co_phan:<mã pháp nhân>|<mã hàng mới>","sl":4,"gia":12.5,'
-            '"thanh_toan":"thoc"}\n'
-            '  (giá do khớp lệnh cung-cầu quyết, không ai áp giá; thanh_toan là tài sản '
-            'khác tai_san)'
+            '- action "loai":"dat_lenh": "chieu" là "mua" hoặc "ban"; '
+            '"tai_san":"$tai_san|\n'
+            '   co_phan:<mã pháp nhân>|<mã hàng mới>","sl" là số dương; "gia" là số '
+            'dương do chính bạn nêu; "thanh_toan" là tài sản khác tai_san. Giá khớp '
+            'do cung-cầu quyết; catalog cố ý không đặt một giá mẫu chung cho nhiều tài sản.'
         ),
         mau_prompt_gia_tri=_gt_dat_lenh,
         ma_ket_qua=("ok", "khong_khop", "khong_du_tai_san", "khong_toi_duoc_cho",
@@ -1784,13 +1858,14 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         engine_handler=("engine.market.phien_cho", "engine.market._phi_buon_chuyen"),
         kha_dung_fn=_luon, kha_dung_key="luon",
         mau_prompt_template=(
-            '- {"loai":"buon_chuyen","chieu":"ban","tai_san":"go","sl":4,"gia":14,'
-            '"thanh_toan":"thoc","lang":1}\n'
-            '  (gửi lệnh sang chợ làng khác; phí vận chuyển $phi mỗi khoảng cách trên giá '
-            'trị khớp)'
+            '- action "loai":"buon_chuyen": "chieu" là "mua" hoặc "ban"; '
+            '"tai_san":"go"; "sl" và "gia" là số dương do bạn nêu; '
+            '"thanh_toan":"thoc"; "lang" là mã làng đích. Gửi lệnh sang chợ làng khác; '
+            'phí vận chuyển $phi mỗi khoảng cách trên giá trị khớp. $bang_chung_gia'
         ),
         mau_prompt_gia_tri=lambda w: {
             "phi": phan_tram(_cfg(w).get("thuong_mai.phi_van_chuyen_moi_khoang_cach")),
+            "bang_chung_gia": _bang_chung_gia(w, "go"),
         },
         ma_ket_qua=("ok", "khong_khop", "lang_khong_ton_tai", "khong_toi_duoc_cho"),
         thu_tu_phat=205,
@@ -1806,16 +1881,17 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         engine_handler=("engine.quotes.buoc_bao_gia",),
         kha_dung_fn=_bao_gia_bat, kha_dung_key="thuong_mai.bao_gia.bat",
         mau_prompt_template=(
-            '- {"loai":"dang_bao_gia","chieu":"ban"|"mua","tai_san":"go",'
-            '"so_luong":4,"don_gia":12,"thanh_toan":"thoc","doi_tac":null,'
-            '"het_han_tick":null,"giao_tai":"ngay"}  (tạo báo giá song phương; tài sản '
-            'bạn hứa giao bị ký quỹ ngay, hạn mặc định $han tick; đơn giá và tài sản thanh '
-            'toán do bạn tự nêu)'
+            '- action "loai":"dang_bao_gia": "chieu" là "ban" hoặc "mua"; '
+            '"tai_san":"go"; "so_luong" và "don_gia" là số dương do bạn nêu; '
+            '"thanh_toan":"thoc"; "doi_tac" và "het_han_tick" có thể bỏ hoặc null; '
+            '"giao_tai":"ngay". Tài sản bạn hứa giao bị ký quỹ ngay, hạn mặc định $han '
+            'tick. $bang_chung_gia'
         ),
         mau_prompt_gia_tri=_gt_bao_gia,
         ma_ket_qua=("ok", "bad_params", "insufficient_inventory", "counterparty_unavailable",
                     "expired_quote"),
         thu_tu_phat=206,
+        optional_fields=("doi_tac", "het_han_tick"),
     ),
     HanhDongCapability(
         ten="chap_nhan_bao_gia",
@@ -1833,6 +1909,7 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         ma_ket_qua=("ok", "offer_not_found", "offer_not_visible", "quote_exhausted",
                     "expired_quote", "insufficient_payment", "bad_params"),
         thu_tu_phat=207,
+        optional_fields=("so_luong",),
     ),
     HanhDongCapability(
         ten="huy_bao_gia",
@@ -1865,6 +1942,7 @@ CATALOG: tuple[HanhDongCapability, ...] = (
         ma_ket_qua=("ok", "unknown_project", "project_capacity", "no_site", "no_right",
                     "bad_project_spec"),
         thu_tu_phat=2081,
+        optional_fields=("thua",),
     ),
     HanhDongCapability(
         ten="gop_vat_lieu_du_an",
@@ -2147,7 +2225,9 @@ def ap_dung_hanh_dong(w: Any, kh: KeHoach, d: dict[str, Any],
         else:
             w.ghi_unrecognized(kh.id, str(loai), "loại hành động lạ")
         return
-    cap.to_kehoach(w, kh, d, thung)
+    # Chỉ null của field OPTIONAL mới tương đương omitted; required/nested null phải reject.
+    # Log lỗi vẫn dùng `d` gốc ở caller để không làm mất intent evidence.
+    cap.to_kehoach(w, kh, chuan_hoa_null_hanh_dong(cap, d), thung)
 
 
 def hanh_dong_tu_ke_hoach(kh: KeHoach) -> list[dict[str, Any]]:

@@ -107,6 +107,61 @@ class HopDong(BaseModel):
 # ---------------------------------------------------------------- validate
 
 
+_V7_GOP_CONG_SCHEDULE = "signing_tick_half_open_v2"
+
+
+def _v7_delivery_enabled(w) -> bool:
+    """ADR 0009 §4.3 is active only as one inseparable config pair."""
+    return (
+        w.cfg.get("hop_dong.gop_cong_lich", "") == _V7_GOP_CONG_SCHEDULE
+        and bool(w.cfg.get("hop_dong.tiep_can_vat_ly_v2", False))
+    )
+
+
+def _residence_key(w, aid: str) -> str | tuple[str, ...] | None:
+    """Read-only residence identity used solely by the v7 delivery boundary."""
+    if aid not in w.agents:
+        return None
+    from engine.household import _cu_tru_bat
+
+    if _cu_tru_bat(w):
+        for rid, residence in sorted(w.cu_tru.items()):
+            if aid in residence.thanh_vien:
+                return str(rid)
+        # Persistent-residence state missing its member is a closed boundary, not
+        # an excuse to reconstruct a different household from legacy kinship.
+        return None
+    return tuple(sorted(w.ho_cua(aid)))
+
+
+def delivery_failure_code(w, tu: str, den: str) -> str | None:
+    """Return the v7 tangible-delivery rejection code, without mutating ``w``.
+
+    Information may be directed across any distance.  Assets and labour may not:
+    an active pair must share a residence, or share both village and river bank.
+    Entities deliberately have no invented location, so the physical treatment
+    fails closed for them until a declared entity-location primitive exists.
+    """
+    if not _v7_delivery_enabled(w):
+        return None
+    if tu == den:
+        return None
+    if tu not in w.agents or den not in w.agents:
+        return "delivery_unreachable"
+    tu_residence = _residence_key(w, tu)
+    den_residence = _residence_key(w, den)
+    if tu_residence is not None and tu_residence == den_residence:
+        return None
+    if w.agents[tu].lang != w.agents[den].lang:
+        return "delivery_unreachable"
+    from engine.spatial import _bo_cua, _hai_bo_bat
+
+    if not _hai_bo_bat(w):
+        return None
+    tu_bank, den_bank = _bo_cua(w, tu), _bo_cua(w, den)
+    return None if tu_bank is not None and tu_bank == den_bank else "delivery_unreachable"
+
+
 def validate_hop_dong(hd: HopDong, w) -> str | None:
     """Trả None nếu hợp lệ, ngược lại là lý do từ chối (engine bỏ qua + log)."""
     ben = set(hd.cac_ben)
@@ -177,6 +232,13 @@ def _chuyen_an_toan(w, tu: str, den: str, tai_san: str, so_luong: float, ly_do: 
 
     if so_luong <= 0:
         return True
+    failure_code = delivery_failure_code(w, tu, den)
+    if failure_code is not None:
+        # The code is an auditable execution outcome; callers retain their
+        # ordinary default/breach handling and no compensating transfer occurs.
+        w.events.ghi(w.tick, "hd_chuyen_that_bai", hd=hd_id, tu=tu, den=den,
+                     tai_san=tai_san, sl=round(so_luong, 3), code=failure_code)
+        return False
     try:
         w.ledger.chuyen(tu, den, tai_san, so_luong, ly_do, w.tick)
         w.kl_hd_tick = getattr(w, "kl_hd_tick", 0.0) + gia_tri_thi_truong(w, tai_san, so_luong)
@@ -256,13 +318,16 @@ def xiet_the_chap(w, hd: HopDong, chu_no: str, con_no: str, no_con_lai_thoc: flo
             no_con_lai_thoc -= gia_tri_xiet
 
 
-def phat_vi_pham(w, hd: HopDong, ke_vi_pham: str) -> None:
+def phat_vi_pham(w, hd: HopDong, ke_vi_pham: str, ly_do: str | None = None) -> None:
     """Cưỡng chế: miệng → trừ uy tín + tin đồn; văn bản → thi hành khi_pha_vo."""
     hd.trang_thai = "vi_pham"
     hd.ke_vi_pham = ke_vi_pham
     nan_nhan = [ben_hien_tai(w, hd.id, b) for b in hd.cac_ben]
     nan_nhan = [b for b in nan_nhan if b != ke_vi_pham]
-    w.events.ghi(w.tick, "vi_pham", hd=hd.id, ai=ke_vi_pham, hinh_thuc=hd.hinh_thuc)
+    event = {"hd": hd.id, "ai": ke_vi_pham, "hinh_thuc": hd.hinh_thuc}
+    if ly_do is not None:
+        event["ly_do"] = ly_do
+    w.events.ghi(w.tick, "vi_pham", **event)
     w.ghi_ky_uc(ke_vi_pham, f"tôi THẤT HỨA giao kèo {hd.id} — mất mặt với làng")
     for nn in nan_nhan:
         w.ghi_ky_uc(nn, f"{ke_vi_pham} thất hứa giao kèo {hd.id} với tôi")
@@ -486,6 +551,10 @@ def gop_cong_dau_san_xuat(w) -> None:
         for ck in hd.dieu_khoan:
             if ck.loai != "gop_cong":
                 continue
+            if _v7_delivery_enabled(w):
+                tuoi = w.tick - hd.tick_ky
+                if tuoi < 0 or (hd.thoi_han is not None and tuoi >= hd.thoi_han):
+                    continue
             tu, den = ben_hien_tai(w, hd.id, ck.tu), ben_hien_tai(w, hd.id, ck.den)
             # bên chết/vị thế vô thừa nhận → skip, KHÔNG dán nhãn vi_pham cho cái chết
             # (hợp đồng sẽ bị hủy ở bước 7 cùng tick)
@@ -503,7 +572,7 @@ def gop_cong_dau_san_xuat(w) -> None:
             cong_phai_giao = max(0.0, ck.so_cong_moi_tick - credit)
             if not _chuyen_an_toan(w, tu, den, "cong", cong_phai_giao,
                                    f"góp công {hd.id}", hd_id=hd.id):
-                phat_vi_pham(w, hd, tu)
+                phat_vi_pham(w, hd, tu, delivery_failure_code(w, tu, den))
                 dot_vi_the(w, hd)
                 break
 

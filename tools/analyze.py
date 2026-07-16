@@ -143,10 +143,23 @@ def analyze_run(run: str, output_dir: Path) -> Path:
     pngs = ve_bieu_do(metrics, run, output_dir)
     cuoi = metrics[-1]
 
+    gini_dat = cuoi.get("gini_dat")
+    n_dat = cuoi.get("n_thua_tu_huu", 0)
+    gini_dat_text = (
+        f"{gini_dat} (n={n_dat} thửa tư hữu)" if gini_dat is not None
+        else f"không xác định (n={n_dat} thửa tư hữu)"
+    )
+    coverage = cuoi.get("gdp_price_coverage", {})
+    if isinstance(coverage, dict):
+        gdp_note = (f"GDP {cuoi.get('gdp', '?')}; price coverage theo ledger component "
+                    f"{coverage.get('priced_components', 0)}/{coverage.get('components', 0)}")
+    else:
+        gdp_note = "GDP price coverage: không có trong artifact cũ"
     lines = [f"# Phân tích cuối run `{run}`", ""]
     lines.append(f"- Tick cuối: {cuoi['tick']} (năm {cuoi['nam']}); dân số {cuoi['dan_so']}; "
-                 f"gini đất {cuoi['gini_dat']}; biết chữ {cuoi['ty_le_biet_chu']:.0%}; "
+                 f"gini đất {gini_dat_text}; biết chữ {cuoi['ty_le_biet_chu']:.0%}; "
                  f"tri thức {cuoi.get('tri_thuc', 0)}")
+    lines.append(f"- {gdp_note}. Coverage thiếu không được diễn giải GDP như giá trị đầy đủ.")
     lines.append(f"- β thừa kế của cải (log-log, n={n_beta}): **{beta:.3f}**")
     cn = next((m for m in metrics if m.get("cong_nghiep_hoa")), None)
     lines.append("- Công nghiệp hóa: "

@@ -102,6 +102,8 @@ def bat_dau_tick(w: Any) -> None:
         )),
         "band_person_ticks": bands,
         "births": 0,
+        "deliveries": 0,
+        "twin_deliveries": 0,
         "deaths": [],
     }
     # Childbirth deaths are tagged by the demographic engine before ``cai_chet``
@@ -111,8 +113,44 @@ def bat_dau_tick(w: Any) -> None:
 
 
 def ghi_sinh(w: Any) -> None:
+    """Ghi một trẻ sinh sống; sinh đôi gọi hai lần trong cùng một ca sinh."""
     if _bat(w):
         _tick_record(w)["births"] += 1
+
+
+def ghi_ca_sinh(w: Any, me_id: str, *, so_con: int) -> None:
+    """Ghi một ca sinh và khoảng cách với ca trước của cùng mẹ.
+
+    Đây là observation state do metrics sở hữu, không được engine đọc để quyết định.
+    Sinh đôi là một ca sinh có hai trẻ, nên không tạo khoảng cách 0 giả.
+    """
+    if not _bat(w):
+        return
+    if so_con < 1:
+        raise ValueError("so_con của một ca sinh phải >= 1")
+    record = _tick_record(w)
+    record["deliveries"] = int(record.get("deliveries", 0)) + 1
+    if so_con > 1:
+        record["twin_deliveries"] = int(record.get("twin_deliveries", 0)) + 1
+
+    tracker = getattr(w, "nhan_khau_khoang_sinh", None)
+    if not isinstance(tracker, dict):
+        tracker = {"tick_sinh_truoc": {}, "khoang": []}
+        w.nhan_khau_khoang_sinh = tracker
+    previous_by_mother = tracker.setdefault("tick_sinh_truoc", {})
+    intervals = tracker.setdefault("khoang", [])
+    previous = previous_by_mother.get(str(me_id))
+    if previous is not None:
+        spacing = int(w.tick) - int(previous)
+        if spacing <= 0:
+            raise ValueError("hai ca sinh khác nhau của cùng mẹ phải ở tick tăng dần")
+        intervals.append({
+            "me": str(me_id),
+            "tu_tick": int(previous),
+            "den_tick": int(w.tick),
+            "khoang_tick": spacing,
+        })
+    previous_by_mother[str(me_id)] = int(w.tick)
 
 
 def danh_dau_tu_vong_sinh_no(w: Any, aid: str) -> None:
@@ -141,6 +179,8 @@ def _copy_record(record: dict[str, Any]) -> dict[str, Any]:
             str(k): float(v) for k, v in sorted(record["band_person_ticks"].items())
         },
         "births": int(record["births"]),
+        "deliveries": int(record.get("deliveries", record["births"])),
+        "twin_deliveries": int(record.get("twin_deliveries", 0)),
         "deaths": [
             {"tuoi": float(d["tuoi"]), "ly_do": str(d["ly_do"])}
             for d in record["deaths"]
@@ -268,6 +308,63 @@ def _life_table(w: Any, history: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _birth_spacing(w: Any) -> dict[str, Any]:
+    """Khoảng cách giữa các CA SINH, không phải giữa từng trẻ trong ca sinh đôi."""
+    tracker = getattr(w, "nhan_khau_khoang_sinh", None)
+    rows = tracker.get("khoang", []) if isinstance(tracker, dict) else []
+    values = [
+        int(row["khoang_tick"])
+        for row in rows
+        if isinstance(row, dict) and int(row.get("khoang_tick", 0)) > 0
+    ]
+    if not values:
+        return {
+            "pham_vi": "toan_run_tu_khi_bat_metric",
+            "n_khoang": 0,
+            "min_tick": None,
+            "trung_binh_tick": None,
+            "trung_vi_tick": None,
+            "min_nam": None,
+            "trung_binh_nam": None,
+            "trung_vi_nam": None,
+        }
+    ticks_per_year = float(w.tick_moi_nam())
+    mean_tick = sum(values) / len(values)
+    median_tick = float(median(values))
+    return {
+        "pham_vi": "toan_run_tu_khi_bat_metric",
+        "n_khoang": len(values),
+        "min_tick": min(values),
+        "trung_binh_tick": _round_or_none(mean_tick),
+        "trung_vi_tick": _round_or_none(median_tick),
+        "min_nam": _round_or_none(min(values) / ticks_per_year),
+        "trung_binh_nam": _round_or_none(mean_tick / ticks_per_year),
+        "trung_vi_nam": _round_or_none(median_tick / ticks_per_year),
+    }
+
+
+def _reproduction(w: Any, history: list[dict[str, Any]]) -> dict[str, Any] | None:
+    ss = w.cfg.get("nhan_khau.sinh_san")
+    if not isinstance(ss, dict) or "thai_ky_tick" not in ss:
+        return None
+    current = history[-1] if history else {}
+    births = sum(int(record.get("births", 0)) for record in history)
+    deliveries = sum(int(record.get("deliveries", record.get("births", 0)))
+                     for record in history)
+    twins = sum(int(record.get("twin_deliveries", 0)) for record in history)
+    return {
+        "tre_sinh_song_tick": int(current.get("births", 0)),
+        "ca_sinh_tick": int(current.get("deliveries", current.get("births", 0))),
+        "ca_sinh_doi_tick": int(current.get("twin_deliveries", 0)),
+        "tre_sinh_song_cua_so": births,
+        "ca_sinh_cua_so": deliveries,
+        "ca_sinh_doi_cua_so": twins,
+        "dang_mang_thai": len(getattr(w, "thai_ky", {})),
+        "dang_hau_san": len(getattr(w, "hau_san", {})),
+        "khoang_cach_ca_sinh": _birth_spacing(w),
+    }
+
+
 def _residence(w: Any) -> dict[str, Any] | None:
     from engine.economy import household_snapshot
     from engine.household import _cu_tru_bat
@@ -321,7 +418,8 @@ def tinh(w: Any) -> dict[str, Any] | None:
     living = [a for a in w.agents.values() if a.con_song]
     ages = [float(a.tuoi_nam) for a in living]
     current = history[-1] if history else {
-        "births": 0, "deaths": [], "person_ticks": 0.0, "woman_ticks": 0.0,
+        "births": 0, "deliveries": 0, "twin_deliveries": 0,
+        "deaths": [], "person_ticks": 0.0, "woman_ticks": 0.0,
     }
     deaths = [death for record in history for death in record["deaths"]]
     ages_at_death = [float(death["tuoi"]) for death in deaths]
@@ -364,6 +462,7 @@ def tinh(w: Any) -> dict[str, Any] | None:
             _rate(births, woman_exposure, ticks_per_year, minimum_women)
         ),
         "ty_le_phu_thuoc": _round_or_none(dependency),
+        "sinh_san": _reproduction(w, history),
         "bang_song": _life_table(w, history),
         "cu_tru": _residence(w),
         "di_san": _estate(w),
@@ -374,6 +473,6 @@ def tinh(w: Any) -> dict[str, Any] | None:
 
 
 __all__ = [
-    "bat_dau_tick", "chot_tick", "danh_dau_tu_vong_sinh_no", "ghi_chet", "ghi_sinh",
-    "la_tu_vong_sinh_no", "tinh",
+    "bat_dau_tick", "chot_tick", "danh_dau_tu_vong_sinh_no", "ghi_ca_sinh",
+    "ghi_chet", "ghi_sinh", "la_tu_vong_sinh_no", "tinh",
 ]

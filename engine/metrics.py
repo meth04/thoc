@@ -50,6 +50,48 @@ def _gia_quy_thoc(w: World, tai_san: str) -> float:
     return float(g) if g is not None else 0.0
 
 
+def gdp_price_coverage(w: World) -> dict[str, Any]:
+    """Coverage của các bút toán được dùng trong :func:`gdp_thuc`.
+
+    Không thể gán một tỷ lệ theo *giá trị* cho phần chưa có giá mà không bịa giá.
+    Vì vậy coverage là tỷ lệ **ledger component** (đầu ra hoặc đầu vào trung gian)
+    có giá thị trường/numéraire quan sát được; report luôn kèm các count thành phần.
+    """
+    priced_output = unpriced_output = 0
+    priced_input = unpriced_input = 0
+    for tx in reversed(w.ledger.lich_su):
+        if tx.tick != w.tick:
+            break
+        for d in tx.sinh_huy:
+            is_output = d.so_luong > 0 and d.luong in _SAN_XUAT_LUONG
+            is_input = d.so_luong < 0 and d.luong in _NGUYEN_LIEU_LUONG
+            if not (is_output or is_input):
+                continue
+            priced = _gia_quy_thoc(w, d.tai_san) > 0.0
+            if is_output:
+                if priced:
+                    priced_output += 1
+                else:
+                    unpriced_output += 1
+            elif priced:
+                priced_input += 1
+            else:
+                unpriced_input += 1
+    components = priced_output + unpriced_output + priced_input + unpriced_input
+    priced_components = priced_output + priced_input
+    return {
+        "components": components,
+        "priced_components": priced_components,
+        "unpriced_components": components - priced_components,
+        "priced_output_components": priced_output,
+        "unpriced_output_components": unpriced_output,
+        "priced_intermediate_components": priced_input,
+        "unpriced_intermediate_components": unpriced_input,
+        "coverage": round(priced_components / components, 4) if components else None,
+        "complete": components > 0 and priced_components == components,
+    }
+
+
 def gdp_thuc(w: World) -> float:
     """GDP THỰC (value-added) của tick hiện tại, quy giá thóc.
 
@@ -265,6 +307,7 @@ def tinh_metrics(w: World) -> dict[str, Any]:
         sum(1 for row in ho if float(row["food_security"]) < 1.0) / len(ho) if ho else 0.0
     )
     dat_metric = land_price_productivity(w, int(w.cfg.get("quan_sat.cua_so_dat_tick")))
+    gdp_coverage = gdp_price_coverage(w)
     m = {
         "tick": w.tick,
         "nam": w.nam(),
@@ -273,7 +316,10 @@ def tinh_metrics(w: World) -> dict[str, Any]:
         "tong_thoc": round(sum(thoc), 1),
         "thoc_moi_nguoi": round(sum(thoc) / len(song), 1) if song else 0.0,
         "gini_thoc": round(gini(thoc), 4),
-        "gini_dat": round(gini([float(d) for d in dat]), 4),
+        # Không có thửa tư hữu ⇒ không có phân phối đất để đo, không phải Gini = 0.
+        "gini_dat": round(gini([float(d) for d in dat]), 4) if sum(dat) else None,
+        "n_thua_tu_huu": sum(dat),
+        "n_nguoi_mau_gini_dat": len(song),
         # Gini THU NHẬP (dòng chảy) — đi cùng gini_thoc/gini_dat để tools vẽ quỹ đạo
         # bất bình đẳng (observatory.quy_dao_gini). QUY LUẬT KHÔNG MÃ HÓA — chỉ đo.
         "gini_thu_nhap": round(gini_thu_nhap(w, song), 4),
@@ -298,6 +344,7 @@ def tinh_metrics(w: World) -> dict[str, Any]:
         "so_cong_cu": round(w.ledger.tong_tai_san("cong_cu"), 2),
         # --- chỉ số vĩ mô viện hàn lâm (THUẦN QUAN SÁT) ---
         "gdp": round(gdp_thuc(w), 3),
+        "gdp_price_coverage": gdp_coverage,
         "velocity": round(velocity_tien(w), 4),
         "ty_le_phi_ly": round(ty_le_phi_ly(w), 4),
     }
